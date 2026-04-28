@@ -1,0 +1,23 @@
+[project]
+name = "alumina-sol-extractor"
+version = "0.1.0"
+description = "A lightweight alumina sol literature extraction pipeline."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "PyYAML>=6.0.1",
+    "requests>=2.32.0",
+    "pydantic>=2.0.0",
+    "pandas>=2.2.0",
+    "lxml>=5.0.0",
+    "tabulate>=0.9.0",
+    "pillow>=10.0.0",
+    "torch>=2.2.0",
+    "torchvision>=0.17.0",
+    "huggingface_hub>=0.23.0",
+    "transformers>=4.40.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
