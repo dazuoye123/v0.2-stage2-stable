@@ -15,6 +15,10 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageOps
 
 from alumina_sol_extractor.models.figure import FigureInfo
+from alumina_sol_extractor.vision.pdf_figure_recropper import (
+    infer_fragment_layout_from_bboxes,
+    recrop_fragment_group_by_bbox,
+)
 
 
 FIGURE_ID_RE = re.compile(
@@ -47,6 +51,7 @@ def detect_and_merge_fragmented_figures(
     markdown_text: str,
     output_dir: Path,
     paper_id: str,
+    pdf_path: Path | None = None,
 ) -> list[FigureInfo]:
     """Detect consecutive strip fragments and append merged figures.
 
@@ -56,7 +61,9 @@ def detect_and_merge_fragmented_figures(
     """
     output_dir = Path(output_dir)
     merged_dir = output_dir / "figures_merged"
+    recropped_dir = output_dir / "figures_recropped"
     merged_dir.mkdir(parents=True, exist_ok=True)
+    recropped_dir.mkdir(parents=True, exist_ok=True)
 
     sorted_figures = sorted(figures, key=lambda figure: figure.position)
     groups = _candidate_groups(sorted_figures, markdown_text)
@@ -69,7 +76,7 @@ def detect_and_merge_fragmented_figures(
             if shapes and shapes[0].abnormal:
                 group[0].review_reason = group[0].review_reason or "possible_fragment_single_image"
             continue
-        if not _should_merge_group(group, shapes):
+        if not _should_consider_fragment_group(group, shapes):
             continue
 
         group_id = f"{paper_id}_fragment_group_{merge_index:03d}"
@@ -79,6 +86,45 @@ def detect_and_merge_fragmented_figures(
         figure_id = _figure_id_from_caption(caption) or first.figure_id
         if not figure_id or figure_id.startswith("Unknown Figure"):
             figure_id = first.figure_id
+
+        if not _all_have_bbox(group):
+            for figure in group:
+                figure.review_reason = figure.review_reason or "bbox_missing_for_fragment_group"
+            continue
+
+        layout = infer_fragment_layout_from_bboxes(group)
+        merged_path: Path | None = None
+        image_origin = "merged_from_fragments"
+        if layout in {"grid", "horizontal", "scattered"}:
+            if pdf_path:
+                recrop_path = recropped_dir / f"recropped_figure_{merge_index:03d}.jpg"
+                try:
+                    page_idx = group[0].page_idx
+                    if page_idx is None or any(figure.page_idx != page_idx for figure in group):
+                        raise ValueError("Fragments are not on the same page")
+                    merged_path = recrop_fragment_group_by_bbox(
+                        pdf_path=pdf_path,
+                        page_idx=page_idx,
+                        fragment_figures=group,
+                        output_path=recrop_path,
+                    )
+                    image_origin = "recropped_from_pdf"
+                except Exception as exc:
+                    for figure in group:
+                        figure.review_reason = figure.review_reason or f"bbox_recrop_failed: {exc}"
+                    continue
+            else:
+                for figure in group:
+                    figure.review_reason = figure.review_reason or "bbox_recrop_pdf_missing"
+                continue
+        elif layout == "vertical":
+            merged_path = merged_dir / f"merged_figure_{merge_index:03d}.jpg"
+            _merge_images_vertically([shape.path for shape in shapes], merged_path)
+        else:
+            for figure in group:
+                figure.review_reason = figure.review_reason or "fragment_layout_unknown"
+            continue
+
         for fragment_index, figure in enumerate(group, start=1):
             figure.figure_id = figure_id
             figure.is_fragment = True
@@ -89,11 +135,8 @@ def detect_and_merge_fragmented_figures(
             figure.keep_for_archive = True
             figure.send_to_vision_model = False
             figure.keep = False
-            figure.exclude_reason = "merged_fragment"
-            figure.keep_reason = "merged_fragment"
-
-        merged_path = merged_dir / f"merged_figure_{merge_index:03d}.jpg"
-        _merge_images_vertically([shape.path for shape in shapes], merged_path)
+            figure.exclude_reason = "replaced_by_recropped_figure" if image_origin == "recropped_from_pdf" else "merged_fragment"
+            figure.keep_reason = figure.exclude_reason
 
         merged = FigureInfo(
             paper_id=paper_id,
@@ -104,9 +147,14 @@ def detect_and_merge_fragmented_figures(
             alt_text=first.alt_text,
             image_path=str(merged_path.resolve()),
             image_hash=_sha256_file(merged_path),
-            image_origin="merged_from_fragments",
+            image_origin=image_origin,
             position=first.position,
             section_title=first.section_title,
+            page_idx=first.page_idx,
+            page_number=first.page_number,
+            bbox=_union_bbox(group),
+            bbox_format=first.bbox_format,
+            bbox_source=first.bbox_source,
             context_before=first.context_before,
             context_after=group[-1].context_after,
             raw_caption=first.raw_caption,
@@ -190,7 +238,7 @@ def _load_group_shapes(group: list[FigureInfo]) -> list[ImageShape]:
     return shapes
 
 
-def _should_merge_group(group: list[FigureInfo], shapes: list[ImageShape]) -> bool:
+def _should_consider_fragment_group(group: list[FigureInfo], shapes: list[ImageShape]) -> bool:
     if len(group) < 3 or len(shapes) != len(group):
         return False
     abnormal_count = sum(1 for shape in shapes if shape.abnormal)
@@ -203,6 +251,22 @@ def _should_merge_group(group: list[FigureInfo], shapes: list[ImageShape]) -> bo
     if explicit_subfigures and all_complete_panels:
         return False
     return has_strip_pattern or (len(group) >= 4 and widths_close and heights_close and max(shape.height for shape in shapes) < 260)
+
+
+def _all_have_bbox(group: list[FigureInfo]) -> bool:
+    return all(figure.page_idx is not None and figure.bbox and len(figure.bbox) == 4 for figure in group)
+
+
+def _union_bbox(group: list[FigureInfo]) -> list[float] | None:
+    boxes = [figure.bbox for figure in group if figure.bbox]
+    if not boxes:
+        return None
+    return [
+        min(box[0] for box in boxes),
+        min(box[1] for box in boxes),
+        max(box[2] for box in boxes),
+        max(box[3] for box in boxes),
+    ]
 
 
 def _merge_confidence(group: list[FigureInfo], shapes: list[ImageShape]) -> float:

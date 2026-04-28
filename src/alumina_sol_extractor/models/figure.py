@@ -21,6 +21,13 @@ class FigureInfo(BaseModel):
     base64_data: str | None = None
     image_hash: str | None = None
     image_origin: str = "mineru"
+    mineru_img_path: str | None = None
+
+    page_idx: int | None = None
+    page_number: int | None = None
+    bbox: list[float] | None = None
+    bbox_format: str | None = None
+    bbox_source: str | None = None
 
     position: int = 0
     section_title: str | None = None

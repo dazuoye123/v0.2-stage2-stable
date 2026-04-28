@@ -19,7 +19,13 @@ def _make_image(path: Path, size: tuple[int, int], color: str = "black") -> Path
     return path
 
 
-def _figures_from_markdown(markdown: str, image_paths: list[Path], caption: str, size_group_id: str = "图3-17") -> list[FigureInfo]:
+def _figures_from_markdown(
+    markdown: str,
+    image_paths: list[Path],
+    caption: str,
+    size_group_id: str = "图3-17",
+    bboxes: list[list[float]] | None = None,
+) -> list[FigureInfo]:
     figures = []
     offset = 0
     for index, image_path in enumerate(image_paths, start=1):
@@ -36,6 +42,11 @@ def _figures_from_markdown(markdown: str, image_paths: list[Path], caption: str,
                 position=position,
                 subfigure_index=index,
                 keep_for_archive=True,
+                page_idx=0 if bboxes else None,
+                page_number=1 if bboxes else None,
+                bbox=bboxes[index - 1] if bboxes else None,
+                bbox_format="pixel" if bboxes else None,
+                bbox_source="test" if bboxes else None,
             )
         )
     return figures
@@ -47,7 +58,8 @@ def test_merge_long_strip_fragments() -> None:
         paths = [_make_image(root / f"frag{i}.jpg", (600, 80)) for i in range(1, 6)]
         caption = "图3-17 所制纤维摩擦10000次后的损伤形貌(a)1#；(b)2#；(c)3#"
         markdown = "\n".join(f"![]({path.as_posix()})" for path in paths) + "\n" + caption
-        figures = _figures_from_markdown(markdown, paths, caption)
+        bboxes = [[100, 50 + i * 90, 700, 120 + i * 90] for i in range(5)]
+        figures = _figures_from_markdown(markdown, paths, caption, bboxes=bboxes)
 
         result = detect_and_merge_fragmented_figures(figures, markdown, root / "outputs", "test")
         fragments = [figure for figure in result if figure.is_fragment]
@@ -93,8 +105,24 @@ def test_single_long_strip_goes_to_review() -> None:
         assert result[0].review_reason == "possible_fragment_single_image"
 
 
+def test_group_without_bbox_is_not_blindly_merged() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        paths = [_make_image(root / f"frag{i}.jpg", (600, 80)) for i in range(1, 4)]
+        caption = "图8 损伤形貌图"
+        markdown = "\n".join(f"![]({path.as_posix()})" for path in paths) + "\n" + caption
+        figures = _figures_from_markdown(markdown, paths, caption, "图8")
+
+        result = detect_and_merge_fragmented_figures(figures, markdown, root / "outputs", "test")
+
+        assert not any(figure.is_fragment for figure in result)
+        assert not any(figure.is_merged_figure for figure in result)
+        assert all(figure.review_reason == "bbox_missing_for_fragment_group" for figure in result)
+
+
 if __name__ == "__main__":
     test_merge_long_strip_fragments()
     test_keep_normal_subfigures()
     test_single_long_strip_goes_to_review()
+    test_group_without_bbox_is_not_blindly_merged()
     print("figure fragment merger test passed")

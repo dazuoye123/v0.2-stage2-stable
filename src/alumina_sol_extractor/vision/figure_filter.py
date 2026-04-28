@@ -157,6 +157,7 @@ class FigureFilter:
         return figure
 
     def _set_archive_and_vision_fields(self, figure: FigureInfo, text: str) -> None:
+        existing_exclude_reason = figure.exclude_reason
         figure.keep_for_archive = True
         figure.send_to_vision_model = False
         figure.maybe_useful = False
@@ -165,7 +166,7 @@ class FigureFilter:
         if figure.is_fragment:
             figure.send_to_vision_model = False
             figure.keep = False
-            figure.exclude_reason = "merged_fragment" if figure.fragment_group_id else "fragment_image"
+            figure.exclude_reason = existing_exclude_reason or ("merged_fragment" if figure.fragment_group_id else "fragment_image")
             figure.keep_reason = figure.exclude_reason
             return
 

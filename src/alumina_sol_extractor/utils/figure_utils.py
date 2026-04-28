@@ -102,6 +102,7 @@ def find_figures_in_markdown_any(
     markdown_path: Path,
     project_root: Path,
     paper_id: str,
+    mineru_layout: dict[str, dict] | None = None,
 ) -> list[FigureInfo]:
     """Find figures in Markdown and return image-hash de-duplicated records."""
     markdown_path = Path(markdown_path)
@@ -156,6 +157,11 @@ def find_figures_in_markdown_any(
             figure_id_raw = group_id_raw or alt_id_raw or after_id_raw or before_id_raw
             if not figure_id:
                 figure_id = f"Unknown Figure {len(figures) + 1}"
+            layout_record = _match_mineru_layout(
+                raw_path=raw_path,
+                image_path=image_path,
+                mineru_layout=mineru_layout,
+            )
 
             current_caption = caption
             caption_source = caption_result.source
@@ -191,6 +197,12 @@ def find_figures_in_markdown_any(
                     image_url=image_url,
                     base64_data=base64_data,
                     image_hash=image_hash,
+                    mineru_img_path=layout_record.get("mineru_img_path") if layout_record else None,
+                    page_idx=layout_record.get("page_idx") if layout_record else None,
+                    page_number=layout_record.get("page_number") if layout_record else None,
+                    bbox=layout_record.get("bbox") if layout_record else None,
+                    bbox_format=layout_record.get("bbox_format") if layout_record else None,
+                    bbox_source=layout_record.get("source") if layout_record else None,
                     position=position,
                     section_title=section_title,
                     context_before=context_before,
@@ -702,6 +714,32 @@ def _assign_same_id_caption_subfigure_indices(figures: list[FigureInfo]) -> None
             continue
         for index, figure in enumerate(sorted(group, key=lambda item: item.position), start=1):
             figure.subfigure_index = index
+
+
+def _match_mineru_layout(
+    raw_path: str,
+    image_path: str | None,
+    mineru_layout: dict[str, dict] | None,
+) -> dict | None:
+    if not mineru_layout:
+        return None
+    candidates = []
+    for value in [raw_path, image_path]:
+        if not value:
+            continue
+        normalized = value.replace("\\", "/").strip().strip('"').strip("'").lstrip("./")
+        candidates.append(normalized)
+        candidates.append(Path(normalized).name)
+        if "/images/" in normalized:
+            candidates.append("images/" + normalized.rsplit("/images/", 1)[1])
+    seen = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate in mineru_layout:
+            return mineru_layout[candidate]
+    return None
 
 
 def _extract_base64_data(data_uri: str) -> str:
