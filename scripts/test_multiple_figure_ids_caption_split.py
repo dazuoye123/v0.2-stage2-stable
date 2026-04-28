@@ -28,6 +28,12 @@ def test_multiple_figure_ids_caption_split() -> None:
     FigureFilter().apply_one(figure)
     assert figure.review_reason == "multiple_figure_ids_in_caption"
 
+    panel_text = "图3-17所制纤维摩擦10000次后的损伤形貌(a)1#；(b)2#；(c)3#"
+    caption, following, reason = _split_caption_details(panel_text, "图3-17")
+    assert caption == panel_text
+    assert following == []
+    assert reason is None
+
 
 if __name__ == "__main__":
     test_multiple_figure_ids_caption_split()

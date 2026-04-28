@@ -20,6 +20,15 @@ def test_rheology_priority() -> None:
     assert figure.figure_class == "rheology_curve"
     assert figure.figure_class != "photo_image"
 
+    microscopy = FigureInfo(
+        paper_id="demo",
+        figure_id="图3-24",
+        caption="图3-24 粘度为395Pa·s可纺性溶胶在放大倍率30000X下的TEM",
+    )
+    FigureFilter().apply_one(microscopy)
+    assert microscopy.figure_class == "microscopy_image"
+    assert microscopy.figure_class != "rheology_curve"
+
 
 if __name__ == "__main__":
     test_rheology_priority()

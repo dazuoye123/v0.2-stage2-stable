@@ -22,6 +22,16 @@ def test_mechanical_property_plot() -> None:
     assert figure.figure_class != "microscopy_image"
     assert figure.send_to_vision_model is True
 
+    xrd = FigureInfo(
+        paper_id="demo",
+        figure_id="图3-8",
+        caption="图3-8 凝胶纤维在不同陶瓷化阶段的XRD",
+        reference_sentences=["强度和模量用于后续性能分析。"],
+    )
+    FigureFilter().apply_one(xrd)
+    assert xrd.figure_class == "xrd_pattern"
+    assert xrd.figure_class != "mechanical_property_plot"
+
 
 if __name__ == "__main__":
     test_mechanical_property_plot()

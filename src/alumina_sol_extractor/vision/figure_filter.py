@@ -126,6 +126,10 @@ MATERIAL_STATE_PHOTO_KEYWORDS = ["\u72b6\u6001\u5bf9\u7167\u56fe", "\u900f\u660e
 SPINNABILITY_PHOTO_KEYWORDS = ["\u6210\u4e1d\u6027", "\u53ef\u7eba\u6027", "\u62c9\u4e1d", "\u7eba\u4e1d\u6027", "spinnability", "fiber drawing", "thread-forming"]
 TEMPERATURE_CURVE_KEYWORDS = ["\u6e29\u5ea6\u53d8\u5316\u56fe", "\u6e29\u5ea6\u66f2\u7ebf", "temperature curve", "temperature profile", "temperature variation"]
 CAPTION_FTIR_KEYWORDS = ["\u7ea2\u5916", "ir", "ftir", "infrared", "cm-1", "cm\u22121", "\u7ea2\u5916\u8c31\u56fe"]
+CAPTION_XRD_KEYWORDS = ["xrd", "\u884d\u5c04", "diffraction"]
+CAPTION_MICROSCOPY_KEYWORDS = ["tem", "sem", "hrtem", "\u663e\u5fae", "\u5f62\u8c8c", "\u653e\u5927\u500d\u7387", "magnification", "micrograph", "microscopy", "scale bar"]
+CAPTION_THERMAL_KEYWORDS = ["tg", "tga", "dsc", "tg-dsc", "\u70ed\u91cd", "\u5dee\u70ed"]
+CAPTION_RHEOLOGY_KEYWORDS = ["\u6d41\u53d8\u66f2\u7ebf", "\u6d41\u53d8\u6027", "\u6d41\u53d8\u6027\u7279\u5f81", "rheology curve", "viscosity curve", "shear curve"]
 CAPTION_SCHEMATIC_KEYWORDS = ["\u539f\u7406\u56fe", "\u793a\u610f\u56fe", "\u7ed3\u6784\u56fe", "\u6784\u9020", "\u6b65\u9aa4", "\u6d41\u7a0b\u56fe"]
 CAPTION_SPECTRUM_KEYWORDS = ["\u8c31\u56fe", "spectrum", "mass spectrum", "m/z", "\u8d28\u8c31\u56fe"]
 CAPTION_SCIENTIFIC_KEYWORDS = [
@@ -150,6 +154,8 @@ CAPTION_SCIENTIFIC_KEYWORDS = [
     "\u53ef\u7eba\u6027",
     "\u62c9\u4e1d",
     "spinnability",
+    "eds",
+    "mapping",
 ]
 STRUCTURE_SCHEMATIC_KEYWORDS = ["\u80f6\u4f53\u7ed3\u6784", "\u80f6\u56e2\u7ed3\u6784", "\u7ed3\u6784\u5f62\u6210\u673a\u7406", "\u53cc\u7535\u5c42\u7ed3\u6784", "al13", "al13^7+", "keggin", "\u56e2\u7c07\u7ed3\u6784", "\u7c7b\u578b\u53ca\u7ed3\u6784"]
 NMR_SPECTRUM_KEYWORDS = ["\u6838\u78c1", "nmr", "^27al", "²⁷al", "27al", "ppm", "\u6838\u78c1\u8c31\u56fe"]
@@ -268,11 +274,21 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         ):
             return "nmr_quantification_plot"
         return "nmr_spectrum"
+    if _keyword_hits(caption_text, KEYWORDS["elemental_mapping"]):
+        return "elemental_mapping"
+    if _keyword_hits(caption_text, CAPTION_XRD_KEYWORDS):
+        return "xrd_pattern"
     if _keyword_hits(caption_text, CAPTION_FTIR_KEYWORDS):
         return "ftir_spectrum"
+    if _keyword_hits(caption_text, KEYWORDS["raman_spectrum"]):
+        return "raman_spectrum"
+    if _keyword_hits(caption_text, CAPTION_THERMAL_KEYWORDS):
+        return "thermal_analysis_plot"
+    if _keyword_hits(caption_text, CAPTION_MICROSCOPY_KEYWORDS):
+        return "microscopy_image"
     if _keyword_hits(text, KEYWORDS["elemental_mapping"]):
         return "elemental_mapping"
-    if _keyword_hits(text, KEYWORDS["rheology_curve"]):
+    if _keyword_hits(caption_text, CAPTION_RHEOLOGY_KEYWORDS):
         return "rheology_curve"
     if _keyword_hits(text, TEMPERATURE_CURVE_KEYWORDS):
         return "temperature_curve"
@@ -280,8 +296,6 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "mechanical_property_plot"
     if _keyword_hits(text, KEYWORDS["mechanical_curve"]):
         return "mechanical_curve"
-    if _keyword_hits(caption_text, KEYWORDS["microscopy_image"]):
-        return "microscopy_image"
     if _keyword_hits(text, SPINNABILITY_PHOTO_KEYWORDS):
         return "photo_image"
     if _keyword_hits(caption_text, KEYWORDS["schematic_or_flow"]) and not _keyword_hits(caption_text, CAPTION_SCIENTIFIC_KEYWORDS):
@@ -299,7 +313,6 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         "microscopy_image",
         "ferron_curve",
         "calibration_curve",
-        "rheology_curve",
         "xrd_pattern",
         "ftir_spectrum",
         "raman_spectrum",
@@ -353,6 +366,10 @@ def is_false_candidate(figure: FigureInfo) -> bool:
 
 def is_review_candidate(figure: FigureInfo) -> bool:
     """Return True when a figure should be manually reviewed."""
+    if figure.is_fragment:
+        return False
+    if figure.exclude_reason == "replaced_by_bbox_stitched_figure":
+        return False
     return figure.review_reason is not None or is_caption_ocr_suspect(figure)
 
 
