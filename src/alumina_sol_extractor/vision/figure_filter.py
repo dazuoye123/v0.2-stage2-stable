@@ -10,6 +10,7 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
+import yaml
 from PIL import Image
 
 from alumina_sol_extractor.models.figure import FigureInfo
@@ -18,6 +19,7 @@ from alumina_sol_extractor.models.figure import FigureInfo
 FIGURE_CLASSES = [
     "nmr_spectrum",
     "nmr_quantification_plot",
+    "elemental_mapping",
     "mass_spectrum",
     "xrd_pattern",
     "ftir_spectrum",
@@ -32,6 +34,7 @@ FIGURE_CLASSES = [
     "microscopy_image",
     "photo_image",
     "mechanical_curve",
+    "mechanical_property_plot",
     "schematic_or_flow",
     "table_image",
     "logo_or_icon",
@@ -43,6 +46,7 @@ SIMPLIFIED_CLASSES = FIGURE_CLASSES
 VISION_ALLOWED_CLASSES = {
     "nmr_spectrum",
     "nmr_quantification_plot",
+    "elemental_mapping",
     "mass_spectrum",
     "xrd_pattern",
     "ftir_spectrum",
@@ -57,6 +61,7 @@ VISION_ALLOWED_CLASSES = {
     "microscopy_image",
     "photo_image",
     "mechanical_curve",
+    "mechanical_property_plot",
 }
 
 KEYWORDS: dict[str, list[str]] = {
@@ -82,7 +87,40 @@ KEYWORDS: dict[str, list[str]] = {
     "formula_or_text": ["formula", "equation", "text sentences", "\u516c\u5f0f", "\u7eaf\u6587\u672c"],
 }
 
-FALSE_CANDIDATE_KEYWORDS = ["\u6838\u78c1", "nmr", "ppm", "\u7ea2\u5916", "ir", "ftir", "ferron", "\u6d41\u53d8", "rheology", "xrd", "sem", "tem", "zeta", "\u7c92\u5f84", "\u8d28\u8c31", "tof-ms", "mass spectrum"]
+EXTRA_KEYWORDS: dict[str, list[str]] = {
+    "elemental_mapping": ["EDS", "EDS-mapping", "EDS mapping", "elemental mapping", "element mapping", "\u5143\u7d20\u5206\u5e03", "\u9762\u626b\u63cf", "mapping", "\u80fd\u8c31\u9762\u626b"],
+    "mechanical_property_plot": ["\u5f3a\u5ea6", "\u6a21\u91cf", "\u62c9\u4f38\u5f3a\u5ea6", "\u65ad\u88c2\u5f3a\u5ea6", "\u5355\u4e1d\u5f3a\u5ea6", "\u79bb\u6563", "strength", "modulus", "tensile", "distribution", "scatter"],
+    "schematic_or_flow": ["\u4f5c\u7528\u673a\u7406", "\u5f62\u6210\u8fc7\u7a0b", "\u8f6c\u53d8", "\u76f8\u95f4\u8f6c\u53d8", "\u7ed3\u6784\u793a\u610f", "\u793a\u610f", "\u539f\u7406", "\u8fc7\u7a0b", "\u8bd5\u6837\u886c", "\u5939\u5177", "\u88c5\u7f6e", "\u6d4b\u8bd5\u88c5\u7f6e", "\u6d4b\u8bd5\u5939\u5177", "process", "fixture"],
+}
+for _class_name, _keywords in EXTRA_KEYWORDS.items():
+    KEYWORDS.setdefault(_class_name, [])
+    for _keyword in _keywords:
+        if _keyword not in KEYWORDS[_class_name]:
+            KEYWORDS[_class_name].append(_keyword)
+
+
+def _load_taxonomy_config() -> None:
+    """Merge optional YAML taxonomy keywords into the lightweight rules."""
+    config_path = Path(__file__).resolve().parents[3] / "configs" / "figure_taxonomy.yaml"
+    if not config_path.exists():
+        return
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return
+    for class_name, rule in data.items():
+        if not isinstance(rule, dict):
+            continue
+        keywords = rule.get("positive_keywords") or []
+        KEYWORDS.setdefault(class_name, [])
+        for keyword in keywords:
+            if keyword not in KEYWORDS[class_name]:
+                KEYWORDS[class_name].append(str(keyword))
+
+
+_load_taxonomy_config()
+
+FALSE_CANDIDATE_KEYWORDS = ["\u6838\u78c1", "nmr", "ppm", "\u7ea2\u5916", "ir", "ftir", "ferron", "\u6d41\u53d8", "rheology", "xrd", "sem", "tem", "eds", "mapping", "zeta", "\u7c92\u5f84", "\u5f3a\u5ea6", "\u6a21\u91cf", "\u8d28\u8c31", "tof-ms", "mass spectrum"]
 
 MATERIAL_STATE_PHOTO_KEYWORDS = ["\u72b6\u6001\u5bf9\u7167\u56fe", "\u900f\u660e", "\u5fae\u6697", "\u5fae\u767d", "\u80f6\u51dd", "\u5916\u89c2", "\u65cb\u84b8\u72b6\u6001", "\u6eb6\u80f6\u72b6\u6001"]
 SPINNABILITY_PHOTO_KEYWORDS = ["\u6210\u4e1d\u6027", "\u53ef\u7eba\u6027", "\u62c9\u4e1d", "\u7eba\u4e1d\u6027", "spinnability", "fiber drawing", "thread-forming"]
@@ -152,8 +190,8 @@ class FigureFilter:
         text = _classification_text(figure)
         figure.keyword_hits = _keyword_hits(text, _all_keywords())
         figure.figure_class = classify_figure(figure, text)
-        figure.review_reason = "caption_ocr_suspect" if is_caption_ocr_suspect(figure) else None
         self._set_archive_and_vision_fields(figure, text)
+        figure.review_reason = review_reason_for_figure(figure, text)
         return figure
 
     def _set_archive_and_vision_fields(self, figure: FigureInfo, text: str) -> None:
@@ -232,12 +270,22 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "nmr_spectrum"
     if _keyword_hits(caption_text, CAPTION_FTIR_KEYWORDS):
         return "ftir_spectrum"
+    if _keyword_hits(text, KEYWORDS["elemental_mapping"]):
+        return "elemental_mapping"
+    if _keyword_hits(text, KEYWORDS["rheology_curve"]):
+        return "rheology_curve"
     if _keyword_hits(text, TEMPERATURE_CURVE_KEYWORDS):
         return "temperature_curve"
+    if _keyword_hits(text, KEYWORDS["mechanical_property_plot"]):
+        return "mechanical_property_plot"
+    if _keyword_hits(text, KEYWORDS["mechanical_curve"]):
+        return "mechanical_curve"
     if _keyword_hits(caption_text, KEYWORDS["microscopy_image"]):
         return "microscopy_image"
     if _keyword_hits(text, SPINNABILITY_PHOTO_KEYWORDS):
         return "photo_image"
+    if _keyword_hits(caption_text, KEYWORDS["schematic_or_flow"]) and not _keyword_hits(caption_text, CAPTION_SCIENTIFIC_KEYWORDS):
+        return "schematic_or_flow"
     if _keyword_hits(caption_text, CAPTION_SCHEMATIC_KEYWORDS) and not _keyword_hits(caption_text, CAPTION_SCIENTIFIC_KEYWORDS):
         return "schematic_or_flow"
     if _keyword_hits(text, STRUCTURE_SCHEMATIC_KEYWORDS) and not _keyword_hits(caption_text, CAPTION_SCIENTIFIC_KEYWORDS):
@@ -246,6 +294,7 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
     for class_name in [
         "nmr_quantification_plot",
         "nmr_spectrum",
+        "elemental_mapping",
         "mass_spectrum",
         "microscopy_image",
         "ferron_curve",
@@ -260,6 +309,7 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         "zeta_potential_plot",
         "photo_image",
         "mechanical_curve",
+        "mechanical_property_plot",
         "schematic_or_flow",
         "table_image",
         "logo_or_icon",
@@ -304,6 +354,24 @@ def is_false_candidate(figure: FigureInfo) -> bool:
 def is_review_candidate(figure: FigureInfo) -> bool:
     """Return True when a figure should be manually reviewed."""
     return figure.review_reason is not None or is_caption_ocr_suspect(figure)
+
+
+def review_reason_for_figure(figure: FigureInfo, text: str | None = None) -> str | None:
+    """Return the first lightweight manual-review reason for a figure."""
+    text = text if text is not None else _classification_text(figure)
+    if is_caption_ocr_suspect(figure):
+        return "caption_ocr_suspect"
+    if figure.caption_truncation_reason == "multiple_figure_ids_in_caption":
+        return "multiple_figure_ids_in_caption"
+    if figure.caption_cleaned and figure.caption_truncation_reason:
+        return "caption_truncated"
+    if _keyword_hits(text, KEYWORDS["elemental_mapping"]) and figure.figure_class != "elemental_mapping":
+        return "taxonomy_conflict"
+    if figure.figure_class == "other":
+        return "figure_class_other"
+    if _keyword_hits(text, FALSE_CANDIDATE_KEYWORDS) and not figure.send_to_vision_model and not figure.is_fragment:
+        return "scientific_figure_not_sent_to_vision"
+    return None
 
 
 def is_caption_ocr_suspect(figure: FigureInfo) -> bool:

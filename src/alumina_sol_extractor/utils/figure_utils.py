@@ -31,6 +31,10 @@ CAPTION_START_PATTERN = re.compile(
     r"^\s*(?:\u56fe\s*\d+(?:[.\-]\d+)*|Fig\.?\s*S?\d+(?:[.\-]\d+)*|Figure\s*S?\d+(?:[.\-]\d+)*)\b",
     re.IGNORECASE,
 )
+ANY_FIGURE_ID_PATTERN = re.compile(
+    r"(?:\u56fe\s*(?P<zh>\d+(?:[.\-]\d+)*)|Fig\.?\s*(?P<fig>S?\d+(?:[.\-]\d+)*)|Figure\s*(?P<figure>S?\d+(?:[.\-]\d+)*))",
+    re.IGNORECASE,
+)
 TABLE_START_PATTERN = re.compile(r"^\s*(?:\u8868\s*\d+(?:\.\d+)*|Table\s*\d+(?:\.\d+)*|\[TableID:)", re.IGNORECASE)
 HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(?P<title>.+?)\s*$", re.MULTILINE)
 REFERENCE_SECTION_PATTERN = re.compile(
@@ -40,20 +44,20 @@ REFERENCE_SECTION_PATTERN = re.compile(
 SENTENCE_END_CHARS = "\u3002\uff1b;\uff1f\uff01!?."
 BODY_REFERENCE_PATTERN = re.compile(
     r"(?:"
-    r"\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*\u4e3a|"
-    r"\u5c06\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"\u7531\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"\u5982\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"\u7531\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*(?:\u53ef\u77e5|\u53ef\u89c1)|"
-    r"\u5982\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*\u6240\u793a|"
-    r"\u6839\u636e\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"\u4ece\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*\u53ef\u4ee5\u770b\u51fa|"
-    r"\u56fe\s*\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*(?:\u8868\u660e|\u663e\u793a)|"
+    r"\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*\u4e3a|"
+    r"\u5c06\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
+    r"\u7531\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
+    r"\u5982\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
+    r"\u7531\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*(?:\u53ef\u77e5|\u53ef\u89c1)|"
+    r"\u5982\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*\u6240\u793a|"
+    r"\u6839\u636e\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
+    r"\u4ece\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*\u53ef\u4ee5\u770b\u51fa|"
+    r"\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*(?:\u8868\u660e|\u663e\u793a)|"
     r"\u6570\u636e\u89c1\u8868\s*\d+(?:\.\d+)*|"
     r"\u89c1\u8868\s*\d+(?:\.\d+)*|"
-    r"as shown in\s+(?:Fig\.?|Figure)\s*S?\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"shown in\s+(?:Fig\.?|Figure)\s*S?\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"(?:Fig\.?|Figure)\s*S?\d+(?:\.\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s+(?:shows|indicates)"
+    r"as shown in\s+(?:Fig\.?|Figure)\s*S?\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
+    r"shown in\s+(?:Fig\.?|Figure)\s*S?\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
+    r"(?:Fig\.?|Figure)\s*S?\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s+(?:shows|indicates)"
     r")",
     re.IGNORECASE,
 )
@@ -328,8 +332,11 @@ def _split_caption_details(
     if figure_id is None:
         _, figure_id = _find_figure_id_pair(text)
 
-    boundary = _find_repeated_figure_boundary(text, figure_id)
-    reason = "repeated_figure_id" if boundary is not None else None
+    boundary = _find_different_figure_boundary(text, figure_id)
+    reason = "multiple_figure_ids_in_caption" if boundary is not None else None
+    if boundary is None:
+        boundary = _find_repeated_figure_boundary(text, figure_id)
+        reason = "repeated_figure_id" if boundary is not None else None
     if boundary is None:
         boundary = _find_explanatory_phrase_boundary(text)
         reason = "explanatory_phrase" if boundary is not None else None
@@ -402,6 +409,23 @@ def _find_repeated_figure_boundary(text: str, figure_id: str | None) -> int | No
     return None
 
 
+def _find_different_figure_boundary(text: str, figure_id: str | None) -> int | None:
+    first_number = _figure_number_from_id(figure_id) or _figure_number_from_id(text)
+    if not first_number:
+        return None
+    for match in ANY_FIGURE_ID_PATTERN.finditer(text):
+        number = next((value for value in match.groupdict().values() if value), None)
+        if not number:
+            continue
+        if match.start() == 0 or number == first_number:
+            continue
+        return match.start()
+    shorthand = re.search(rf"[、,，]\s*(?!{re.escape(first_number)}\b)(\d+(?:[.\-]\d+)+)", text)
+    if shorthand:
+        return shorthand.start()
+    return None
+
+
 def _include_reference_prefix(text: str, figure_start: int) -> int:
     prefix = text[max(0, figure_start - 4) : figure_start]
     for marker in ["\u6839\u636e", "\u7531", "\u5982", "\u4ece"]:
@@ -412,6 +436,15 @@ def _include_reference_prefix(text: str, figure_start: int) -> int:
 
 def _find_explanatory_phrase_boundary(text: str) -> int | None:
     patterns = [
+        r"\s+\u6d4b\u8bd5\u53d1\u73b0",
+        r"\s+\u968f\u540e",
+        r"\s+\u7ecf\u8fc7\u7cbe\u786e\u63a7\u5236",
+        r"\s+\u5c06\u4e0a\u8ff0",
+        r"\s+\u5bf9\u6240\u5236",
+        r"\s+\u6b64\u65f6",
+        r"\s+\u7ecf\u8fc7",
+        r"\s+\u4ece\u52a8\u6469\u64e6\u7cfb\u6570",
+        r"\s+[^,，。；;]{0,20}\u6d4b\u8bd5\u7ed3\u679c\u6765\u770b",
         r"\s+\u7531\u56fe",
         r"\s+\u5982\u56fe",
         r"\s+\u6839\u636e\u56fe",

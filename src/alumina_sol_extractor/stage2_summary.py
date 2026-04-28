@@ -42,8 +42,6 @@ def save_stage2_outputs(
     summary = {
         "raw_mineru_image_count": raw_mineru_image_count,
         "final_figure_record_count": len(figures),
-        "total_images": raw_mineru_image_count,
-        "deduped_images": len(figures),
         "keep_for_archive_count": sum(1 for figure in figures if figure.keep_for_archive),
         "send_to_vision_model_count": sum(1 for figure in figures if figure.send_to_vision_model),
         "send_to_vision_model_false_count": sum(1 for figure in figures if not figure.send_to_vision_model),

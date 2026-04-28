@@ -1,0 +1,60 @@
+elemental_mapping:
+  priority: 90
+  send_to_vision_model: true
+  maybe_useful: false
+  positive_keywords:
+    - EDS
+    - EDS-mapping
+    - EDS mapping
+    - elemental mapping
+    - element mapping
+    - 元素分布
+    - 面扫描
+    - mapping
+    - 能谱面扫
+  negative_keywords: []
+
+mechanical_property_plot:
+  priority: 88
+  send_to_vision_model: true
+  maybe_useful: false
+  positive_keywords:
+    - 强度
+    - 模量
+    - 拉伸强度
+    - 断裂强度
+    - 单丝强度
+    - 离散
+    - strength
+    - modulus
+    - tensile
+    - distribution
+    - scatter
+  negative_keywords:
+    - SEM
+    - TEM
+    - 显微
+    - 形貌
+
+schematic_or_flow:
+  positive_keywords:
+    - 作用机理
+    - 形成过程
+    - 转变
+    - 相间转变
+    - 结构示意
+    - 示意
+    - 示意图
+    - 原理
+    - 原理图
+    - 过程
+    - 试样衬
+    - 夹具
+    - 装置
+    - 测试装置
+    - 测试夹具
+    - mechanism
+    - schematic
+    - diagram
+    - process
+    - fixture

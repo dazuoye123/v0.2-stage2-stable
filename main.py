@@ -223,8 +223,6 @@ def main() -> None:
         "paper_id": paper_id,
         "raw_mineru_image_count": raw_mineru_image_count,
         "final_figure_record_count": len(figures),
-        "total_images": raw_mineru_image_count,
-        "deduped_images": len(figures),
         "keep_for_archive_count": archive_count,
         "send_to_vision_model_count": vision_count,
         "send_to_vision_model_false_count": vision_false_count,
