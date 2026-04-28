@@ -1,9 +1,4 @@
-"""Detect and merge MinerU fragmented figure images.
-
-MinerU sometimes exports one figure as several consecutive strip images. This
-module keeps the original fragments for archive, marks them as not suitable for
-vision-model input, and creates one merged FigureInfo for downstream taxonomy.
-"""
+"""Detect MinerU fragmented images and stitch them using MinerU bboxes."""
 
 from __future__ import annotations
 
@@ -12,26 +7,27 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image
 
 from alumina_sol_extractor.models.figure import FigureInfo
-from alumina_sol_extractor.vision.pdf_figure_recropper import (
-    infer_fragment_layout_from_bboxes,
-    recrop_fragment_group_by_bbox,
+from alumina_sol_extractor.vision.bbox_fragment_stitcher import (
+    bbox_overlap_ratio,
+    canvas_blank_ratio,
+    stitch_fragments_by_bbox,
 )
 
 
 FIGURE_ID_RE = re.compile(
-    r"(?P<zh>图\s*(?P<zh_num>\d+(?:[.\-]\d+)*))|"
+    r"(?P<zh>\u56fe\s*(?P<zh_num>\d+(?:[.\-]\d+)*))|"
     r"(?P<fig>\bFig\.?\s*(?P<fig_num>S?\d+(?:[.\-]\d+)*))|"
     r"(?P<figure>\bFigure\s*(?P<figure_num>S?\d+(?:[.\-]\d+)*))",
     re.IGNORECASE,
 )
 IMAGE_MARKDOWN_RE = re.compile(r"!\[[^\]]*\]\([^\n]*\)")
-CAPTION_START_RE = re.compile(r"^\s*(?:图\s*\d|Fig\.?\s*S?\d|Figure\s*S?\d)", re.IGNORECASE)
-PANEL_LABEL_RE = re.compile(r"^[A-Za-z0-9#_\-\s/（）()：:，,;；]+$")
+CAPTION_START_RE = re.compile(r"^\s*(?:\u56fe\s*\d|Fig\.?\s*S?\d|Figure\s*S?\d)", re.IGNORECASE)
+PANEL_LABEL_RE = re.compile(r"^[A-Za-z0-9#_\-\s/+\u3000\uff08\uff09()：:，,;；]+$")
 EXPLICIT_SUBFIGURE_RE = re.compile(
-    r"(\([a-zA-Z0-9]\)|（[a-zA-Z0-9]）|\b[A-C]\b|"
+    r"(\([a-zA-Z0-9]\)|\uff08[a-zA-Z0-9]\uff09|\b[A-C]\b|"
     r"low magnification|high magnification|before|after|sample\s*\d+)",
     re.IGNORECASE,
 )
@@ -53,17 +49,15 @@ def detect_and_merge_fragmented_figures(
     paper_id: str,
     pdf_path: Path | None = None,
 ) -> list[FigureInfo]:
-    """Detect consecutive strip fragments and append merged figures.
+    """Detect likely MinerU fragments and append bbox-stitched figures.
 
-    Original MinerU fragments remain in the returned list with
-    ``is_fragment=True``. Merged figures are appended and marked with
-    ``image_origin='merged_from_fragments'``.
+    ``pdf_path`` is accepted for backward compatibility but intentionally not
+    used. This implementation never crops the original PDF and never stitches by
+    Markdown order.
     """
     output_dir = Path(output_dir)
     merged_dir = output_dir / "figures_merged"
-    recropped_dir = output_dir / "figures_recropped"
     merged_dir.mkdir(parents=True, exist_ok=True)
-    recropped_dir.mkdir(parents=True, exist_ok=True)
 
     sorted_figures = sorted(figures, key=lambda figure: figure.position)
     groups = _candidate_groups(sorted_figures, markdown_text)
@@ -79,6 +73,16 @@ def detect_and_merge_fragmented_figures(
         if not _should_consider_fragment_group(group, shapes):
             continue
 
+        if not _all_have_bbox(group):
+            _mark_review(group, "bbox_missing_for_fragment_group")
+            continue
+        if len({figure.page_idx for figure in group}) != 1:
+            _mark_review(group, "fragments_not_on_same_page")
+            continue
+        if bbox_overlap_ratio(group) > 0.35:
+            _mark_review(group, "bbox_overlap_abnormal")
+            continue
+
         group_id = f"{paper_id}_fragment_group_{merge_index:03d}"
         confidence = _merge_confidence(group, shapes)
         first = group[0]
@@ -87,45 +91,20 @@ def detect_and_merge_fragmented_figures(
         if not figure_id or figure_id.startswith("Unknown Figure"):
             figure_id = first.figure_id
 
-        if not _all_have_bbox(group):
-            for figure in group:
-                figure.review_reason = figure.review_reason or "bbox_missing_for_fragment_group"
+        stitched_path = merged_dir / f"stitched_figure_{merge_index:03d}.jpg"
+        try:
+            stitch_fragments_by_bbox(group, stitched_path)
+        except Exception as exc:
+            _mark_review(group, f"stitched_image_abnormal: {exc}")
+            continue
+        if _stitched_image_is_abnormal(stitched_path):
+            _mark_review(group, "stitched_image_abnormal")
+            continue
+        if canvas_blank_ratio(stitched_path) > 0.96:
+            _mark_review(group, "stitched_image_too_sparse")
             continue
 
-        layout = infer_fragment_layout_from_bboxes(group)
-        merged_path: Path | None = None
-        image_origin = "merged_from_fragments"
-        if layout in {"grid", "horizontal", "scattered"}:
-            if pdf_path:
-                recrop_path = recropped_dir / f"recropped_figure_{merge_index:03d}.jpg"
-                try:
-                    page_idx = group[0].page_idx
-                    if page_idx is None or any(figure.page_idx != page_idx for figure in group):
-                        raise ValueError("Fragments are not on the same page")
-                    merged_path = recrop_fragment_group_by_bbox(
-                        pdf_path=pdf_path,
-                        page_idx=page_idx,
-                        fragment_figures=group,
-                        output_path=recrop_path,
-                    )
-                    image_origin = "recropped_from_pdf"
-                except Exception as exc:
-                    for figure in group:
-                        figure.review_reason = figure.review_reason or f"bbox_recrop_failed: {exc}"
-                    continue
-            else:
-                for figure in group:
-                    figure.review_reason = figure.review_reason or "bbox_recrop_pdf_missing"
-                continue
-        elif layout == "vertical":
-            merged_path = merged_dir / f"merged_figure_{merge_index:03d}.jpg"
-            _merge_images_vertically([shape.path for shape in shapes], merged_path)
-        else:
-            for figure in group:
-                figure.review_reason = figure.review_reason or "fragment_layout_unknown"
-            continue
-
-        for fragment_index, figure in enumerate(group, start=1):
+        for fragment_index, figure in enumerate(sorted(group, key=lambda item: (item.bbox[1], item.bbox[0])), start=1):
             figure.figure_id = figure_id
             figure.is_fragment = True
             figure.image_origin = "mineru_fragment"
@@ -135,25 +114,23 @@ def detect_and_merge_fragmented_figures(
             figure.keep_for_archive = True
             figure.send_to_vision_model = False
             figure.keep = False
-            figure.exclude_reason = "replaced_by_recropped_figure" if image_origin == "recropped_from_pdf" else "merged_fragment"
+            figure.exclude_reason = "replaced_by_bbox_stitched_figure"
             figure.keep_reason = figure.exclude_reason
 
         merged = FigureInfo(
             paper_id=paper_id,
             figure_id=figure_id,
             figure_id_raw=first.figure_id_raw,
-            subfigure_index=None,
-            subfigure_label=None,
             alt_text=first.alt_text,
-            image_path=str(merged_path.resolve()),
-            image_hash=_sha256_file(merged_path),
-            image_origin=image_origin,
+            image_path=str(stitched_path.resolve()),
+            image_hash=_sha256_file(stitched_path),
+            image_origin="stitched_from_bbox_fragments",
             position=first.position,
             section_title=first.section_title,
             page_idx=first.page_idx,
             page_number=first.page_number,
             bbox=_union_bbox(group),
-            bbox_format=first.bbox_format,
+            bbox_format="pixel",
             bbox_source=first.bbox_source,
             context_before=first.context_before,
             context_after=group[-1].context_after,
@@ -171,7 +148,8 @@ def detect_and_merge_fragmented_figures(
             fragment_merge_confidence=confidence,
             source_fragment_ids=[_fragment_id(figure) for figure in group],
             source_fragment_paths=[figure.image_path for figure in group if figure.image_path],
-            merged_image_path=str(merged_path.resolve()),
+            merged_image_path=str(stitched_path.resolve()),
+            merge_mode="bbox_grid_stitch",
         )
         merged_figures.append(merged)
         merge_index += 1
@@ -214,9 +192,7 @@ def _can_be_same_fragment_group(previous: FigureInfo, current: FigureInfo, markd
         return True
     if CAPTION_START_RE.search(between):
         return False
-    if len(between) <= 80 and PANEL_LABEL_RE.fullmatch(between):
-        return True
-    return False
+    return len(between) <= 80 and bool(PANEL_LABEL_RE.fullmatch(between))
 
 
 def _load_group_shapes(group: list[FigureInfo]) -> list[ImageShape]:
@@ -280,35 +256,17 @@ def _merge_confidence(group: list[FigureInfo], shapes: list[ImageShape]) -> floa
     return min(round(score, 3), 0.99)
 
 
-def _merge_images_vertically(paths: list[Path], output_path: Path) -> None:
-    images = [_trim_large_white_border(Image.open(path).convert("RGB")) for path in paths]
-    max_width = max(image.width for image in images)
-    total_height = sum(image.height for image in images)
-    canvas = Image.new("RGB", (max_width, total_height), "white")
-    y_offset = 0
-    for image in images:
-        x_offset = (max_width - image.width) // 2
-        canvas.paste(image, (x_offset, y_offset))
-        y_offset += image.height
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(output_path, format="JPEG", quality=95)
-    for image in images:
-        image.close()
+def _mark_review(group: list[FigureInfo], reason: str) -> None:
+    for figure in group:
+        figure.review_reason = figure.review_reason or reason
 
 
-def _trim_large_white_border(image: Image.Image) -> Image.Image:
-    white = Image.new(image.mode, image.size, "white")
-    diff = ImageChops.difference(image, white)
-    bbox = diff.getbbox()
-    if not bbox:
-        return image
-    left, top, right, bottom = bbox
-    x_margin = min(left, image.width - right)
-    y_margin = min(top, image.height - bottom)
-    if x_margin < 8 and y_margin < 8:
-        return image
-    cropped = image.crop((left, top, right, bottom))
-    return ImageOps.expand(cropped, border=2, fill="white")
+def _stitched_image_is_abnormal(path: Path) -> bool:
+    try:
+        with Image.open(path) as image:
+            return image.width < 20 or image.height < 20
+    except Exception:
+        return True
 
 
 def _shared_caption(group: list[FigureInfo]) -> str:
@@ -321,7 +279,7 @@ def _figure_id_from_caption(caption: str | None) -> str | None:
     if not match:
         return None
     if match.group("zh"):
-        return f"图{match.group('zh_num')}"
+        return f"\u56fe{match.group('zh_num')}"
     if match.group("fig"):
         return f"Fig.{match.group('fig_num')}"
     return f"Figure {match.group('figure_num')}"

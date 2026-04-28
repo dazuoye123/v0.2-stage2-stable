@@ -166,7 +166,9 @@ class FigureFilter:
         if figure.is_fragment:
             figure.send_to_vision_model = False
             figure.keep = False
-            figure.exclude_reason = existing_exclude_reason or ("merged_fragment" if figure.fragment_group_id else "fragment_image")
+            figure.exclude_reason = existing_exclude_reason or (
+                "replaced_by_bbox_stitched_figure" if figure.fragment_group_id else "fragment_image"
+            )
             figure.keep_reason = figure.exclude_reason
             return
 

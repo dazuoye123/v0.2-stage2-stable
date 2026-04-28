@@ -99,6 +99,17 @@ def _load_model_json(path: Path) -> dict[str, dict]:
         bbox = _first_existing_key(block, ["bbox", "box", "position"])
         if image_path and _valid_bbox(bbox):
             bbox_format = "normalized" if _looks_normalized(bbox) else "pixel"
+            if bbox_format == "normalized":
+                page_size = _page_size_from_block(block)
+                if page_size is None:
+                    continue
+                bbox = [
+                    float(bbox[0]) * page_size[0],
+                    float(bbox[1]) * page_size[1],
+                    float(bbox[2]) * page_size[0],
+                    float(bbox[3]) * page_size[1],
+                ]
+                bbox_format = "pixel"
             _add_layout(
                 mapping,
                 image_path=str(image_path),
@@ -190,6 +201,27 @@ def _valid_bbox(value: Any) -> bool:
 
 def _looks_normalized(bbox: list[float]) -> bool:
     return all(0 <= float(value) <= 1 for value in bbox)
+
+
+def _page_size_from_block(block: dict) -> tuple[float, float] | None:
+    for width_key, height_key in [
+        ("page_width", "page_height"),
+        ("width", "height"),
+        ("img_width", "img_height"),
+    ]:
+        width = block.get(width_key)
+        height = block.get(height_key)
+        if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 1 and height > 1:
+            return float(width), float(height)
+    page_size = block.get("page_size")
+    if (
+        isinstance(page_size, list)
+        and len(page_size) >= 2
+        and isinstance(page_size[0], (int, float))
+        and isinstance(page_size[1], (int, float))
+    ):
+        return float(page_size[0]), float(page_size[1])
+    return None
 
 
 def _normalize_path_key(path: str) -> str:

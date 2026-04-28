@@ -121,7 +121,6 @@ def main() -> None:
         markdown_text=final_markdown,
         output_dir=output_dir,
         paper_id=paper_id,
-        pdf_path=input_pdf,
     )
     classifier = None
     classifier_error = None
@@ -204,7 +203,10 @@ def main() -> None:
     pseudo_caption_count = sum(1 for figure in figures if figure.caption_source == "pseudo_caption")
     fragment_count = sum(1 for figure in figures if figure.is_fragment)
     merged_figure_count = sum(1 for figure in figures if figure.is_merged_figure)
-    recropped_figure_count = sum(1 for figure in figures if figure.image_origin == "recropped_from_pdf")
+    bbox_attached_count = sum(1 for figure in figures if figure.bbox)
+    bbox_missing_count = sum(1 for figure in figures if not figure.bbox)
+    bbox_stitched_figure_count = sum(1 for figure in figures if figure.image_origin == "stitched_from_bbox_fragments")
+    merge_mode_counts = Counter(figure.merge_mode or "none" for figure in figures)
     clip_counts = Counter(figure.clip_decision or "not_run" for figure in figures)
     class_counts = {
         name: sum(1 for figure in figures if figure.figure_class == name)
@@ -225,8 +227,13 @@ def main() -> None:
         "caption_none_count": caption_none_count,
         "pseudo_caption_count": pseudo_caption_count,
         "fragment_count": fragment_count,
+        "fragment_group_count": len({figure.fragment_group_id for figure in figures if figure.fragment_group_id}),
+        "fragment_image_count": fragment_count,
         "merged_figure_count": merged_figure_count,
-        "recropped_figure_count": recropped_figure_count,
+        "bbox_attached_count": bbox_attached_count,
+        "bbox_missing_count": bbox_missing_count,
+        "bbox_stitched_figure_count": bbox_stitched_figure_count,
+        "merge_mode_counts": dict(sorted(merge_mode_counts.items())),
         "figure_class_counts": class_counts,
         "false_candidate_count": len(false_candidates),
         "review_candidate_count": len(review_candidates),
@@ -235,6 +242,7 @@ def main() -> None:
         "figure_review_candidates_jsonl": str(review_candidates_jsonl),
         "figures_all_dir": str(figures_all_dir),
         "figures_for_vision_dir": str(figures_for_vision_dir),
+        "figures_merged_dir": str(output_dir / "figures_merged"),
         "include_material_state_photos": figure_settings.get("include_material_state_photos", True),
         "include_schematics_for_vision": figure_settings.get("include_schematics_for_vision", False),
         "include_spinnability_photos_for_vision": figure_settings.get("include_spinnability_photos_for_vision", True),
@@ -256,8 +264,12 @@ def main() -> None:
     print(f"caption_none_count: {caption_none_count}")
     print(f"pseudo_caption_count: {pseudo_caption_count}")
     print(f"fragment_count: {fragment_count}")
+    print(f"fragment_group_count: {len({figure.fragment_group_id for figure in figures if figure.fragment_group_id})}")
+    print(f"fragment_image_count: {fragment_count}")
     print(f"merged_figure_count: {merged_figure_count}")
-    print(f"recropped_figure_count: {recropped_figure_count}")
+    print(f"bbox_attached_count: {bbox_attached_count}")
+    print(f"bbox_missing_count: {bbox_missing_count}")
+    print(f"bbox_stitched_figure_count: {bbox_stitched_figure_count}")
     print("clip_decision_counts:")
     for clip_decision, count in sorted(clip_counts.items()):
         print(f"  {clip_decision}: {count}")

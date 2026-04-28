@@ -75,3 +75,4 @@ class FigureInfo(BaseModel):
     source_fragment_ids: list[str] = Field(default_factory=list)
     source_fragment_paths: list[str] = Field(default_factory=list)
     merged_image_path: str | None = None
+    merge_mode: str | None = None

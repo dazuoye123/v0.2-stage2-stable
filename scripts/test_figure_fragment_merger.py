@@ -1,4 +1,4 @@
-"""Tests for MinerU fragmented figure detection and merging."""
+"""Tests for MinerU fragmented figure detection and bbox stitching."""
 
 from pathlib import Path
 import sys
@@ -23,8 +23,9 @@ def _figures_from_markdown(
     markdown: str,
     image_paths: list[Path],
     caption: str,
-    size_group_id: str = "图3-17",
+    figure_id: str = "\u56fe3-17",
     bboxes: list[list[float]] | None = None,
+    page_indices: list[int] | None = None,
 ) -> list[FigureInfo]:
     figures = []
     offset = 0
@@ -32,18 +33,19 @@ def _figures_from_markdown(
         token = f"![]({image_path.as_posix()})"
         position = markdown.index(token, offset)
         offset = position + len(token)
+        page_idx = page_indices[index - 1] if page_indices else 0 if bboxes else None
         figures.append(
             FigureInfo(
                 paper_id="test",
-                figure_id=size_group_id,
+                figure_id=figure_id,
                 caption=caption,
                 caption_source="standard_caption",
                 image_path=str(image_path),
                 position=position,
                 subfigure_index=index,
                 keep_for_archive=True,
-                page_idx=0 if bboxes else None,
-                page_number=1 if bboxes else None,
+                page_idx=page_idx,
+                page_number=page_idx + 1 if page_idx is not None else None,
                 bbox=bboxes[index - 1] if bboxes else None,
                 bbox_format="pixel" if bboxes else None,
                 bbox_source="test" if bboxes else None,
@@ -56,7 +58,7 @@ def test_merge_long_strip_fragments() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         paths = [_make_image(root / f"frag{i}.jpg", (600, 80)) for i in range(1, 6)]
-        caption = "图3-17 所制纤维摩擦10000次后的损伤形貌(a)1#；(b)2#；(c)3#"
+        caption = "\u56fe3-17 \u6240\u5236\u7ea4\u7ef4\u6469\u64e610000\u6b21\u540e\u7684\u635f\u4f24\u5f62\u8c8c(a)1#;(b)2#;(c)3#"
         markdown = "\n".join(f"![]({path.as_posix()})" for path in paths) + "\n" + caption
         bboxes = [[100, 50 + i * 90, 700, 120 + i * 90] for i in range(5)]
         figures = _figures_from_markdown(markdown, paths, caption, bboxes=bboxes)
@@ -68,9 +70,11 @@ def test_merge_long_strip_fragments() -> None:
         assert len(fragments) == 5
         assert len({figure.fragment_group_id for figure in fragments}) == 1
         assert all(not figure.send_to_vision_model for figure in fragments)
+        assert all(figure.exclude_reason == "replaced_by_bbox_stitched_figure" for figure in fragments)
         assert len(merged) == 1
         assert merged[0].caption == caption
-        assert merged[0].image_origin == "merged_from_fragments"
+        assert merged[0].image_origin == "stitched_from_bbox_fragments"
+        assert merged[0].merge_mode == "bbox_grid_stitch"
         assert Path(merged[0].merged_image_path).exists()
 
 
@@ -78,9 +82,9 @@ def test_keep_normal_subfigures() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         paths = [_make_image(root / f"panel{i}.jpg", (400, 300), "white") for i in range(1, 4)]
-        caption = "图6 SEM images of fibers at low magnification(a), high magnification(b), after treatment(c)."
+        caption = "\u56fe6 SEM images of fibers at low magnification(a), high magnification(b), after treatment(c)."
         markdown = "\n".join(f"![]({path.as_posix()})" for path in paths) + "\n" + caption
-        figures = _figures_from_markdown(markdown, paths, caption, "图6")
+        figures = _figures_from_markdown(markdown, paths, caption, "\u56fe6")
 
         result = detect_and_merge_fragmented_figures(figures, markdown, root / "outputs", "test")
 
@@ -89,29 +93,13 @@ def test_keep_normal_subfigures() -> None:
         assert [figure.subfigure_index for figure in result] == [1, 2, 3]
 
 
-def test_single_long_strip_goes_to_review() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        path = _make_image(root / "single_frag.jpg", (700, 90))
-        caption = "图9 损伤形貌图"
-        markdown = f"![]({path.as_posix()})\n{caption}"
-        figures = _figures_from_markdown(markdown, [path], caption, "图9")
-
-        result = detect_and_merge_fragmented_figures(figures, markdown, root / "outputs", "test")
-
-        assert len(result) == 1
-        assert not result[0].is_fragment
-        assert not result[0].is_merged_figure
-        assert result[0].review_reason == "possible_fragment_single_image"
-
-
-def test_group_without_bbox_is_not_blindly_merged() -> None:
+def test_group_without_bbox_is_not_merged() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         paths = [_make_image(root / f"frag{i}.jpg", (600, 80)) for i in range(1, 4)]
-        caption = "图8 损伤形貌图"
+        caption = "\u56fe8 \u635f\u4f24\u5f62\u8c8c\u56fe"
         markdown = "\n".join(f"![]({path.as_posix()})" for path in paths) + "\n" + caption
-        figures = _figures_from_markdown(markdown, paths, caption, "图8")
+        figures = _figures_from_markdown(markdown, paths, caption, "\u56fe8")
 
         result = detect_and_merge_fragmented_figures(figures, markdown, root / "outputs", "test")
 
@@ -120,9 +108,25 @@ def test_group_without_bbox_is_not_blindly_merged() -> None:
         assert all(figure.review_reason == "bbox_missing_for_fragment_group" for figure in result)
 
 
+def test_cross_page_group_is_not_merged() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        paths = [_make_image(root / f"frag{i}.jpg", (600, 80)) for i in range(1, 4)]
+        caption = "\u56fe9 \u635f\u4f24\u5f62\u8c8c\u56fe"
+        markdown = "\n".join(f"![]({path.as_posix()})" for path in paths) + "\n" + caption
+        bboxes = [[100, 50 + i * 90, 700, 120 + i * 90] for i in range(3)]
+        figures = _figures_from_markdown(markdown, paths, caption, "\u56fe9", bboxes=bboxes, page_indices=[0, 0, 1])
+
+        result = detect_and_merge_fragmented_figures(figures, markdown, root / "outputs", "test")
+
+        assert not any(figure.is_fragment for figure in result)
+        assert not any(figure.is_merged_figure for figure in result)
+        assert all(figure.review_reason == "fragments_not_on_same_page" for figure in result)
+
+
 if __name__ == "__main__":
     test_merge_long_strip_fragments()
     test_keep_normal_subfigures()
-    test_single_long_strip_goes_to_review()
-    test_group_without_bbox_is_not_blindly_merged()
+    test_group_without_bbox_is_not_merged()
+    test_cross_page_group_is_not_merged()
     print("figure fragment merger test passed")
