@@ -51,6 +51,8 @@ def save_stage2_outputs(
         "unknown_figure_count": sum(1 for figure in figures if figure.figure_id.startswith("Unknown Figure")),
         "caption_none_count": sum(1 for figure in figures if not figure.caption),
         "pseudo_caption_count": sum(1 for figure in figures if figure.caption_source == "pseudo_caption"),
+        "fragment_count": sum(1 for figure in figures if figure.is_fragment),
+        "merged_figure_count": sum(1 for figure in figures if figure.is_merged_figure),
         "figure_class_counts": {name: class_counts.get(name, 0) for name in SIMPLIFIED_CLASSES},
         "false_candidate_count": len(false_candidates),
         "review_candidate_count": len(review_candidates),

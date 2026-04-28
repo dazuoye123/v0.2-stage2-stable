@@ -20,6 +20,7 @@ class FigureInfo(BaseModel):
     image_url: str | None = None
     base64_data: str | None = None
     image_hash: str | None = None
+    image_origin: str = "mineru"
 
     position: int = 0
     section_title: str | None = None
@@ -56,3 +57,14 @@ class FigureInfo(BaseModel):
     send_to_vision_model: bool = False
     exclude_reason: str | None = None
     review_reason: str | None = None
+
+    # MinerU may split one scientific figure into several long strip images.
+    is_fragment: bool = False
+    fragment_group_id: str | None = None
+    fragment_index: int | None = None
+    fragment_merge_confidence: float | None = None
+
+    is_merged_figure: bool = False
+    source_fragment_ids: list[str] = Field(default_factory=list)
+    source_fragment_paths: list[str] = Field(default_factory=list)
+    merged_image_path: str | None = None

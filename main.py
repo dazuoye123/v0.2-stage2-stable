@@ -28,6 +28,9 @@ from alumina_sol_extractor.utils.figure_utils import (  # noqa: E402
 from alumina_sol_extractor.utils.table_utils import (  # noqa: E402
     extract_tables_from_markdown,
 )
+from alumina_sol_extractor.vision.figure_fragment_merger import (  # noqa: E402
+    detect_and_merge_fragmented_figures,
+)
 from alumina_sol_extractor.vision.figure_filter import (  # noqa: E402
     SIMPLIFIED_CLASSES,
     FigureFilter,
@@ -108,6 +111,13 @@ def main() -> None:
         paper_id=paper_id,
     )
     figures = match_figure_contexts(final_markdown, figures)
+    output_dir = PROJECT_ROOT / "data" / "outputs" / paper_id
+    figures = detect_and_merge_fragmented_figures(
+        figures=figures,
+        markdown_text=final_markdown,
+        output_dir=output_dir,
+        paper_id=paper_id,
+    )
     classifier = None
     classifier_error = None
     try:
@@ -162,7 +172,6 @@ def main() -> None:
             "include_spinnability_photos_for_vision", True
         ),
     ).apply(figures)
-    output_dir = PROJECT_ROOT / "data" / "outputs" / paper_id
     figures_jsonl = output_dir / "figures.jsonl"
     figures_all_dir = output_dir / "figures_all"
     figures_for_vision_dir = output_dir / "figures_for_vision"
@@ -188,6 +197,8 @@ def main() -> None:
     )
     caption_none_count = sum(1 for figure in figures if not figure.caption)
     pseudo_caption_count = sum(1 for figure in figures if figure.caption_source == "pseudo_caption")
+    fragment_count = sum(1 for figure in figures if figure.is_fragment)
+    merged_figure_count = sum(1 for figure in figures if figure.is_merged_figure)
     clip_counts = Counter(figure.clip_decision or "not_run" for figure in figures)
     class_counts = {
         name: sum(1 for figure in figures if figure.figure_class == name)
@@ -207,6 +218,8 @@ def main() -> None:
         "unknown_figure_count": unknown_figure_count,
         "caption_none_count": caption_none_count,
         "pseudo_caption_count": pseudo_caption_count,
+        "fragment_count": fragment_count,
+        "merged_figure_count": merged_figure_count,
         "figure_class_counts": class_counts,
         "false_candidate_count": len(false_candidates),
         "review_candidate_count": len(review_candidates),
@@ -235,6 +248,8 @@ def main() -> None:
     print(f"unknown_figure_count: {unknown_figure_count}")
     print(f"caption_none_count: {caption_none_count}")
     print(f"pseudo_caption_count: {pseudo_caption_count}")
+    print(f"fragment_count: {fragment_count}")
+    print(f"merged_figure_count: {merged_figure_count}")
     print("clip_decision_counts:")
     for clip_decision, count in sorted(clip_counts.items()):
         print(f"  {clip_decision}: {count}")

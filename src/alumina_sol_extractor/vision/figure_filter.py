@@ -162,6 +162,13 @@ class FigureFilter:
         figure.maybe_useful = False
         figure.exclude_reason = None
 
+        if figure.is_fragment:
+            figure.send_to_vision_model = False
+            figure.keep = False
+            figure.exclude_reason = "merged_fragment" if figure.fragment_group_id else "fragment_image"
+            figure.keep_reason = figure.exclude_reason
+            return
+
         clip_negative = figure.clip_decision == "negative"
         clip_positive = figure.clip_decision == "positive"
         has_science_text = has_scientific_text(figure)

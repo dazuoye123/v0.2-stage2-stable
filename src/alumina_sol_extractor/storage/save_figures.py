@@ -27,7 +27,7 @@ def copy_figures_for_vision(figures: list[FigureInfo], output_dir: Path) -> Path
         if old_file.is_file():
             old_file.unlink()
     for figure in figures:
-        if not figure.send_to_vision_model or not figure.image_path:
+        if figure.is_fragment or not figure.send_to_vision_model or not figure.image_path:
             continue
         source = Path(figure.image_path)
         if not source.exists():

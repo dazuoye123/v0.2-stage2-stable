@@ -22,13 +22,13 @@ from alumina_sol_extractor.models.figure import FigureInfo
 IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^\n]*)\)")
 DATA_IMAGE_PATTERN = re.compile(r"^data:image/[^;]+;base64,(?P<data>.+)$", re.DOTALL)
 FIGURE_ID_PATTERN = re.compile(
-    r"(?P<zh>\u56fe\s*(?P<zh_num>\d+(?:\.\d+)*))|"
-    r"(?P<fig>\bFig\.?\s*(?P<fig_num>S?\d+(?:\.\d+)*))|"
-    r"(?P<figure>\bFigure\s*(?P<figure_num>S?\d+(?:\.\d+)*))",
+    r"(?P<zh>\u56fe\s*(?P<zh_num>\d+(?:[.\-]\d+)*))|"
+    r"(?P<fig>\bFig\.?\s*(?P<fig_num>S?\d+(?:[.\-]\d+)*))|"
+    r"(?P<figure>\bFigure\s*(?P<figure_num>S?\d+(?:[.\-]\d+)*))",
     re.IGNORECASE,
 )
 CAPTION_START_PATTERN = re.compile(
-    r"^\s*(?:\u56fe\s*\d+(?:\.\d+)*|Fig\.?\s*S?\d+(?:\.\d+)*|Figure\s*S?\d+(?:\.\d+)*)\b",
+    r"^\s*(?:\u56fe\s*\d+(?:[.\-]\d+)*|Fig\.?\s*S?\d+(?:[.\-]\d+)*|Figure\s*S?\d+(?:[.\-]\d+)*)\b",
     re.IGNORECASE,
 )
 TABLE_START_PATTERN = re.compile(r"^\s*(?:\u8868\s*\d+(?:\.\d+)*|Table\s*\d+(?:\.\d+)*|\[TableID:)", re.IGNORECASE)
@@ -493,7 +493,7 @@ def _first_boundary(text: str, patterns: list[str]) -> int | None:
 def _figure_number_from_id(figure_id: str | None) -> str | None:
     if not figure_id:
         return None
-    match = re.search(r"S?\d+(?:\.\d+)*", figure_id, flags=re.IGNORECASE)
+    match = re.search(r"S?\d+(?:[.\-]\d+)*", figure_id, flags=re.IGNORECASE)
     return match.group(0) if match else None
 
 
