@@ -104,7 +104,7 @@ def main() -> None:
     tables_dir = PROJECT_ROOT / "data" / "outputs" / paper_id / "tables"
 
     final_markdown = cleaned_md.read_text(encoding="utf-8")
-    raw_figure_count = len(re.findall(r"!\[[^\]]*\]\([^\n]*\)", final_markdown))
+    raw_mineru_image_count = len(re.findall(r"!\[[^\]]*\]\([^\n]*\)", final_markdown))
     mineru_raw_dir = resolve_project_path(paths.get("mineru_raw_dir", "data/mineru_raw")) / paper_id
     mineru_layout = load_mineru_image_layout(mineru_raw_dir)
     figures = find_figures_in_markdown_any(
@@ -122,6 +122,13 @@ def main() -> None:
         output_dir=output_dir,
         paper_id=paper_id,
     )
+    stitched_figures = [figure for figure in figures if figure.is_merged_figure]
+    if stitched_figures:
+        for figure in stitched_figures:
+            figure.reference_sentences = []
+            figure.description_text = None
+        match_figure_contexts(final_markdown, stitched_figures)
+
     classifier = None
     classifier_error = None
     try:
@@ -214,7 +221,9 @@ def main() -> None:
     }
     summary = {
         "paper_id": paper_id,
-        "total_images": raw_figure_count,
+        "raw_mineru_image_count": raw_mineru_image_count,
+        "final_figure_record_count": len(figures),
+        "total_images": raw_mineru_image_count,
         "deduped_images": len(figures),
         "keep_for_archive_count": archive_count,
         "send_to_vision_model_count": vision_count,
@@ -254,8 +263,8 @@ def main() -> None:
     print(f"cleaned_markdown: {cleaned_md}")
     print(f"tables_dir: {tables_dir}")
     print(f"tables_count: {len(tables)}")
-    print(f"total_images: {raw_figure_count}")
-    print(f"deduped_images: {len(figures)}")
+    print(f"raw_mineru_image_count: {raw_mineru_image_count}")
+    print(f"final_figure_record_count: {len(figures)}")
     print(f"keep_for_archive_count: {archive_count}")
     print(f"send_to_vision_model_count: {vision_count}")
     print(f"send_to_vision_model_false_count: {vision_false_count}")

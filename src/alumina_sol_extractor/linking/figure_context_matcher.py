@@ -10,14 +10,32 @@ from alumina_sol_extractor.models.figure import FigureInfo
 
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^\n]*)\)")
 CAPTION_RE = re.compile(
-    r"^\s*(?:\u56fe\s*\d+(?:\.\d+)*|Fig\.?\s*S?\d+(?:\.\d+)*|Figure\s*S?\d+(?:\.\d+)*)\b",
+    r"^\s*(?:\u56fe\s*\d+(?:[.\-]\d+)*|Fig\.?\s*S?\d+(?:[.\-]\d+)*|Figure\s*S?\d+(?:[.\-]\d+)*)\b",
     re.IGNORECASE,
 )
 SENTENCE_END_RE = re.compile(r"[\u3002\uff1b;\uff1f\uff01!?.]")
+FIGURE_ID_FINDER_RE = re.compile(
+    r"(?:\u56fe\s*(S?\d+(?:[.\-]\d+)*)|Fig\.?\s*(S?\d+(?:[.\-]\d+)*)|Figure\s*(S?\d+(?:[.\-]\d+)*))",
+    re.IGNORECASE,
+)
+TABLE_OR_PATH_JUNK_RE = re.compile(
+    r"TableID|\bCSV:|\bJSON:|[A-Za-z]:[\\/]|(?:/|\\)[\w.\-\\/]+",
+    re.IGNORECASE,
+)
 CUE_WORDS = [
-    "\u5982\u56fe", "\u7531\u56fe", "\u89c1\u56fe", "\u6839\u636e\u56fe", "\u4ece\u56fe",
-    "\u53ef\u77e5", "\u53ef\u89c1", "\u8868\u660e", "\u663e\u793a",
-    "as shown", "shown in", "shows", "indicates",
+    "\u5982\u56fe",
+    "\u7531\u56fe",
+    "\u89c1\u56fe",
+    "\u6839\u636e\u56fe",
+    "\u4ece\u56fe",
+    "\u53ef\u77e5",
+    "\u53ef\u89c1",
+    "\u8868\u660e",
+    "\u663e\u793a",
+    "as shown",
+    "shown in",
+    "shows",
+    "indicates",
 ]
 
 
@@ -55,8 +73,13 @@ class FigureContextMatcher:
         for candidate in self.sentences:
             if not any(pattern.search(candidate.sentence) for pattern in patterns):
                 continue
-            score = simple_score(candidate.sentence, figure.position, candidate.start, caption_tokens)
-            scored.append((score, candidate.sentence))
+            cleaned_sentence = _clean_reference_sentence(candidate.sentence, figure.figure_id)
+            if not cleaned_sentence:
+                continue
+            score = simple_score(cleaned_sentence, figure.position, candidate.start, caption_tokens)
+            if _contains_other_figure_ids(cleaned_sentence, figure.figure_id):
+                score -= 2.5
+            scored.append((score, cleaned_sentence))
         scored.sort(key=lambda item: item[0], reverse=True)
         return _dedupe([sentence for _, sentence in scored])[:limit]
 
@@ -99,6 +122,9 @@ class FigureContextMatcher:
             if len(sentence) >= 8:
                 candidates.append(SentenceCandidate(sentence=sentence, start=start, end=end))
             start = end
+        tail = _compact(text[start:])
+        if len(tail) >= 8:
+            candidates.append(SentenceCandidate(sentence=tail, start=start, end=len(text)))
         return candidates
 
 
@@ -108,14 +134,14 @@ def match_figure_contexts(markdown_text: str, figures: list[FigureInfo]) -> list
 
 
 def build_mention_patterns(figure_id: str) -> list[re.Pattern[str]]:
-    """Build exact mention regexes for 图2.3/Fig. S1/Figure 2.3."""
+    """Build exact mention regexes for 图3-17/Fig. S1/Figure 2.3."""
     if not figure_id or figure_id.startswith("Unknown Figure"):
         return []
-    number_match = re.search(r"S?\d+(?:\.\d+)*", figure_id, flags=re.IGNORECASE)
+    number_match = re.search(r"S?\d+(?:[.\-]\d+)*", figure_id, flags=re.IGNORECASE)
     if not number_match:
         return []
     number = re.escape(number_match.group(0))
-    exact_end = r"(?![\d.])"
+    exact_end = r"(?![\d.\-])"
     suffix = r"(?:\s*[\uff08(][A-Za-z][\uff09)])?"
     return [
         re.compile(rf"\u56fe\s*{number}{exact_end}{suffix}", re.IGNORECASE),
@@ -148,7 +174,7 @@ def _looks_like_reference_line(text: str) -> bool:
 def _tokens(text: str) -> set[str]:
     return {
         token.lower()
-        for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}|\d+(?:\.\d+)*|[\u4e00-\u9fff]{2,}", text)
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}|\d+(?:[.\-]\d+)*|[\u4e00-\u9fff]{2,}", text)
     }
 
 
@@ -176,3 +202,40 @@ def _dedupe(texts: list[str]) -> list[str]:
             seen.add(compact)
             result.append(compact)
     return result
+
+
+def _clean_reference_sentence(sentence: str, target_figure_id: str) -> str | None:
+    compact = _compact(sentence)
+    if not compact:
+        return None
+    compact = re.sub(r"^(?:json|csv)\)\s*", "", compact, flags=re.IGNORECASE)
+    compact = _compact(compact)
+    compact = re.sub(r"^(?:[A-Za-z]:[\\/]|/|\\)[^\s]+\s*", "", compact)
+    compact = _compact(compact)
+    if TABLE_OR_PATH_JUNK_RE.search(compact):
+        return None
+    compact = re.sub(r"\s*\[[^\]]*TableID:[^\]]*\]\s*", " ", compact, flags=re.IGNORECASE)
+    compact = re.sub(r"\b(?:json|csv)\)\b", " ", compact, flags=re.IGNORECASE)
+    compact = _compact(compact)
+    if len(compact) < 8:
+        return None
+    if not any(pattern.search(compact) for pattern in build_mention_patterns(target_figure_id)):
+        return None
+    return compact
+
+
+def _normalized_figure_numbers(text: str) -> set[str]:
+    numbers: set[str] = set()
+    for match in FIGURE_ID_FINDER_RE.finditer(text):
+        number = next((group for group in match.groups() if group), None)
+        if number:
+            numbers.add(number.lower())
+    return numbers
+
+
+def _contains_other_figure_ids(sentence: str, target_figure_id: str) -> bool:
+    target_numbers = _normalized_figure_numbers(target_figure_id)
+    if not target_numbers:
+        return False
+    sentence_numbers = _normalized_figure_numbers(sentence)
+    return any(number not in target_numbers for number in sentence_numbers)

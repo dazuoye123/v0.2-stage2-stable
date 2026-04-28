@@ -292,6 +292,10 @@ def has_scientific_text(figure: FigureInfo) -> bool:
 def is_false_candidate(figure: FigureInfo) -> bool:
     if figure.send_to_vision_model:
         return False
+    if figure.is_fragment:
+        return False
+    if figure.exclude_reason == "replaced_by_bbox_stitched_figure":
+        return False
     if figure.figure_class == "schematic_or_flow":
         return False
     return bool(_keyword_hits(_classification_text(figure), FALSE_CANDIDATE_KEYWORDS))
