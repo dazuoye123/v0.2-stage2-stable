@@ -615,9 +615,17 @@ def _include_reference_prefix(text: str, figure_start: int) -> int:
 
 def _find_explanatory_phrase_boundary(text: str) -> int | None:
     patterns = [
+        r"\s+\u53ef\u7eba\u4e1d\u6eb6\u80f6\u7684\u70ed\u5931\u91cd",
+        r"\s+TG\u66f2\u7ebf\u8868\u660e",
+        r"\s+TG/DSC\u66f2\u7ebf\u8868\u660e",
+        r"\s+\u66f2\u7ebf\u8868\u660e",
+        r"\s+\u6d4b\u8bd5\u7ed3\u679c\u8868\u660e",
+        r"\s+\u6d4b\u8bd5\u7ed3\u679c\u6765\u770b",
+        r"\s+\u4ece\u6d4b\u8bd5\u7ed3\u679c\u6765\u770b",
         r"\s+\u6d4b\u8bd5\u53d1\u73b0",
         r"\s+\u968f\u540e",
         r"\s+\u7ecf\u8fc7\u7cbe\u786e\u63a7\u5236",
+        r"\s+\u7ed3\u679c\u8868\u660e",
         r"\s+\u5c06\u4e0a\u8ff0",
         r"\s+\u5bf9\u6240\u5236",
         r"\s+\u6b64\u65f6",
@@ -653,6 +661,14 @@ def _find_explanatory_phrase_boundary(text: str) -> int | None:
 
 def _find_space_body_start_boundary(text: str) -> int | None:
     body_starts = [
+        "\u53ef\u7eba\u4e1d\u6eb6\u80f6\u7684\u70ed\u5931\u91cd",
+        "TG\u66f2\u7ebf\u8868\u660e",
+        "TG/DSC\u66f2\u7ebf\u8868\u660e",
+        "\u66f2\u7ebf\u8868\u660e",
+        "\u6d4b\u8bd5\u7ed3\u679c\u8868\u660e",
+        "\u6d4b\u8bd5\u7ed3\u679c\u6765\u770b",
+        "\u4ece\u6d4b\u8bd5\u7ed3\u679c\u6765\u770b",
+        "\u4ece\u52a8\u6469\u64e6\u7cfb\u6570\u6d4b\u8bd5\u7ed3\u679c\u6765\u770b",
         "\u94dd\u6eb6\u80f6\u4e2d",
         "\u672c\u6587",
         "\u5b9e\u9a8c",

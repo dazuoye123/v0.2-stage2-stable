@@ -167,6 +167,7 @@ CAPTION_THERMAL_KEYWORDS = ["tg", "tga", "dsc", "tg-dsc", "\u70ed\u91cd", "\u5de
 CAPTION_RHEOLOGY_KEYWORDS = ["\u6d41\u53d8\u66f2\u7ebf", "\u6d41\u53d8\u6027", "\u6d41\u53d8\u6027\u7279\u5f81", "rheology curve", "viscosity curve", "shear curve"]
 CAPTION_SCHEMATIC_KEYWORDS = ["\u539f\u7406\u56fe", "\u793a\u610f\u56fe", "\u7ed3\u6784\u56fe", "\u6784\u9020", "\u6b65\u9aa4", "\u6d41\u7a0b\u56fe"]
 CAPTION_SPECTRUM_KEYWORDS = ["\u8c31\u56fe", "spectrum", "mass spectrum", "m/z", "\u8d28\u8c31\u56fe"]
+CAPTION_PHOTO_KEYWORDS = ["\u5149\u5b66\u7167\u7247", "\u7167\u7247", "photo", "photograph", "optical image", "\u5b9e\u7269\u56fe", "\u5916\u89c2"]
 CAPTION_SCIENTIFIC_KEYWORDS = [
     "xrd",
     "\u6838\u78c1",
@@ -332,6 +333,8 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "nmr_spectrum"
     if _keyword_hits(caption_text, KEYWORDS["elemental_mapping"]):
         return "elemental_mapping"
+    if _keyword_hits(caption_text, CAPTION_PHOTO_KEYWORDS):
+        return "photo_image"
     if _keyword_hits(caption_text, CAPTION_XRD_KEYWORDS):
         return "xrd_pattern"
     if _keyword_hits(caption_text, CAPTION_FTIR_KEYWORDS):

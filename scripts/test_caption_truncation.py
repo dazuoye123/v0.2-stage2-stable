@@ -68,6 +68,13 @@ def test_english_caption_split() -> None:
     assert refs and "The results show that" in refs[0]
 
 
+def test_rheology_caption_split_before_tg_body() -> None:
+    text = "\u56fe2-12 \u7c98\u5ea6\u4e3a800Pa\u00b7s\u7684\u6eb6\u80f6\u7684\u6d41\u53d8\u6027\u7279\u5f81 \u53ef\u7eba\u4e1d\u6eb6\u80f6\u7684\u70ed\u5931\u91cd(TG)\u66f2\u7ebf\u8868\u660e\uff0c\u6709\u673a\u7269\u9010\u6b65\u5206\u89e3\u3002"
+    caption, refs = split_caption_and_following_text(text, "\u56fe2-12")
+    assert caption == "\u56fe2-12 \u7c98\u5ea6\u4e3a800Pa\u00b7s\u7684\u6eb6\u80f6\u7684\u6d41\u53d8\u6027\u7279\u5f81"
+    assert refs and "\u53ef\u7eba\u4e1d\u6eb6\u80f6\u7684\u70ed\u5931\u91cd(TG)\u66f2\u7ebf\u8868\u660e" in refs[0]
+
+
 if __name__ == "__main__":
     test_caption_body_split()
     test_caption_body_split_with_subfigure_label()
@@ -77,4 +84,5 @@ if __name__ == "__main__":
     test_normal_caption_not_split()
     test_temperature_caption_split_at_explanation()
     test_english_caption_split()
+    test_rheology_caption_split_before_tg_body()
     print("caption truncation test passed")

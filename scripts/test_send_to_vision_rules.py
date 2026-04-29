@@ -179,6 +179,18 @@ def test_send_to_vision_rules() -> None:
     assert material_photo_disabled.maybe_useful
     assert not material_photo_disabled.send_to_vision_model
 
+    optical_photo_with_xrd_context = filt.apply_one(
+        FigureInfo(
+            paper_id="p",
+            figure_id="\u56fe2-4",
+            caption="\u56fe2-4\u65b0\u5236\u83ab\u6765\u77f3\u6676\u79cd\u5206\u6563\u6db2(a)\u53ca\u5176\u653e\u7f6e3\u4e2a\u6708\u540e(b)\u7684\u5149\u5b66\u7167\u7247",
+            reference_sentences=["\u7531XRD\u53ef\u77e5\uff0c\u6676\u79cd\u7269\u76f8\u672a\u53d1\u751f\u660e\u663e\u53d8\u5316\u3002"],
+            caption_source="standard_caption",
+        )
+    )
+    assert optical_photo_with_xrd_context.figure_class == "photo_image"
+    assert optical_photo_with_xrd_context.send_to_vision_model
+
     temperature_curve = filt.apply_one(
         FigureInfo(
             paper_id="p",
