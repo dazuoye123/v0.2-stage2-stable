@@ -17,25 +17,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from alumina_sol_extractor.figures.figure_id import (
+    ANY_FIGURE_ID_PATTERN,
+    CAPTION_START_PATTERN,
+    FIGURE_ID_PATTERN,
+    figure_number_from_id as _shared_figure_number_from_id,
+    find_figure_id_pair as _shared_find_figure_id_pair,
+)
 from alumina_sol_extractor.models.figure import FigureInfo
 
 
 IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^\n]*)\)")
 DATA_IMAGE_PATTERN = re.compile(r"^data:image/[^;]+;base64,(?P<data>.+)$", re.DOTALL)
-FIGURE_ID_PATTERN = re.compile(
-    r"(?P<zh>\u56fe\s*(?P<zh_num>\d+(?:[.\-]\d+)*))|"
-    r"(?P<fig>\bFig\.?\s*(?P<fig_num>S?\d+(?:[.\-]\d+)*))|"
-    r"(?P<figure>\bFigure\s*(?P<figure_num>S?\d+(?:[.\-]\d+)*))",
-    re.IGNORECASE,
-)
-CAPTION_START_PATTERN = re.compile(
-    r"^\s*(?:\u56fe\s*\d+(?:[.\-]\d+)*|Fig\.?\s*S?\d+(?:[.\-]\d+)*|Figure\s*S?\d+(?:[.\-]\d+)*)\b",
-    re.IGNORECASE,
-)
-ANY_FIGURE_ID_PATTERN = re.compile(
-    r"(?:\u56fe\s*(?P<zh>\d+(?:[.\-]\d+)*)|Fig\.?\s*(?P<fig>S?\d+(?:[.\-]\d+)*)|Figure\s*(?P<figure>S?\d+(?:[.\-]\d+)*))",
-    re.IGNORECASE,
-)
 TABLE_START_PATTERN = re.compile(r"^\s*(?:\u8868\s*\d+(?:\.\d+)*|Table\s*\d+(?:\.\d+)*|\[TableID:)", re.IGNORECASE)
 HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(?P<title>.+?)\s*$", re.MULTILINE)
 REFERENCE_SECTION_PATTERN = re.compile(
@@ -731,10 +724,7 @@ def _first_boundary(text: str, patterns: list[str]) -> int | None:
 
 
 def _figure_number_from_id(figure_id: str | None) -> str | None:
-    if not figure_id:
-        return None
-    match = re.search(r"S?\d+(?:[.\-]\d+)*", figure_id, flags=re.IGNORECASE)
-    return match.group(0) if match else None
+    return _shared_figure_number_from_id(figure_id)
 
 
 def extract_complete_sentences(text: str) -> list[str]:
@@ -901,15 +891,8 @@ def _extract_context(text: str, position: int, window: int) -> tuple[str, str]:
 
 
 def _find_figure_id_pair(text: str) -> tuple[str | None, str | None]:
-    match = FIGURE_ID_PATTERN.search(text or "")
-    if not match:
-        return None, None
-    raw = _compact_spaces(match.group(0))
-    if match.group("zh"):
-        return raw, f"\u56fe{match.group('zh_num')}"
-    if match.group("fig"):
-        return raw, f"Fig.{match.group('fig_num')}"
-    return raw, f"Figure {match.group('figure_num')}"
+    raw, figure_id = _shared_find_figure_id_pair(text)
+    return _compact_spaces(raw) if raw else None, figure_id
 
 
 def _extract_subfigure_labels(caption: str | None) -> list[str]:

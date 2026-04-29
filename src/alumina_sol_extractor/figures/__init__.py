@@ -1,5 +1,7 @@
-"""Figure output helpers."""
+"""Figure-related helpers.
 
-from .figure_writer import save_figure_outputs
+Keep this package light: modules should be imported directly to avoid pulling
+the whole stage-2 output stack into figure-id parsing or reference matching.
+"""
 
-__all__ = ["save_figure_outputs"]
+__all__: list[str] = []

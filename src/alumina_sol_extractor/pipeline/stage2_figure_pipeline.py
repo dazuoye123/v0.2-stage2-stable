@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from alumina_sol_extractor.config import resolve_project_path
-from alumina_sol_extractor.figures import save_figure_outputs
+from alumina_sol_extractor.figures.figure_writer import save_figure_outputs
 from alumina_sol_extractor.linking import match_figure_contexts
 from alumina_sol_extractor.pdf.mineru_layout_parser import load_mineru_image_layout
 from alumina_sol_extractor.utils.figure_utils import find_figures_in_markdown_any

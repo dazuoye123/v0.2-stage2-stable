@@ -5,19 +5,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from alumina_sol_extractor.figures.figure_id import (
+    CAPTION_START_PATTERN as CAPTION_RE,
+    FIGURE_ID_PATTERN as FIGURE_ID_FINDER_RE,
+    build_mention_patterns,
+)
 from alumina_sol_extractor.models.figure import FigureInfo
 
 
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^\n]*)\)")
-CAPTION_RE = re.compile(
-    r"^\s*(?:\u56fe\s*\d+(?:[.\-]\d+)*|Fig\.?\s*S?\d+(?:[.\-]\d+)*|Figure\s*S?\d+(?:[.\-]\d+)*)\b",
-    re.IGNORECASE,
-)
 SENTENCE_END_RE = re.compile(r"[\u3002\uff1b;\uff1f\uff01!?.]")
-FIGURE_ID_FINDER_RE = re.compile(
-    r"(?:\u56fe\s*(S?\d+(?:[.\-]\d+)*)|Fig\.?\s*(S?\d+(?:[.\-]\d+)*)|Figure\s*(S?\d+(?:[.\-]\d+)*))",
-    re.IGNORECASE,
-)
 TABLE_OR_PATH_JUNK_RE = re.compile(
     r"TableID|\bCSV:|\bJSON:|[A-Za-z]:[\\/]|(?:/|\\)[\w.\-\\/]+",
     re.IGNORECASE,
@@ -133,23 +130,6 @@ def match_figure_contexts(markdown_text: str, figures: list[FigureInfo]) -> list
     return FigureContextMatcher(markdown_text).apply(figures)
 
 
-def build_mention_patterns(figure_id: str) -> list[re.Pattern[str]]:
-    """Build exact mention regexes for 图3-17/Fig. S1/Figure 2.3."""
-    if not figure_id or figure_id.startswith("Unknown Figure"):
-        return []
-    number_match = re.search(r"S?\d+(?:[.\-]\d+)*", figure_id, flags=re.IGNORECASE)
-    if not number_match:
-        return []
-    number = re.escape(number_match.group(0))
-    exact_end = r"(?![\d.\-])"
-    suffix = r"(?:\s*[\uff08(][A-Za-z][\uff09)])?"
-    return [
-        re.compile(rf"\u56fe\s*{number}{exact_end}{suffix}", re.IGNORECASE),
-        re.compile(rf"Fig\.?\s*{number}{exact_end}{suffix}", re.IGNORECASE),
-        re.compile(rf"Figure\s*{number}{exact_end}{suffix}", re.IGNORECASE),
-    ]
-
-
 def simple_score(sentence: str, figure_position: int, sentence_position: int, caption_tokens: set[str]) -> float:
     sentence_lower = sentence.lower()
     score = 5.0
@@ -227,7 +207,7 @@ def _clean_reference_sentence(sentence: str, target_figure_id: str) -> str | Non
 def _normalized_figure_numbers(text: str) -> set[str]:
     numbers: set[str] = set()
     for match in FIGURE_ID_FINDER_RE.finditer(text):
-        number = next((group for group in match.groups() if group), None)
+        number = match.group("zh_num") or match.group("fig_num") or match.group("figure_num")
         if number:
             numbers.add(number.lower())
     return numbers

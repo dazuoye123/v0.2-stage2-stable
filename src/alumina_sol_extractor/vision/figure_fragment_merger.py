@@ -9,19 +9,12 @@ from pathlib import Path
 
 from PIL import Image
 
+from alumina_sol_extractor.figures.figure_id import find_figure_id_pair
 from alumina_sol_extractor.models.figure import FigureInfo
 from alumina_sol_extractor.vision.bbox_fragment_stitcher import (
     bbox_overlap_ratio,
     canvas_blank_ratio,
     stitch_fragments_by_bbox,
-)
-
-
-FIGURE_ID_RE = re.compile(
-    r"(?P<zh>\u56fe\s*(?P<zh_num>\d+(?:[.\-]\d+)*))|"
-    r"(?P<fig>\bFig\.?\s*(?P<fig_num>S?\d+(?:[.\-]\d+)*))|"
-    r"(?P<figure>\bFigure\s*(?P<figure_num>S?\d+(?:[.\-]\d+)*))",
-    re.IGNORECASE,
 )
 IMAGE_MARKDOWN_RE = re.compile(r"!\[[^\]]*\]\([^\n]*\)")
 CAPTION_START_RE = re.compile(r"^\s*(?:\u56fe\s*\d|Fig\.?\s*S?\d|Figure\s*S?\d)", re.IGNORECASE)
@@ -275,14 +268,8 @@ def _shared_caption(group: list[FigureInfo]) -> str:
 
 
 def _figure_id_from_caption(caption: str | None) -> str | None:
-    match = FIGURE_ID_RE.search(caption or "")
-    if not match:
-        return None
-    if match.group("zh"):
-        return f"\u56fe{match.group('zh_num')}"
-    if match.group("fig"):
-        return f"Fig.{match.group('fig_num')}"
-    return f"Figure {match.group('figure_num')}"
+    _, figure_id = find_figure_id_pair(caption or "")
+    return figure_id
 
 
 def _relative_span(values: list[int]) -> float:
