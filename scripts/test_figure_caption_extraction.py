@@ -88,7 +88,50 @@ def test_decimal_figure_id_and_group_labels() -> None:
     shutil.rmtree(work_dir)
 
 
+def test_multi_caption_assignment_to_consecutive_images() -> None:
+    paper_id = "_figure_multi_caption_test"
+    work_dir = PROJECT_ROOT / "data" / "outputs" / paper_id
+    markdown_dir = work_dir / "markdown"
+    images_dir = markdown_dir / "images"
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    for name, color in {
+        "a.png": (255, 240, 240),
+        "b.png": (240, 255, 240),
+        "c.png": (240, 240, 255),
+    }.items():
+        Image.new("RGB", (24, 24), color).save(images_dir / name)
+
+    markdown_path = markdown_dir / "paper.md"
+    markdown = """![](images/a.png)
+![](images/b.png)
+![](images/c.png)
+图2-4新制莫来石晶种分散液(a)及其放置3个月后(b)的光学照片 图2-5 新制莫来石晶种分散液的TEM
+
+如图2-4所示，晶种分散液放置后仍保持分散。
+图2-5显示晶种呈现典型TEM形貌。"""
+    markdown_path.write_text(markdown, encoding="utf-8")
+
+    figures = find_figures_in_markdown_any(markdown, markdown_path, PROJECT_ROOT, paper_id)
+    figures = FigureFilter().apply(figures)
+
+    assert len(figures) == 3
+    assert [figure.figure_id for figure in figures] == ["图2-4", "图2-4", "图2-5"]
+    assert [figure.subfigure_label for figure in figures] == ["a", "b", None]
+    assert figures[0].caption == "图2-4新制莫来石晶种分散液(a)及其放置3个月后(b)的光学照片"
+    assert figures[1].caption == figures[0].caption
+    assert figures[2].caption == "图2-5 新制莫来石晶种分散液的TEM"
+    assert not any("图2-5 新制莫来石晶种分散液的TEM" in " ".join(figure.reference_sentences) for figure in figures[:2])
+    assert figures[2].figure_class == "microscopy_image"
+    assert "图2-5 新制莫来石晶种分散液的TEM" not in (figures[0].description_text or "")
+
+    shutil.rmtree(work_dir)
+
+
 if __name__ == "__main__":
     test_grouped_caption_extraction()
     test_decimal_figure_id_and_group_labels()
+    test_multi_caption_assignment_to_consecutive_images()
     print("figure caption extraction test passed")

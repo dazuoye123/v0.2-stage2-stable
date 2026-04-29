@@ -378,6 +378,8 @@ def review_reason_for_figure(figure: FigureInfo, text: str | None = None) -> str
     text = text if text is not None else _classification_text(figure)
     if is_caption_ocr_suspect(figure):
         return "caption_ocr_suspect"
+    if figure.caption_truncation_reason == "multiple_figure_ids_caption_assignment_uncertain":
+        return "multiple_figure_ids_caption_assignment_uncertain"
     if figure.caption_truncation_reason == "multiple_figure_ids_in_caption":
         return "multiple_figure_ids_in_caption"
     if figure.caption_cleaned and figure.caption_truncation_reason:

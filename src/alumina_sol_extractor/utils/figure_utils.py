@@ -13,6 +13,7 @@ import hashlib
 import mimetypes
 import re
 import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -128,13 +129,15 @@ def find_figures_in_markdown_any(
             image_end_position=group[-1].end(),
             next_image_position=next_image_position,
         )
-        caption = caption_result.caption
-        group_id_raw, group_figure_id = _find_figure_id_pair(caption or "")
-        subfigure_labels = _extract_subfigure_labels(caption)
-        if not subfigure_labels and len(group) > 1:
-            subfigure_labels = _extract_group_labels(markdown_text, group)
+        caption_assignments = _build_caption_assignments_for_group(caption_result, len(group))
+        fallback_labels = _extract_group_labels(markdown_text, group) if len(group) > 1 else []
 
         for index_in_group, match in enumerate(group, start=1):
+            caption_assignment = caption_assignments[index_in_group - 1]
+            caption = caption_assignment.caption
+            group_id_raw = caption_assignment.figure_id_raw
+            group_figure_id = caption_assignment.figure_id
+            subfigure_labels = caption_assignment.subfigure_labels or fallback_labels
             alt_text = match.group(1)
             raw_path = match.group(2).strip().strip('"').strip("'")
             position = match.start()
@@ -168,8 +171,8 @@ def find_figures_in_markdown_any(
             )
 
             current_caption = caption
-            caption_source = caption_result.source
-            reference_sentences = list(caption_result.trailing_reference_sentences)
+            caption_source = caption_assignment.source
+            reference_sentences = list(caption_assignment.trailing_reference_sentences)
             if not current_caption:
                 pseudo_caption = build_pseudo_caption(figure_id, local_window)
                 if pseudo_caption:
@@ -180,7 +183,10 @@ def find_figures_in_markdown_any(
 
             section_title = find_section_title_for_position(headings, position)
 
-            subfigure_label = _label_for_index(subfigure_labels, index_in_group)
+            subfigure_label = caption_assignment.subfigure_label
+            if not subfigure_label and subfigure_labels:
+                local_index = caption_assignment.subfigure_index or index_in_group
+                subfigure_label = _label_for_index(subfigure_labels, local_index)
             description_text = build_description_text(
                 caption=current_caption,
                 reference_sentences=reference_sentences,
@@ -194,7 +200,7 @@ def find_figures_in_markdown_any(
                     paper_id=paper_id,
                     figure_id=figure_id,
                     figure_id_raw=figure_id_raw,
-                    subfigure_index=index_in_group if len(group) > 1 else None,
+                    subfigure_index=caption_assignment.subfigure_index,
                     subfigure_label=subfigure_label,
                     alt_text=alt_text,
                     image_path=image_path,
@@ -211,11 +217,11 @@ def find_figures_in_markdown_any(
                     section_title=section_title,
                     context_before=context_before,
                     context_after=context_after,
-                    raw_caption=caption_result.raw_caption,
+                    raw_caption=caption_assignment.raw_caption,
                     caption=current_caption,
                     caption_source=caption_source,
-                    caption_cleaned=caption_result.caption_cleaned,
-                    caption_truncation_reason=caption_result.truncation_reason,
+                    caption_cleaned=caption_assignment.caption_cleaned,
+                    caption_truncation_reason=caption_assignment.truncation_reason,
                     reference_sentences=reference_sentences,
                     description_text=description_text,
                     keep_for_archive=True,
@@ -243,6 +249,21 @@ class CaptionRecord:
         self.raw_caption = raw_caption
         self.caption_cleaned = caption_cleaned
         self.truncation_reason = truncation_reason
+
+
+@dataclass
+class CaptionAssignment:
+    caption: str | None
+    source: str
+    figure_id_raw: str | None
+    figure_id: str | None
+    subfigure_labels: list[str] = field(default_factory=list)
+    subfigure_index: int | None = None
+    subfigure_label: str | None = None
+    trailing_reference_sentences: list[str] = field(default_factory=list)
+    raw_caption: str | None = None
+    caption_cleaned: bool = False
+    truncation_reason: str | None = None
 
 
 def extract_caption_near_image(
@@ -353,6 +374,164 @@ def _split_caption_details(
     caption = text[:boundary].strip()
     trailing = text[boundary:].strip()
     return caption, _following_sentences(trailing), reason
+
+
+def _build_caption_assignments_for_group(
+    caption_record: CaptionRecord,
+    group_size: int,
+) -> list[CaptionAssignment]:
+    if group_size <= 0:
+        return []
+
+    segments = _split_caption_record_into_segments(caption_record)
+    if not segments:
+        return [CaptionAssignment(caption=None, source="none", figure_id_raw=None, figure_id=None) for _ in range(group_size)]
+
+    if len(segments) == 1:
+        segment = segments[0]
+        return _expand_segment_assignments(
+            segment,
+            image_count=group_size,
+            preserve_labels=len(segment.subfigure_labels) == group_size,
+        )
+
+    assignments: list[CaptionAssignment] = []
+    remaining = group_size
+    uncertain = False
+
+    for segment in segments:
+        if remaining <= 0:
+            uncertain = True
+            break
+        requested = max(1, len(segment.subfigure_labels) or 1)
+        assigned_count = min(requested, remaining)
+        if assigned_count != requested:
+            uncertain = True
+        preserve_labels = len(segment.subfigure_labels) == assigned_count
+        assignments.extend(
+            _expand_segment_assignments(
+                segment,
+                image_count=assigned_count,
+                preserve_labels=preserve_labels,
+            )
+        )
+        remaining -= assigned_count
+
+    if remaining > 0:
+        uncertain = True
+        fallback = segments[-1]
+        assignments.extend(
+            _expand_segment_assignments(
+                fallback,
+                image_count=remaining,
+                preserve_labels=False,
+            )
+        )
+
+    assignments = assignments[:group_size]
+    if uncertain:
+        for assignment in assignments:
+            assignment.caption_cleaned = True
+            assignment.truncation_reason = "multiple_figure_ids_caption_assignment_uncertain"
+    return assignments
+
+
+def _split_caption_record_into_segments(caption_record: CaptionRecord) -> list[CaptionAssignment]:
+    raw_text = _compact_spaces(caption_record.raw_caption or caption_record.caption or "")
+    if not raw_text:
+        return []
+
+    raw_segments = _split_multi_figure_caption_segments(raw_text)
+    segments: list[CaptionAssignment] = []
+    for raw_segment in raw_segments:
+        figure_id_raw, figure_id = _find_figure_id_pair(raw_segment)
+        caption, trailing_refs, truncation_reason = _split_caption_details(
+            raw_segment,
+            figure_id=figure_id or figure_id_raw,
+        )
+        clean_caption = caption or None
+        reference_sentences = _clean_caption_reference_sentences(
+            trailing_refs,
+            current_figure_id=figure_id,
+        )
+        segments.append(
+            CaptionAssignment(
+                caption=clean_caption,
+                source="standard_caption" if clean_caption else "none",
+                figure_id_raw=figure_id_raw,
+                figure_id=figure_id,
+                subfigure_labels=_extract_subfigure_labels(clean_caption or raw_segment),
+                trailing_reference_sentences=reference_sentences,
+                raw_caption=raw_segment,
+                caption_cleaned=truncation_reason is not None,
+                truncation_reason=truncation_reason,
+            )
+        )
+    return segments
+
+
+def _split_multi_figure_caption_segments(raw_caption_text: str) -> list[str]:
+    matches = list(ANY_FIGURE_ID_PATTERN.finditer(raw_caption_text))
+    if len(matches) <= 1:
+        return [_compact_spaces(raw_caption_text)]
+
+    boundaries = [match.start() for match in matches[1:]]
+    segments: list[str] = []
+    start = 0
+    for boundary in boundaries:
+        segment = _compact_spaces(raw_caption_text[start:boundary])
+        if segment:
+            segments.append(segment)
+        start = boundary
+    tail = _compact_spaces(raw_caption_text[start:])
+    if tail:
+        segments.append(tail)
+    return segments or [_compact_spaces(raw_caption_text)]
+
+
+def _expand_segment_assignments(
+    segment: CaptionAssignment,
+    image_count: int,
+    preserve_labels: bool,
+) -> list[CaptionAssignment]:
+    assignments: list[CaptionAssignment] = []
+    for index in range(1, image_count + 1):
+        label = segment.subfigure_labels[index - 1] if preserve_labels and index <= len(segment.subfigure_labels) else None
+        assignments.append(
+            CaptionAssignment(
+                caption=segment.caption,
+                source=segment.source,
+                figure_id_raw=segment.figure_id_raw,
+                figure_id=segment.figure_id,
+                subfigure_labels=list(segment.subfigure_labels),
+                subfigure_index=index if image_count > 1 else None,
+                subfigure_label=label,
+                trailing_reference_sentences=list(segment.trailing_reference_sentences),
+                raw_caption=segment.raw_caption,
+                caption_cleaned=segment.caption_cleaned,
+                truncation_reason=segment.truncation_reason,
+            )
+        )
+    return assignments
+
+
+def _clean_caption_reference_sentences(
+    sentences: list[str],
+    current_figure_id: str | None,
+) -> list[str]:
+    cleaned: list[str] = []
+    for sentence in sentences:
+        compact = _compact_spaces(sentence)
+        if not compact:
+            continue
+        sentence_id_raw, sentence_figure_id = _find_figure_id_pair(compact)
+        starts_like_caption = bool(CAPTION_START_PATTERN.match(compact))
+        if starts_like_caption and sentence_figure_id and sentence_figure_id != current_figure_id:
+            continue
+        if sentence_id_raw and sentence_figure_id != current_figure_id and not BODY_REFERENCE_PATTERN.search(compact):
+            continue
+        cleaned.append(compact)
+    return _dedupe_texts(cleaned)[:3]
 
 
 def build_pseudo_caption(figure_id: str, context: str) -> str | None:
