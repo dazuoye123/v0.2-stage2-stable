@@ -1,595 +1,1347 @@
-version: "2.0"
-key_style: "English snake_case with unit suffix when a standard unit is fixed"
+version: '2.1'
+key_style: English snake_case with unit suffix when a standard unit is fixed
 rules:
-  - "Core statistical fields must use canonical_key exactly as listed here."
-  - "Models may not invent new core parameter names."
-  - "Long-tail fields may enter extended_data only when they are not listed as core statistical fields."
-  - "All numeric values should be normalized to standard_unit and stored as numbers, with raw text preserved in provenance."
-
+- Core statistical fields must use canonical_key exactly as listed here.
+- Models may not invent new core parameter names.
+- Long-tail fields may enter extended_data only when they are not listed as core statistical fields.
+- All numeric values should be normalized to standard_unit and stored as numbers, with raw text preserved in provenance.
+- canonical_key normalization should prefer aliases declared in this file instead of ad hoc prompt heuristics.
 categories:
-  precursor_solution: "前驱体/溶胶/纺丝原液"
-  composition: "组成与配比"
-  forming: "成型与纺丝工艺"
-  heat_treatment: "热处理与陶瓷化"
-  structure: "物相、微结构与孔结构"
-  mechanical: "力学性能"
-  thermal: "热学与高温服役性能"
-  spectroscopy: "谱学与机理证据"
-  production: "连续化与放大生产"
-
+  precursor_solution: 前驱液/溶胶与纺丝原液
+  composition: 组成与配比
+  forming: 成型与纺丝工艺
+  heat_treatment: 热处理与陶瓷化
+  structure: 物相、微结构与孔结构
+  mechanical: 力学性能
+  thermal: 热学与高温服役性能
+  spectroscopy: 谱学与机理证据
+  production: 连续化与放大生产
 parameters:
-  - canonical_key: solid_content_wt_percent
-    zh_name: 固含量
-    en_aliases: [solid content, solids content, solid loading, solid fraction]
-    zh_aliases: [固含, 固体含量, 固相含量, 固体质量分数]
-    standard_unit: wt%
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: viscosity_Pa_s
-    zh_name: 粘度
-    en_aliases: [viscosity, apparent viscosity, spinning viscosity]
-    zh_aliases: [黏度, 表观粘度, 纺丝粘度, 可纺丝黏度]
-    standard_unit: Pa*s
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: particle_size_nm
-    zh_name: 胶粒粒径
-    en_aliases: [particle size, sol particle size, colloid size, grain size of sol]
-    zh_aliases: [粒径, 胶粒大小, 溶胶粒径, 纳米胶粒直径]
-    standard_unit: nm
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: zeta_potential_mV
-    zh_name: Zeta 电位
-    en_aliases: [zeta potential, zeta-potential]
-    zh_aliases: [zeta电位, Zeta 电势, 胶粒表面电荷]
-    standard_unit: mV
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: pH
-    zh_name: pH 值
-    en_aliases: [pH, pH value]
-    zh_aliases: [pH值, 酸碱度]
-    standard_unit: dimensionless
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: pva_content_wt_percent
-    zh_name: PVA 含量
-    en_aliases: [PVA content, polyvinyl alcohol content]
-    zh_aliases: [PVA添加量, 聚乙烯醇含量, 聚乙烯醇添加量]
-    standard_unit: wt%
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: pvp_content_wt_percent
-    zh_name: PVP 含量
-    en_aliases: [PVP content, polyvinylpyrrolidone content]
-    zh_aliases: [PVP添加量, 聚乙烯吡咯烷酮含量, 聚乙烯吡咯烷酮添加量]
-    standard_unit: wt%
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: peo_content_wt_percent
-    zh_name: PEO 含量
-    en_aliases: [PEO content, polyethylene oxide content]
-    zh_aliases: [PEO添加量, 聚氧化乙烯含量, 聚环氧乙烷含量]
-    standard_unit: wt%
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: aging_temperature_C
-    zh_name: 老化温度
-    en_aliases: [aging temperature, ageing temperature]
-    zh_aliases: [陈化温度, 熟化温度]
-    standard_unit: C
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: aging_time_h
-    zh_name: 老化时间
-    en_aliases: [aging time, ageing time]
-    zh_aliases: [陈化时间, 熟化时间]
-    standard_unit: h
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: concentration_temperature_C
-    zh_name: 浓缩温度
-    en_aliases: [concentration temperature, evaporation temperature]
-    zh_aliases: [减压浓缩温度, 浓缩水浴温度]
-    standard_unit: C
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: concentration_time_h
-    zh_name: 浓缩时间
-    en_aliases: [concentration time, evaporation time]
-    zh_aliases: [减压浓缩时间]
-    standard_unit: h
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: gelation_time_h
-    zh_name: 凝胶时间
-    en_aliases: [gelation time, gelling time]
-    zh_aliases: [成胶时间, 凝胶化时间]
-    standard_unit: h
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: drying_temperature_C
-    zh_name: 干燥温度
-    en_aliases: [drying temperature, dried temperature]
-    zh_aliases: [烘干温度, 干燥处理温度]
-    standard_unit: C
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: drying_time_h
-    zh_name: 干燥时间
-    en_aliases: [drying time, dried time]
-    zh_aliases: [烘干时间]
-    standard_unit: h
-    category: precursor_solution
-    is_core_statistical_field: true
-
-  - canonical_key: alumina_content_wt_percent
-    zh_name: 氧化铝含量
-    en_aliases: [Al2O3 content, alumina content]
-    zh_aliases: [Al2O3含量, 氧化铝质量分数]
-    standard_unit: wt%
-    category: composition
-    is_core_statistical_field: true
-
-  - canonical_key: silica_content_wt_percent
-    zh_name: 二氧化硅含量
-    en_aliases: [SiO2 content, silica content]
-    zh_aliases: [SiO2含量, 二氧化硅质量分数]
-    standard_unit: wt%
-    category: composition
-    is_core_statistical_field: true
-
-  - canonical_key: boria_content_wt_percent
-    zh_name: 氧化硼含量
-    en_aliases: [B2O3 content, boria content]
-    zh_aliases: [B2O3含量, 氧化硼质量分数]
-    standard_unit: wt%
-    category: composition
-    is_core_statistical_field: true
-
-  - canonical_key: zirconia_content_wt_percent
-    zh_name: 氧化锆含量
-    en_aliases: [ZrO2 content, zirconia content]
-    zh_aliases: [ZrO2含量, 氧化锆质量分数]
-    standard_unit: wt%
-    category: composition
-    is_core_statistical_field: true
-
-  - canonical_key: alumina_silica_molar_ratio
-    zh_name: 铝硅摩尔比
-    en_aliases: [Al/Si molar ratio, Al2O3/SiO2 molar ratio]
-    zh_aliases: [Al/Si摩尔比, 铝硅比, 氧化铝二氧化硅摩尔比]
-    standard_unit: mol/mol
-    category: composition
-    is_core_statistical_field: true
-
-  - canonical_key: spinneret_hole_diameter_mm
-    zh_name: 喷丝板孔径
-    en_aliases: [spinneret hole diameter, orifice diameter]
-    zh_aliases: [喷丝孔径, 喷丝孔直径]
-    standard_unit: mm
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: spinneret_hole_count
-    zh_name: 喷丝孔数
-    en_aliases: [spinneret hole count, number of orifices]
-    zh_aliases: [孔数, 喷丝板孔数]
-    standard_unit: count
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: needle_gauge
-    zh_name: 针头规格
-    en_aliases: [needle gauge, needle size]
-    zh_aliases: [针头型号, 针头尺寸]
-    standard_unit: gauge
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: nozzle_inner_diameter_mm
-    zh_name: 喷头内径
-    en_aliases: [nozzle inner diameter, needle inner diameter]
-    zh_aliases: [喷嘴内径, 针头内径]
-    standard_unit: mm
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: feed_pressure_MPa
-    zh_name: 进料压力
-    en_aliases: [feed pressure, extrusion pressure]
-    zh_aliases: [供料压力, 挤出压力, 纺丝压力]
-    standard_unit: MPa
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: applied_voltage_kV
-    zh_name: 工作电压
-    en_aliases: [applied voltage, working voltage, electrospinning voltage]
-    zh_aliases: [外加电场, 外加电压, 静电纺丝电压]
-    standard_unit: kV
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: air_pressure_MPa
-    zh_name: 风压
-    en_aliases: [air pressure, gas pressure]
-    zh_aliases: [气压, 气流压力, 压缩空气压力]
-    standard_unit: MPa
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: collector_distance_cm
-    zh_name: 接收距离
-    en_aliases: [collector distance, tip-to-collector distance, working distance]
-    zh_aliases: [喷头接收板距离, 针尖到接收器距离, 接收板距离]
-    standard_unit: cm
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: feed_rate_ml_h
-    zh_name: 进料速率
-    en_aliases: [feed rate, flow rate, injection rate]
-    zh_aliases: [推进速率, 注射速率, 供液速率]
-    standard_unit: ml/h
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: take_up_speed_m_min
-    zh_name: 收丝辊线速度
-    en_aliases: [take-up speed, winding speed, collecting roller speed]
-    zh_aliases: [收丝速度, 卷绕速度, 收丝辊速度]
-    standard_unit: m/min
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: drawing_speed_mm_min
-    zh_name: 提拉速度
-    en_aliases: [drawing speed, pulling speed]
-    zh_aliases: [拉伸速度, 拉拔速度]
-    standard_unit: mm/min
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: spinning_channel_temperature_C
-    zh_name: 纺丝甬道温度
-    en_aliases: [spinning channel temperature, drying channel temperature]
-    zh_aliases: [甬道温度, 纺丝通道温度]
-    standard_unit: C
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: hot_air_temperature_C
-    zh_name: 热风温度
-    en_aliases: [hot air temperature, drying air temperature]
-    zh_aliases: [热空气温度]
-    standard_unit: C
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: ambient_temperature_C
-    zh_name: 环境温度
-    en_aliases: [ambient temperature, room temperature]
-    zh_aliases: [操作箱温度, 室温, 环境控制温度]
-    standard_unit: C
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: relative_humidity_percent
-    zh_name: 相对湿度
-    en_aliases: [relative humidity, RH]
-    zh_aliases: [环境湿度, 操作箱湿度]
-    standard_unit: "%"
-    category: forming
-    is_core_statistical_field: true
-
-  - canonical_key: calcination_temperature_C
-    zh_name: 煅烧温度
-    en_aliases: [calcination temperature, calcined temperature]
-    zh_aliases: [煅烧目标温度, 低温煅烧温度]
-    standard_unit: C
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: sintering_temperature_C
-    zh_name: 烧结温度
-    en_aliases: [sintering temperature, firing temperature]
-    zh_aliases: [高温烧结温度, 陶瓷化温度]
-    standard_unit: C
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: holding_time_h
-    zh_name: 保温时间
-    en_aliases: [holding time, dwell time, soaking time]
-    zh_aliases: [保温, 恒温时间, 热处理时间]
-    standard_unit: h
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: heating_rate_C_min
-    zh_name: 升温速率
-    en_aliases: [heating rate, ramp rate]
-    zh_aliases: [升温速度, 升温速率]
-    standard_unit: C/min
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: start_temperature_C
-    zh_name: 起始温度
-    en_aliases: [start temperature, initial temperature]
-    zh_aliases: [初始温度, 起始热处理温度]
-    standard_unit: C
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: target_temperature_C
-    zh_name: 目标温度
-    en_aliases: [target temperature, final temperature]
-    zh_aliases: [目标热处理温度, 终点温度]
-    standard_unit: C
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: temperature_range_C
-    zh_name: 温度区间
-    en_aliases: [temperature range, temperature interval]
-    zh_aliases: [温度范围, 热处理区间]
-    standard_unit: C
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: dsc_peak_temperature_C
-    zh_name: DSC 峰温
-    en_aliases: [DSC peak temperature, exothermic peak, endothermic peak]
-    zh_aliases: [DSC峰温, 放热峰温度, 吸热峰温度]
-    standard_unit: C
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: mass_loss_wt_percent
-    zh_name: TG 失重率
-    en_aliases: [mass loss, weight loss, TG weight loss]
-    zh_aliases: [失重率, 热失重, 质量损失]
-    standard_unit: wt%
-    category: heat_treatment
-    is_core_statistical_field: true
-
-  - canonical_key: average_fiber_diameter_um
-    zh_name: 平均纤维直径
-    en_aliases: [average fiber diameter, mean fiber diameter, fiber diameter]
-    zh_aliases: [平均直径, 纤维平均直径, 纤维直径]
-    standard_unit: um
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: average_fiber_diameter_nm
-    zh_name: 平均纤维直径
-    en_aliases: [average nanofiber diameter, fiber diameter in nm]
-    zh_aliases: [纳米纤维直径, 平均纤维直径nm]
-    standard_unit: nm
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: fiber_length_m
-    zh_name: 纤维长度
-    en_aliases: [fiber length, filament length]
-    zh_aliases: [纤维长度, 单根纤维长度]
-    standard_unit: m
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: crystallite_size_nm
-    zh_name: 晶粒尺寸
-    en_aliases: [crystallite size, crystal size, grain size]
-    zh_aliases: [晶粒大小, 晶粒尺寸, 微晶尺寸]
-    standard_unit: nm
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: porosity_vol_percent
-    zh_name: 孔隙率
-    en_aliases: [porosity, pore fraction]
-    zh_aliases: [孔隙率, 孔体积分数]
-    standard_unit: vol%
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: average_pore_size_nm
-    zh_name: 平均孔径
-    en_aliases: [average pore size, pore diameter]
-    zh_aliases: [孔径, 平均孔径]
-    standard_unit: nm
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: pore_volume_cm3_g
-    zh_name: 孔容
-    en_aliases: [pore volume, total pore volume]
-    zh_aliases: [总孔容, 孔体积]
-    standard_unit: cm3/g
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: specific_surface_area_m2_g
-    zh_name: 比表面积
-    en_aliases: [specific surface area, BET surface area, SSA]
-    zh_aliases: [BET比表面积, 比表面]
-    standard_unit: m2/g
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: density_g_cm3
-    zh_name: 密度
-    en_aliases: [density, bulk density, apparent density]
-    zh_aliases: [体积密度, 表观密度]
-    standard_unit: g/cm3
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: linear_shrinkage_percent
-    zh_name: 线收缩率
-    en_aliases: [linear shrinkage, shrinkage]
-    zh_aliases: [线收缩, 收缩率]
-    standard_unit: "%"
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: volume_shrinkage_percent
-    zh_name: 体积收缩率
-    en_aliases: [volume shrinkage, volumetric shrinkage]
-    zh_aliases: [体积收缩, 体收缩率]
-    standard_unit: "%"
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: crystallization_temperature_C
-    zh_name: 晶化温度
-    en_aliases: [crystallization temperature, crystal transition temperature]
-    zh_aliases: [结晶温度, 相变晶化温度]
-    standard_unit: C
-    category: structure
-    is_core_statistical_field: true
-
-  - canonical_key: tensile_strength_MPa
-    zh_name: 拉伸强度
-    en_aliases: [tensile strength, breaking strength]
-    zh_aliases: [断裂强度, 抗拉强度, 单丝强度]
-    standard_unit: MPa
-    category: mechanical
-    is_core_statistical_field: true
-
-  - canonical_key: compressive_strength_MPa
-    zh_name: 抗压强度
-    en_aliases: [compressive strength, compression strength]
-    zh_aliases: [压缩强度]
-    standard_unit: MPa
-    category: mechanical
-    is_core_statistical_field: true
-
-  - canonical_key: flexural_strength_MPa
-    zh_name: 抗弯强度
-    en_aliases: [flexural strength, bending strength]
-    zh_aliases: [弯曲强度]
-    standard_unit: MPa
-    category: mechanical
-    is_core_statistical_field: true
-
-  - canonical_key: breaking_force_cN
-    zh_name: 断裂强力
-    en_aliases: [breaking force, fracture force, maximum load]
-    zh_aliases: [最大断裂强力, 断裂载荷]
-    standard_unit: cN
-    category: mechanical
-    is_core_statistical_field: true
-
-  - canonical_key: elastic_modulus_GPa
-    zh_name: 弹性模量
-    en_aliases: [elastic modulus, Young's modulus, tensile modulus]
-    zh_aliases: [杨氏模量, 模量]
-    standard_unit: GPa
-    category: mechanical
-    is_core_statistical_field: true
-
-  - canonical_key: elongation_at_break_percent
-    zh_name: 断裂伸长率
-    en_aliases: [elongation at break, strain at break, maximum strain]
-    zh_aliases: [断裂伸长, 断裂应变, 最大应变]
-    standard_unit: "%"
-    category: mechanical
-    is_core_statistical_field: true
-
-  - canonical_key: thermal_conductivity_W_mK
-    zh_name: 热导率
-    en_aliases: [thermal conductivity]
-    zh_aliases: [导热系数]
-    standard_unit: W/(m*K)
-    category: thermal
-    is_core_statistical_field: true
-
-  - canonical_key: strength_retention_percent
-    zh_name: 强度保持率
-    en_aliases: [strength retention, retained strength, residual strength ratio]
-    zh_aliases: [高温后强度保持率, 残余强度保持率]
-    standard_unit: "%"
-    category: thermal
-    is_core_statistical_field: true
-
-  - canonical_key: service_temperature_C
-    zh_name: 使用温度
-    en_aliases: [service temperature, use temperature, working temperature]
-    zh_aliases: [使用上限, 耐温上限, 服役温度]
-    standard_unit: C
-    category: thermal
-    is_core_statistical_field: true
-
-  - canonical_key: continuous_length_m
-    zh_name: 连续成纤长度
-    en_aliases: [continuous fiber length, collected length, spinning length]
-    zh_aliases: [连续长度, 收丝长度, 可连续纺丝长度]
-    standard_unit: m
-    category: production
-    is_core_statistical_field: true
-
-  - canonical_key: spinning_duration_h
-    zh_name: 连续纺丝时长
-    en_aliases: [spinning duration, continuous spinning time]
-    zh_aliases: [纺丝时长, 连续纺丝时间]
-    standard_unit: h
-    category: production
-    is_core_statistical_field: true
-
-  - canonical_key: sol_conversion_percent
-    zh_name: 溶胶转化率
-    en_aliases: [sol conversion, conversion yield]
-    zh_aliases: [单批次溶胶转化率, 转化率]
-    standard_unit: "%"
-    category: production
-    is_core_statistical_field: true
-
-  - canonical_key: fiber_water_content_percent
-    zh_name: 凝胶纤维含水量
-    en_aliases: [fiber water content, gel fiber moisture content]
-    zh_aliases: [含水量, 凝胶纤维水分]
-    standard_unit: "%"
-    category: production
-    is_core_statistical_field: true
-
-  - canonical_key: ftir_peak_position_cm_1
-    zh_name: FTIR 峰位
-    en_aliases: [FTIR peak position, infrared band, wavenumber]
-    zh_aliases: [红外峰位, 红外吸收峰, 波数]
-    standard_unit: cm^-1
-    category: spectroscopy
-    is_core_statistical_field: false
-
-  - canonical_key: xrd_peak_position_2theta_deg
-    zh_name: XRD 峰位
-    en_aliases: [XRD peak position, diffraction peak, 2 theta]
-    zh_aliases: [衍射峰位, 2θ, XRD主峰]
-    standard_unit: degree
-    category: spectroscopy
-    is_core_statistical_field: false
-
-  - canonical_key: nmr_chemical_shift_ppm
-    zh_name: NMR 化学位移
-    en_aliases: [NMR chemical shift, chemical shift]
-    zh_aliases: [核磁化学位移]
-    standard_unit: ppm
-    category: spectroscopy
-    is_core_statistical_field: false
+- canonical_key: solid_content_wt_percent
+  category: precursor_solution
+  standard_unit: wt%
+  zh_name: solid content
+  en_name: solid content
+  aliases_zh:
+  - solid content
+  aliases_en:
+  - solid content
+  - solids content
+  - solid loading
+  - solid fraction
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for solid content.
+- canonical_key: viscosity_Pa_s
+  category: precursor_solution
+  standard_unit: Pa*s
+  zh_name: viscosity
+  en_name: viscosity
+  aliases_zh:
+  - viscosity
+  aliases_en:
+  - viscosity
+  - apparent viscosity
+  - spinning viscosity
+  - viscosity Pa s
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for viscosity Pa s.
+- canonical_key: particle_size_nm
+  category: precursor_solution
+  standard_unit: nm
+  zh_name: particle size
+  en_name: particle size
+  aliases_zh:
+  - particle size
+  aliases_en:
+  - particle size
+  - sol particle size
+  - colloid size
+  - grain size of sol
+  - particle
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for particle.
+- canonical_key: zeta_potential_mV
+  category: precursor_solution
+  standard_unit: mV
+  zh_name: zeta potential
+  en_name: zeta potential
+  aliases_zh:
+  - zeta potential
+  aliases_en:
+  - zeta potential
+  - zeta-potential
+  - zeta
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for zeta.
+- canonical_key: pH
+  category: precursor_solution
+  standard_unit: dimensionless
+  zh_name: pH
+  en_name: pH
+  aliases_zh:
+  - pH
+  aliases_en:
+  - pH
+  - pH value
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for pH.
+- canonical_key: pva_content_wt_percent
+  category: precursor_solution
+  standard_unit: wt%
+  zh_name: PVA content
+  en_name: PVA content
+  aliases_zh:
+  - PVA content
+  aliases_en:
+  - PVA content
+  - polyvinyl alcohol content
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for pva content.
+- canonical_key: pvp_content_wt_percent
+  category: precursor_solution
+  standard_unit: wt%
+  zh_name: PVP content
+  en_name: PVP content
+  aliases_zh:
+  - PVP content
+  aliases_en:
+  - PVP content
+  - polyvinylpyrrolidone content
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for pvp content.
+- canonical_key: peo_content_wt_percent
+  category: precursor_solution
+  standard_unit: wt%
+  zh_name: PEO content
+  en_name: PEO content
+  aliases_zh:
+  - PEO content
+  aliases_en:
+  - PEO content
+  - polyethylene oxide content
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for peo content.
+- canonical_key: aging_temperature_C
+  category: precursor_solution
+  standard_unit: C
+  zh_name: aging temperature
+  en_name: aging temperature
+  aliases_zh:
+  - aging temperature
+  aliases_en:
+  - aging temperature
+  - ageing temperature
+  - aging
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for aging.
+- canonical_key: aging_time_h
+  category: precursor_solution
+  standard_unit: h
+  zh_name: 老化时间
+  en_name: aging time
+  aliases_zh:
+  - 老化时间
+  - 陈化时间
+  aliases_en:
+  - aging time
+  - ageing time
+  - aging
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for aging.
+- canonical_key: concentration_temperature_C
+  category: precursor_solution
+  standard_unit: C
+  zh_name: concentration temperature
+  en_name: concentration temperature
+  aliases_zh:
+  - concentration temperature
+  aliases_en:
+  - concentration temperature
+  - evaporation temperature
+  - concentration
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for concentration.
+- canonical_key: concentration_time_h
+  category: precursor_solution
+  standard_unit: h
+  zh_name: concentration time
+  en_name: concentration time
+  aliases_zh:
+  - concentration time
+  aliases_en:
+  - concentration time
+  - evaporation time
+  - concentration
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for concentration.
+- canonical_key: gelation_time_h
+  category: precursor_solution
+  standard_unit: h
+  zh_name: gelation time
+  en_name: gelation time
+  aliases_zh:
+  - gelation time
+  aliases_en:
+  - gelation time
+  - gelling time
+  - gelation
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for gelation.
+- canonical_key: drying_temperature_C
+  category: precursor_solution
+  standard_unit: C
+  zh_name: drying temperature
+  en_name: drying temperature
+  aliases_zh:
+  - drying temperature
+  aliases_en:
+  - drying temperature
+  - dried temperature
+  - drying
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for drying.
+- canonical_key: drying_time_h
+  category: precursor_solution
+  standard_unit: h
+  zh_name: drying time
+  en_name: drying time
+  aliases_zh:
+  - drying time
+  aliases_en:
+  - drying time
+  - dried time
+  - drying
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for drying.
+- canonical_key: alumina_content_wt_percent
+  category: composition
+  standard_unit: wt%
+  zh_name: Al2O3 content
+  en_name: Al2O3 content
+  aliases_zh:
+  - Al2O3 content
+  aliases_en:
+  - Al2O3 content
+  - alumina content
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for alumina content.
+- canonical_key: silica_content_wt_percent
+  category: composition
+  standard_unit: wt%
+  zh_name: SiO2 content
+  en_name: SiO2 content
+  aliases_zh:
+  - SiO2 content
+  aliases_en:
+  - SiO2 content
+  - silica content
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for silica content.
+- canonical_key: boria_content_wt_percent
+  category: composition
+  standard_unit: wt%
+  zh_name: B2O3 content
+  en_name: B2O3 content
+  aliases_zh:
+  - B2O3 content
+  aliases_en:
+  - B2O3 content
+  - boria content
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for boria content.
+- canonical_key: zirconia_content_wt_percent
+  category: composition
+  standard_unit: wt%
+  zh_name: ZrO2 content
+  en_name: ZrO2 content
+  aliases_zh:
+  - ZrO2 content
+  aliases_en:
+  - ZrO2 content
+  - zirconia content
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for zirconia content.
+- canonical_key: alumina_silica_molar_ratio
+  category: composition
+  standard_unit: mol/mol
+  zh_name: Al/Si molar ratio
+  en_name: Al/Si molar ratio
+  aliases_zh:
+  - Al/Si molar ratio
+  aliases_en:
+  - Al/Si molar ratio
+  - Al2O3/SiO2 molar ratio
+  - alumina silica
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for alumina silica.
+- canonical_key: spinneret_hole_diameter_mm
+  category: forming
+  standard_unit: mm
+  zh_name: spinneret hole diameter
+  en_name: spinneret hole diameter
+  aliases_zh:
+  - spinneret hole diameter
+  aliases_en:
+  - spinneret hole diameter
+  - orifice diameter
+  - spinneret hole
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for spinneret hole.
+- canonical_key: spinneret_hole_count
+  category: forming
+  standard_unit: count
+  zh_name: spinneret hole count
+  en_name: spinneret hole count
+  aliases_zh:
+  - spinneret hole count
+  aliases_en:
+  - spinneret hole count
+  - number of orifices
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for spinneret hole count.
+- canonical_key: needle_gauge
+  category: forming
+  standard_unit: gauge
+  zh_name: needle gauge
+  en_name: needle gauge
+  aliases_zh:
+  - needle gauge
+  aliases_en:
+  - needle gauge
+  - needle size
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for needle gauge.
+- canonical_key: nozzle_inner_diameter_mm
+  category: forming
+  standard_unit: mm
+  zh_name: nozzle inner diameter
+  en_name: nozzle inner diameter
+  aliases_zh:
+  - nozzle inner diameter
+  aliases_en:
+  - nozzle inner diameter
+  - needle inner diameter
+  - nozzle inner
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for nozzle inner.
+- canonical_key: feed_pressure_MPa
+  category: forming
+  standard_unit: MPa
+  zh_name: feed pressure
+  en_name: feed pressure
+  aliases_zh:
+  - feed pressure
+  aliases_en:
+  - feed pressure
+  - extrusion pressure
+  - feed
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for feed.
+- canonical_key: applied_voltage_kV
+  category: forming
+  standard_unit: kV
+  zh_name: applied voltage
+  en_name: applied voltage
+  aliases_zh:
+  - applied voltage
+  aliases_en:
+  - applied voltage
+  - working voltage
+  - electrospinning voltage
+  - applied voltage kV
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for applied voltage kV.
+- canonical_key: air_pressure_MPa
+  category: forming
+  standard_unit: MPa
+  zh_name: air pressure
+  en_name: air pressure
+  aliases_zh:
+  - air pressure
+  aliases_en:
+  - air pressure
+  - gas pressure
+  - air
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for air.
+- canonical_key: collector_distance_cm
+  category: forming
+  standard_unit: cm
+  zh_name: collector distance
+  en_name: collector distance
+  aliases_zh:
+  - collector distance
+  aliases_en:
+  - collector distance
+  - tip-to-collector distance
+  - working distance
+  - collector distance cm
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for collector distance cm.
+- canonical_key: feed_rate_ml_h
+  category: forming
+  standard_unit: ml/h
+  zh_name: feed rate
+  en_name: feed rate
+  aliases_zh:
+  - feed rate
+  aliases_en:
+  - feed rate
+  - flow rate
+  - injection rate
+  - feed
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for feed.
+- canonical_key: take_up_speed_m_min
+  category: forming
+  standard_unit: m/min
+  zh_name: take-up speed
+  en_name: take-up speed
+  aliases_zh:
+  - take-up speed
+  aliases_en:
+  - take-up speed
+  - winding speed
+  - collecting roller speed
+  - take up
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for take up.
+- canonical_key: drawing_speed_mm_min
+  category: forming
+  standard_unit: mm/min
+  zh_name: drawing speed
+  en_name: drawing speed
+  aliases_zh:
+  - drawing speed
+  aliases_en:
+  - drawing speed
+  - pulling speed
+  - drawing
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for drawing.
+- canonical_key: spinning_channel_temperature_C
+  category: forming
+  standard_unit: C
+  zh_name: spinning channel temperature
+  en_name: spinning channel temperature
+  aliases_zh:
+  - spinning channel temperature
+  aliases_en:
+  - spinning channel temperature
+  - drying channel temperature
+  - spinning channel
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for spinning channel.
+- canonical_key: hot_air_temperature_C
+  category: forming
+  standard_unit: C
+  zh_name: hot air temperature
+  en_name: hot air temperature
+  aliases_zh:
+  - hot air temperature
+  aliases_en:
+  - hot air temperature
+  - drying air temperature
+  - hot air
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for hot air.
+- canonical_key: ambient_temperature_C
+  category: forming
+  standard_unit: C
+  zh_name: ambient temperature
+  en_name: ambient temperature
+  aliases_zh:
+  - ambient temperature
+  aliases_en:
+  - ambient temperature
+  - room temperature
+  - ambient
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for ambient.
+- canonical_key: relative_humidity_percent
+  category: forming
+  standard_unit: '%'
+  zh_name: relative humidity
+  en_name: relative humidity
+  aliases_zh:
+  - relative humidity
+  aliases_en:
+  - relative humidity
+  - RH
+  - relative humidity percent
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for relative humidity percent.
+- canonical_key: calcination_temperature_C
+  category: heat_treatment
+  standard_unit: C
+  zh_name: calcination temperature
+  en_name: calcination temperature
+  aliases_zh:
+  - calcination temperature
+  aliases_en:
+  - calcination temperature
+  - calcined temperature
+  - calcination
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for calcination.
+- canonical_key: sintering_temperature_C
+  category: heat_treatment
+  standard_unit: C
+  zh_name: sintering temperature
+  en_name: sintering temperature
+  aliases_zh:
+  - sintering temperature
+  aliases_en:
+  - sintering temperature
+  - firing temperature
+  - sintering
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for sintering.
+- canonical_key: holding_time_h
+  category: heat_treatment
+  standard_unit: h
+  zh_name: holding time
+  en_name: holding time
+  aliases_zh:
+  - holding time
+  aliases_en:
+  - holding time
+  - dwell time
+  - soaking time
+  - holding
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for holding.
+- canonical_key: heating_rate_C_min
+  category: heat_treatment
+  standard_unit: C/min
+  zh_name: heating rate
+  en_name: heating rate
+  aliases_zh:
+  - heating rate
+  aliases_en:
+  - heating rate
+  - ramp rate
+  - heating
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for heating.
+- canonical_key: start_temperature_C
+  category: heat_treatment
+  standard_unit: C
+  zh_name: start temperature
+  en_name: start temperature
+  aliases_zh:
+  - start temperature
+  aliases_en:
+  - start temperature
+  - initial temperature
+  - start
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for start.
+- canonical_key: target_temperature_C
+  category: heat_treatment
+  standard_unit: C
+  zh_name: target temperature
+  en_name: target temperature
+  aliases_zh:
+  - target temperature
+  aliases_en:
+  - target temperature
+  - final temperature
+  - target
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for target.
+- canonical_key: temperature_range_C
+  category: heat_treatment
+  standard_unit: C
+  zh_name: temperature range
+  en_name: temperature range
+  aliases_zh:
+  - temperature range
+  aliases_en:
+  - temperature range
+  - temperature interval
+  - temperature range C
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for temperature range C.
+- canonical_key: dsc_peak_temperature_C
+  category: heat_treatment
+  standard_unit: C
+  zh_name: DSC peak temperature
+  en_name: DSC peak temperature
+  aliases_zh:
+  - DSC peak temperature
+  aliases_en:
+  - DSC peak temperature
+  - exothermic peak
+  - endothermic peak
+  - dsc peak
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for dsc peak.
+- canonical_key: mass_loss_wt_percent
+  category: heat_treatment
+  standard_unit: wt%
+  zh_name: mass loss
+  en_name: mass loss
+  aliases_zh:
+  - mass loss
+  aliases_en:
+  - mass loss
+  - weight loss
+  - TG weight loss
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for mass loss.
+- canonical_key: average_fiber_diameter_um
+  category: structure
+  standard_unit: um
+  zh_name: average fiber diameter
+  en_name: average fiber diameter
+  aliases_zh:
+  - average fiber diameter
+  aliases_en:
+  - average fiber diameter
+  - mean fiber diameter
+  - fiber diameter
+  - average fiber
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for average fiber.
+- canonical_key: average_fiber_diameter_nm
+  category: structure
+  standard_unit: nm
+  zh_name: average nanofiber diameter
+  en_name: average nanofiber diameter
+  aliases_zh:
+  - average nanofiber diameter
+  aliases_en:
+  - average nanofiber diameter
+  - fiber diameter in nm
+  - average fiber
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for average fiber.
+- canonical_key: fiber_length_m
+  category: structure
+  standard_unit: m
+  zh_name: fiber length
+  en_name: fiber length
+  aliases_zh:
+  - fiber length
+  aliases_en:
+  - fiber length
+  - filament length
+  - fiber
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for fiber.
+- canonical_key: crystallite_size_nm
+  category: structure
+  standard_unit: nm
+  zh_name: crystallite size
+  en_name: crystallite size
+  aliases_zh:
+  - crystallite size
+  aliases_en:
+  - crystallite size
+  - crystal size
+  - grain size
+  - crystallite
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for crystallite.
+- canonical_key: porosity_vol_percent
+  category: structure
+  standard_unit: vol%
+  zh_name: porosity
+  en_name: porosity
+  aliases_zh:
+  - porosity
+  aliases_en:
+  - porosity
+  - pore fraction
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for porosity.
+- canonical_key: average_pore_size_nm
+  category: structure
+  standard_unit: nm
+  zh_name: average pore size
+  en_name: average pore size
+  aliases_zh:
+  - average pore size
+  aliases_en:
+  - average pore size
+  - pore diameter
+  - average pore
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for average pore.
+- canonical_key: pore_volume_cm3_g
+  category: structure
+  standard_unit: cm3/g
+  zh_name: pore volume
+  en_name: pore volume
+  aliases_zh:
+  - pore volume
+  aliases_en:
+  - pore volume
+  - total pore volume
+  - pore volume cm3 g
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for pore volume cm3 g.
+- canonical_key: specific_surface_area_m2_g
+  category: structure
+  standard_unit: m2/g
+  zh_name: specific surface area
+  en_name: specific surface area
+  aliases_zh:
+  - specific surface area
+  aliases_en:
+  - specific surface area
+  - BET surface area
+  - SSA
+  - specific surface area m2 g
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for specific surface area m2 g.
+- canonical_key: density_g_cm3
+  category: structure
+  standard_unit: g/cm3
+  zh_name: density
+  en_name: density
+  aliases_zh:
+  - density
+  aliases_en:
+  - density
+  - bulk density
+  - apparent density
+  - density g cm3
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for density g cm3.
+- canonical_key: linear_shrinkage_percent
+  category: structure
+  standard_unit: '%'
+  zh_name: linear shrinkage
+  en_name: linear shrinkage
+  aliases_zh:
+  - linear shrinkage
+  aliases_en:
+  - linear shrinkage
+  - shrinkage
+  - linear shrinkage percent
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for linear shrinkage percent.
+- canonical_key: volume_shrinkage_percent
+  category: structure
+  standard_unit: '%'
+  zh_name: volume shrinkage
+  en_name: volume shrinkage
+  aliases_zh:
+  - volume shrinkage
+  aliases_en:
+  - volume shrinkage
+  - volumetric shrinkage
+  - volume shrinkage percent
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for volume shrinkage percent.
+- canonical_key: crystallization_temperature_C
+  category: structure
+  standard_unit: C
+  zh_name: crystallization temperature
+  en_name: crystallization temperature
+  aliases_zh:
+  - crystallization temperature
+  aliases_en:
+  - crystallization temperature
+  - crystal transition temperature
+  - crystallization
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for crystallization.
+- canonical_key: tensile_strength_MPa
+  category: mechanical
+  standard_unit: MPa
+  zh_name: tensile strength
+  en_name: tensile strength
+  aliases_zh:
+  - tensile strength
+  aliases_en:
+  - tensile strength
+  - breaking strength
+  - tensile strength MPa
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for tensile strength MPa.
+- canonical_key: compressive_strength_MPa
+  category: mechanical
+  standard_unit: MPa
+  zh_name: compressive strength
+  en_name: compressive strength
+  aliases_zh:
+  - compressive strength
+  aliases_en:
+  - compressive strength
+  - compression strength
+  - compressive strength MPa
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for compressive strength MPa.
+- canonical_key: flexural_strength_MPa
+  category: mechanical
+  standard_unit: MPa
+  zh_name: flexural strength
+  en_name: flexural strength
+  aliases_zh:
+  - flexural strength
+  aliases_en:
+  - flexural strength
+  - bending strength
+  - flexural strength MPa
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for flexural strength MPa.
+- canonical_key: breaking_force_cN
+  category: mechanical
+  standard_unit: cN
+  zh_name: breaking force
+  en_name: breaking force
+  aliases_zh:
+  - breaking force
+  aliases_en:
+  - breaking force
+  - fracture force
+  - maximum load
+  - breaking force cN
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for breaking force cN.
+- canonical_key: elastic_modulus_GPa
+  category: mechanical
+  standard_unit: GPa
+  zh_name: elastic modulus
+  en_name: elastic modulus
+  aliases_zh:
+  - elastic modulus
+  aliases_en:
+  - elastic modulus
+  - Young's modulus
+  - tensile modulus
+  - elastic modulus GPa
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for elastic modulus GPa.
+- canonical_key: elongation_at_break_percent
+  category: mechanical
+  standard_unit: '%'
+  zh_name: elongation at break
+  en_name: elongation at break
+  aliases_zh:
+  - elongation at break
+  aliases_en:
+  - elongation at break
+  - strain at break
+  - maximum strain
+  - elongation at break percent
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for elongation at break percent.
+- canonical_key: thermal_conductivity_W_mK
+  category: thermal
+  standard_unit: W/(m*K)
+  zh_name: thermal conductivity
+  en_name: thermal conductivity
+  aliases_zh:
+  - thermal conductivity
+  aliases_en:
+  - thermal conductivity
+  - thermal conductivity W mK
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for thermal conductivity W mK.
+- canonical_key: strength_retention_percent
+  category: thermal
+  standard_unit: '%'
+  zh_name: strength retention
+  en_name: strength retention
+  aliases_zh:
+  - strength retention
+  aliases_en:
+  - strength retention
+  - retained strength
+  - residual strength ratio
+  - strength retention percent
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for strength retention percent.
+- canonical_key: service_temperature_C
+  category: thermal
+  standard_unit: C
+  zh_name: service temperature
+  en_name: service temperature
+  aliases_zh:
+  - service temperature
+  aliases_en:
+  - service temperature
+  - use temperature
+  - working temperature
+  - service
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for service.
+- canonical_key: continuous_length_m
+  category: production
+  standard_unit: m
+  zh_name: continuous fiber length
+  en_name: continuous fiber length
+  aliases_zh:
+  - continuous fiber length
+  aliases_en:
+  - continuous fiber length
+  - collected length
+  - spinning length
+  - continuous
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for continuous.
+- canonical_key: spinning_duration_h
+  category: production
+  standard_unit: h
+  zh_name: spinning duration
+  en_name: spinning duration
+  aliases_zh:
+  - spinning duration
+  aliases_en:
+  - spinning duration
+  - continuous spinning time
+  - spinning duration h
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for spinning duration h.
+- canonical_key: sol_conversion_percent
+  category: production
+  standard_unit: '%'
+  zh_name: sol conversion
+  en_name: sol conversion
+  aliases_zh:
+  - sol conversion
+  aliases_en:
+  - sol conversion
+  - conversion yield
+  - sol conversion percent
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for sol conversion percent.
+- canonical_key: fiber_water_content_percent
+  category: production
+  standard_unit: '%'
+  zh_name: fiber water content
+  en_name: fiber water content
+  aliases_zh:
+  - fiber water content
+  aliases_en:
+  - fiber water content
+  - gel fiber moisture content
+  - fiber water content percent
+  is_core_statistical_field: true
+  description: Canonical Stage 3 field for fiber water content percent.
+- canonical_key: ftir_peak_position_cm_1
+  category: spectroscopy
+  standard_unit: cm^-1
+  zh_name: FTIR peak position
+  en_name: FTIR peak position
+  aliases_zh:
+  - FTIR peak position
+  aliases_en:
+  - FTIR peak position
+  - infrared band
+  - wavenumber
+  - ftir peak
+  is_core_statistical_field: false
+  description: Canonical Stage 3 field for ftir peak.
+- canonical_key: xrd_peak_position_2theta_deg
+  category: spectroscopy
+  standard_unit: degree
+  zh_name: XRD peak position
+  en_name: XRD peak position
+  aliases_zh:
+  - XRD peak position
+  aliases_en:
+  - XRD peak position
+  - diffraction peak
+  - 2 theta
+  - xrd peak
+  is_core_statistical_field: false
+  description: Canonical Stage 3 field for xrd peak.
+- canonical_key: nmr_chemical_shift_ppm
+  category: spectroscopy
+  standard_unit: ppm
+  zh_name: NMR chemical shift
+  en_name: NMR chemical shift
+  aliases_zh:
+  - NMR chemical shift
+  aliases_en:
+  - NMR chemical shift
+  - chemical shift
+  - nmr chemical shift ppm
+  is_core_statistical_field: false
+  description: Canonical Stage 3 field for nmr chemical shift ppm.
+- canonical_key: Al_concentration_mol_L
+  category: composition
+  standard_unit: mol/L
+  zh_name: 铝浓度
+  en_name: aluminum concentration
+  aliases_zh:
+  - 铝浓度
+  - Al浓度
+  - 铝离子浓度
+  aliases_en:
+  - aluminum concentration
+  - Al concentration
+  is_core_statistical_field: true
+  description: Total aluminum concentration in the precursor solution or sol.
+- canonical_key: Al_to_AlN_molar_ratio
+  category: composition
+  standard_unit: dimensionless
+  zh_name: 铝硝比
+  en_name: Al to AlN molar ratio
+  aliases_zh:
+  - 铝硝比
+  - Al:AlN
+  - 铝与硝酸铝摩尔比
+  aliases_en:
+  - Al:AlN
+  - Al/AlN molar ratio
+  - Al to AlN molar ratio
+  is_core_statistical_field: true
+  description: Legacy canonical ratio name retained for compatibility with alumina-sol seed data.
+- canonical_key: water_to_aluminum_molar_ratio
+  category: composition
+  standard_unit: dimensionless
+  zh_name: 水铝比
+  en_name: water to aluminum molar ratio
+  aliases_zh:
+  - 水铝比
+  - H2O/Al比
+  - 水与铝摩尔比
+  aliases_en:
+  - water to aluminum molar ratio
+  - H2O/Al ratio
+  is_core_statistical_field: true
+  description: Molar ratio between water and total aluminum species.
+- canonical_key: nitrate_to_aluminum_molar_ratio
+  category: composition
+  standard_unit: dimensionless
+  zh_name: nitrate to aluminum molar ratio
+  en_name: nitrate to aluminum molar ratio
+  aliases_zh:
+  - nitrate to aluminum molar ratio
+  aliases_en:
+  - nitrate to aluminum molar ratio
+  - NO3/Al ratio
+  is_core_statistical_field: true
+  description: Molar ratio between nitrate and total aluminum.
+- canonical_key: acid_to_aluminum_molar_ratio
+  category: composition
+  standard_unit: dimensionless
+  zh_name: acid to aluminum molar ratio
+  en_name: acid to aluminum molar ratio
+  aliases_zh:
+  - acid to aluminum molar ratio
+  aliases_en:
+  - acid to aluminum molar ratio
+  is_core_statistical_field: true
+  description: Molar ratio between added acid and total aluminum.
+- canonical_key: base_to_aluminum_molar_ratio
+  category: composition
+  standard_unit: dimensionless
+  zh_name: base to aluminum molar ratio
+  en_name: base to aluminum molar ratio
+  aliases_zh:
+  - base to aluminum molar ratio
+  aliases_en:
+  - base to aluminum molar ratio
+  is_core_statistical_field: true
+  description: Molar ratio between added base and total aluminum.
+- canonical_key: aluminum_source
+  category: composition
+  standard_unit: text
+  zh_name: aluminum source
+  en_name: aluminum source
+  aliases_zh:
+  - aluminum source
+  aliases_en:
+  - aluminum source
+  - aluminum precursor
+  is_core_statistical_field: true
+  description: Primary aluminum-containing precursor or salt.
+- canonical_key: nitrate_source
+  category: composition
+  standard_unit: text
+  zh_name: nitrate source
+  en_name: nitrate source
+  aliases_zh:
+  - nitrate source
+  aliases_en:
+  - nitrate source
+  is_core_statistical_field: false
+  description: Nitrate-containing source used in the precursor solution.
+- canonical_key: acid_type
+  category: composition
+  standard_unit: text
+  zh_name: acid type
+  en_name: acid type
+  aliases_zh:
+  - acid type
+  aliases_en:
+  - acid type
+  - acid species
+  is_core_statistical_field: false
+  description: Acid used for pH adjustment or peptization.
+- canonical_key: base_type
+  category: composition
+  standard_unit: text
+  zh_name: base type
+  en_name: base type
+  aliases_zh:
+  - base type
+  aliases_en:
+  - base type
+  - base species
+  is_core_statistical_field: false
+  description: Base used for pH adjustment or hydrolysis control.
+- canonical_key: peptizing_agent
+  category: composition
+  standard_unit: text
+  zh_name: peptizing agent
+  en_name: peptizing agent
+  aliases_zh:
+  - peptizing agent
+  aliases_en:
+  - peptizing agent
+  is_core_statistical_field: true
+  description: Agent used to peptize alumina sol or precursor particles.
+- canonical_key: chelating_agent
+  category: composition
+  standard_unit: text
+  zh_name: chelating agent
+  en_name: chelating agent
+  aliases_zh:
+  - chelating agent
+  aliases_en:
+  - chelating agent
+  - complexing agent
+  is_core_statistical_field: false
+  description: Chelating or complexing additive used in the sol system.
+- canonical_key: hydrolysis_temperature_C
+  category: precursor_solution
+  standard_unit: C
+  zh_name: 水解温度
+  en_name: hydrolysis temperature
+  aliases_zh:
+  - 水解温度
+  aliases_en:
+  - hydrolysis temperature
+  is_core_statistical_field: true
+  description: Temperature used during hydrolysis of the aluminum precursor.
+- canonical_key: hydrolysis_time_h
+  category: precursor_solution
+  standard_unit: h
+  zh_name: hydrolysis time
+  en_name: hydrolysis time
+  aliases_zh:
+  - hydrolysis time
+  aliases_en:
+  - hydrolysis time
+  is_core_statistical_field: true
+  description: Duration of precursor hydrolysis.
+- canonical_key: peptization_temperature_C
+  category: precursor_solution
+  standard_unit: C
+  zh_name: peptization temperature
+  en_name: peptization temperature
+  aliases_zh:
+  - peptization temperature
+  aliases_en:
+  - peptization temperature
+  is_core_statistical_field: true
+  description: Temperature used during peptization.
+- canonical_key: peptization_time_h
+  category: precursor_solution
+  standard_unit: h
+  zh_name: 胶溶时间
+  en_name: peptization time
+  aliases_zh:
+  - 胶溶时间
+  - 胶溶时长
+  aliases_en:
+  - peptization time
+  is_core_statistical_field: true
+  description: Duration of the peptization step.
+- canonical_key: stirring_speed_rpm
+  category: precursor_solution
+  standard_unit: rpm
+  zh_name: stirring speed
+  en_name: stirring speed
+  aliases_zh:
+  - stirring speed
+  aliases_en:
+  - stirring speed
+  - stirring rate
+  is_core_statistical_field: true
+  description: Stirring speed during hydrolysis, peptization, or aging.
+- canonical_key: Al13_fraction_percent
+  category: spectroscopy
+  standard_unit: '%'
+  zh_name: Al13 含量
+  en_name: Al13 fraction
+  aliases_zh:
+  - Al13
+  - Al13含量
+  - Al13比例
+  aliases_en:
+  - Al13 fraction
+  - Al13 content
+  is_core_statistical_field: true
+  description: Fraction attributed to Al13 species.
+- canonical_key: Al30_fraction_percent
+  category: spectroscopy
+  standard_unit: '%'
+  zh_name: Al30 fraction
+  en_name: Al30 fraction
+  aliases_zh:
+  - Al30
+  aliases_en:
+  - Al30 fraction
+  - Al30 content
+  is_core_statistical_field: false
+  description: Fraction attributed to Al30 species.
+- canonical_key: monomeric_aluminum_fraction_percent
+  category: spectroscopy
+  standard_unit: '%'
+  zh_name: monomeric aluminum fraction
+  en_name: monomeric aluminum fraction
+  aliases_zh:
+  - monomeric aluminum fraction
+  aliases_en:
+  - monomeric aluminum fraction
+  is_core_statistical_field: false
+  description: Fraction of monomeric aluminum species.
+- canonical_key: polymeric_aluminum_fraction_percent
+  category: spectroscopy
+  standard_unit: '%'
+  zh_name: polymeric aluminum fraction
+  en_name: polymeric aluminum fraction
+  aliases_zh:
+  - polymeric aluminum fraction
+  aliases_en:
+  - polymeric aluminum fraction
+  is_core_statistical_field: false
+  description: Fraction of polymeric aluminum species.
+- canonical_key: octahedral_aluminum_fraction_percent
+  category: spectroscopy
+  standard_unit: '%'
+  zh_name: octahedral aluminum fraction
+  en_name: octahedral aluminum fraction
+  aliases_zh:
+  - octahedral aluminum fraction
+  aliases_en:
+  - octahedral aluminum fraction
+  is_core_statistical_field: false
+  description: Fraction of octahedral aluminum coordination.
+- canonical_key: tetrahedral_aluminum_fraction_percent
+  category: spectroscopy
+  standard_unit: '%'
+  zh_name: tetrahedral aluminum fraction
+  en_name: tetrahedral aluminum fraction
+  aliases_zh:
+  - tetrahedral aluminum fraction
+  aliases_en:
+  - tetrahedral aluminum fraction
+  is_core_statistical_field: false
+  description: Fraction of tetrahedral aluminum coordination.
+- canonical_key: pentahedral_aluminum_fraction_percent
+  category: spectroscopy
+  standard_unit: '%'
+  zh_name: pentahedral aluminum fraction
+  en_name: pentahedral aluminum fraction
+  aliases_zh:
+  - pentahedral aluminum fraction
+  aliases_en:
+  - pentahedral aluminum fraction
+  is_core_statistical_field: false
+  description: Fraction of penta-coordinated aluminum species.
+- canonical_key: nmr_27Al_peak_position_ppm
+  category: spectroscopy
+  standard_unit: ppm
+  zh_name: 27Al NMR 峰位
+  en_name: 27Al NMR peak position
+  aliases_zh:
+  - 27Al NMR峰位
+  - 铝核磁峰位
+  - 27Al峰位
+  aliases_en:
+  - 27Al NMR peak position
+  - 27Al peak position
+  is_core_statistical_field: true
+  description: Peak position in 27Al NMR spectra.
+- canonical_key: nmr_27Al_peak_area
+  category: spectroscopy
+  standard_unit: a.u.
+  zh_name: 27Al NMR peak area
+  en_name: 27Al NMR peak area
+  aliases_zh:
+  - 27Al NMR peak area
+  aliases_en:
+  - 27Al NMR peak area
+  is_core_statistical_field: false
+  description: Peak area or integrated area in 27Al NMR spectra.
+- canonical_key: raman_peak_position_cm_1
+  category: spectroscopy
+  standard_unit: cm^-1
+  zh_name: Raman peak position
+  en_name: Raman peak position
+  aliases_zh:
+  - Raman peak position
+  aliases_en:
+  - Raman peak position
+  is_core_statistical_field: false
+  description: Peak position in Raman spectra.
+- canonical_key: sol_stability_time_h
+  category: precursor_solution
+  standard_unit: h
+  zh_name: 溶胶稳定时间（小时）
+  en_name: sol stability time (hours)
+  aliases_zh:
+  - 溶胶稳定时间
+  - 溶胶稳定时长
+  aliases_en:
+  - sol stability time
+  is_core_statistical_field: false
+  description: Stability time of the sol reported in hours.
+- canonical_key: sol_stability_time_d
+  category: precursor_solution
+  standard_unit: d
+  zh_name: sol stability time (days)
+  en_name: sol stability time (days)
+  aliases_zh:
+  - sol stability time (days)
+  aliases_en:
+  - sol stability time days
+  is_core_statistical_field: false
+  description: Stability time of the sol reported in days.
+- canonical_key: sol_transparency
+  category: precursor_solution
+  standard_unit: categorical
+  zh_name: sol transparency
+  en_name: sol transparency
+  aliases_zh:
+  - sol transparency
+  aliases_en:
+  - sol transparency
+  is_core_statistical_field: false
+  description: Qualitative transparency or clarity of the sol.
+- canonical_key: spinnability
+  category: forming
+  standard_unit: categorical
+  zh_name: 可纺性
+  en_name: spinnability
+  aliases_zh:
+  - 可纺性
+  - 成丝性
+  - 拉丝性
+  aliases_en:
+  - spinnability
+  - fiber drawing ability
+  - thread-forming ability
+  is_core_statistical_field: true
+  description: Qualitative or semi-quantitative description of whether the sol can be spun into fibers.
+- canonical_key: fiber_forming_ability
+  category: forming
+  standard_unit: categorical
+  zh_name: fiber forming ability
+  en_name: fiber forming ability
+  aliases_zh:
+  - fiber forming ability
+  aliases_en:
+  - fiber forming ability
+  is_core_statistical_field: false
+  description: Ability of the system to form continuous fibers.
