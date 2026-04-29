@@ -35,10 +35,15 @@ FIGURE_CLASSES = [
     "photo_image",
     "mechanical_curve",
     "mechanical_property_plot",
+    "process_parameter_plot",
+    "generic_chart_or_plot",
     "schematic_or_flow",
     "table_image",
     "logo_or_icon",
     "formula_or_text",
+    "pure_text_image",
+    "qr_code_or_barcode",
+    "cover_decoration",
     "other",
 ]
 SIMPLIFIED_CLASSES = FIGURE_CLASSES
@@ -62,6 +67,8 @@ VISION_ALLOWED_CLASSES = {
     "photo_image",
     "mechanical_curve",
     "mechanical_property_plot",
+    "process_parameter_plot",
+    "generic_chart_or_plot",
 }
 
 KEYWORDS: dict[str, list[str]] = {
@@ -81,10 +88,38 @@ KEYWORDS: dict[str, list[str]] = {
     "microscopy_image": ["sem", "tem", "hrtem", "electron microscopy", "scanning electron microscopy", "transmission electron microscopy", "\u663e\u5fae", "\u5f62\u8c8c", "micrograph", "morphology", "scale bar"],
     "photo_image": ["photograph", "photo", "\u7167\u7247", "\u5b9e\u7269\u56fe", "\u53ef\u7eba\u6027", "\u7ea4\u7ef4\u7167\u7247", "\u72b6\u6001\u5bf9\u7167\u56fe", "\u900f\u660e", "\u5fae\u6697", "\u5fae\u767d", "\u80f6\u51dd", "\u5916\u89c2", "\u65cb\u84b8\u72b6\u6001", "\u6eb6\u80f6\u72b6\u6001"],
     "mechanical_curve": ["load-displacement", "stress-strain", "tensile", "strength", "modulus", "force", "displacement"],
+    "process_parameter_plot": [
+        "工艺参数",
+        "参数影响",
+        "环境参数",
+        "纺丝环境参数",
+        "纺丝参数",
+        "工艺条件",
+        "条件影响",
+        "parameter effect",
+        "process parameter",
+    ],
+    "generic_chart_or_plot": [
+        "plot",
+        "curve",
+        "chart",
+        "graph",
+        "trend",
+        "distribution",
+        "comparison",
+        "统计图",
+        "坐标图",
+        "曲线图",
+        "参数图",
+        "性能图",
+    ],
     "schematic_or_flow": ["\u793a\u610f\u56fe", "\u539f\u7406\u56fe", "\u6d41\u7a0b\u56fe", "\u6784\u9020", "\u6b65\u9aa4", "mechanism", "schematic", "diagram", "workflow"],
     "table_image": ["table", "\u8868\u683c"],
     "logo_or_icon": ["logo", "\u6821\u5fbd", "publisher logo", "school logo", "icon"],
     "formula_or_text": ["formula", "equation", "text sentences", "\u516c\u5f0f", "\u7eaf\u6587\u672c"],
+    "pure_text_image": ["text image", "pure text", "text only", "paragraph text", "sentence image"],
+    "qr_code_or_barcode": ["qr code", "barcode", "bar code"],
+    "cover_decoration": ["cover decoration", "cover image", "decorative image"],
 }
 
 EXTRA_KEYWORDS: dict[str, list[str]] = {
@@ -172,6 +207,20 @@ CAPTION_OCR_ANCHOR_KEYWORDS = [
 
 RESNET_SCHEMATIC_CLASSES = {"Flow chart", "Block diagram", "Algorithm", "Tree Diagram", "Sketches"}
 RESNET_TABLE_CLASSES = {"Tables"}
+RESNET_CHART_CLASSES = {
+    "Graph plots",
+    "Scatter plot",
+    "Bar plots",
+    "Heat map",
+    "Histogram",
+    "Box plot",
+    "Area chart",
+    "Contour plot",
+    "Surface plot",
+    "Vector plot",
+    "Line graph",
+    "Confusion matrix",
+}
 
 
 class FigureFilter:
@@ -219,7 +268,14 @@ class FigureFilter:
         clip_negative = figure.clip_decision == "negative"
         clip_positive = figure.clip_decision == "positive"
         has_science_text = has_scientific_text(figure)
-        if figure.figure_class in {"logo_or_icon", "formula_or_text", "table_image"}:
+        if figure.figure_class in {
+            "logo_or_icon",
+            "formula_or_text",
+            "pure_text_image",
+            "qr_code_or_barcode",
+            "cover_decoration",
+            "table_image",
+        }:
             figure.exclude_reason = figure.figure_class
         elif not figure.caption and figure.figure_id.startswith("Unknown Figure") and not clip_positive:
             figure.exclude_reason = "unknown_without_caption"
@@ -292,6 +348,8 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "rheology_curve"
     if _keyword_hits(text, TEMPERATURE_CURVE_KEYWORDS):
         return "temperature_curve"
+    if _keyword_hits(text, KEYWORDS["process_parameter_plot"]):
+        return "process_parameter_plot"
     if _keyword_hits(text, KEYWORDS["mechanical_property_plot"]):
         return "mechanical_property_plot"
     if _keyword_hits(text, KEYWORDS["mechanical_curve"]):
@@ -323,6 +381,7 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         "photo_image",
         "mechanical_curve",
         "mechanical_property_plot",
+        "process_parameter_plot",
         "schematic_or_flow",
         "table_image",
         "logo_or_icon",
@@ -338,11 +397,24 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
             return "formula_or_text"
         if figure.clip_label == "a table with text and numbers":
             return "table_image"
+        if figure.clip_label in {"a barcode or qr code"}:
+            return "qr_code_or_barcode"
+        if figure.clip_label in {"a cover page image", "a decorative image"}:
+            return "cover_decoration"
 
     if figure.resnet_raw_class in RESNET_TABLE_CLASSES:
         return "table_image"
     if figure.resnet_raw_class in RESNET_SCHEMATIC_CLASSES and _keyword_hits(text, KEYWORDS["schematic_or_flow"]):
         return "schematic_or_flow"
+    if figure.resnet_raw_class in RESNET_CHART_CLASSES or figure.clip_label in {
+        "a scientific graph or plot",
+        "a spectrum plot",
+        "a thermal analysis curve",
+        "a rheology curve",
+        "a particle size distribution plot",
+        "a zeta potential plot",
+    }:
+        return "generic_chart_or_plot"
     return "other"
 
 

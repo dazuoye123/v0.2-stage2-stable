@@ -58,3 +58,37 @@ schematic_or_flow:
     - diagram
     - process
     - fixture
+process_parameter_plot:
+  priority: 87
+  send_to_vision_model: true
+  maybe_useful: false
+  positive_keywords:
+    - 工艺参数
+    - 参数影响
+    - 环境参数
+    - 纺丝环境参数
+    - 纺丝参数
+    - 工艺条件
+    - 条件影响
+    - parameter effect
+    - process parameter
+  negative_keywords: []
+
+generic_chart_or_plot:
+  priority: 50
+  send_to_vision_model: true
+  maybe_useful: false
+  positive_keywords:
+    - plot
+    - curve
+    - chart
+    - graph
+    - trend
+    - distribution
+    - comparison
+    - 统计图
+    - 坐标图
+    - 曲线图
+    - 参数图
+    - 性能图
+  negative_keywords: []
