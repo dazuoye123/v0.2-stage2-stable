@@ -1,0 +1,17 @@
+dspy:
+  enabled: false
+  api_key_env: "OPENAI_API_KEY"
+  base_url_env: "OPENAI_BASE_URL"
+  model_name_env: "MODEL_NAME"
+  chunk_size: 4000
+  chunk_overlap: 300
+  run_judge: false
+  outputs:
+    paper_basic_info: "paper_basic_info.json"
+    global_constants: "global_constants.json"
+    experiment_series: "experiment_series.jsonl"
+    data_points: "data_points.jsonl"
+    evidence_objects: "evidence_objects.jsonl"
+    paper_extraction: "paper_extraction.schema_v2.json"
+    judge: "dspy_judge.json"
+    summary: "stage3_summary.json"

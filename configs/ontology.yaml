@@ -1,0 +1,595 @@
+version: "2.0"
+key_style: "English snake_case with unit suffix when a standard unit is fixed"
+rules:
+  - "Core statistical fields must use canonical_key exactly as listed here."
+  - "Models may not invent new core parameter names."
+  - "Long-tail fields may enter extended_data only when they are not listed as core statistical fields."
+  - "All numeric values should be normalized to standard_unit and stored as numbers, with raw text preserved in provenance."
+
+categories:
+  precursor_solution: "前驱体/溶胶/纺丝原液"
+  composition: "组成与配比"
+  forming: "成型与纺丝工艺"
+  heat_treatment: "热处理与陶瓷化"
+  structure: "物相、微结构与孔结构"
+  mechanical: "力学性能"
+  thermal: "热学与高温服役性能"
+  spectroscopy: "谱学与机理证据"
+  production: "连续化与放大生产"
+
+parameters:
+  - canonical_key: solid_content_wt_percent
+    zh_name: 固含量
+    en_aliases: [solid content, solids content, solid loading, solid fraction]
+    zh_aliases: [固含, 固体含量, 固相含量, 固体质量分数]
+    standard_unit: wt%
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: viscosity_Pa_s
+    zh_name: 粘度
+    en_aliases: [viscosity, apparent viscosity, spinning viscosity]
+    zh_aliases: [黏度, 表观粘度, 纺丝粘度, 可纺丝黏度]
+    standard_unit: Pa*s
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: particle_size_nm
+    zh_name: 胶粒粒径
+    en_aliases: [particle size, sol particle size, colloid size, grain size of sol]
+    zh_aliases: [粒径, 胶粒大小, 溶胶粒径, 纳米胶粒直径]
+    standard_unit: nm
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: zeta_potential_mV
+    zh_name: Zeta 电位
+    en_aliases: [zeta potential, zeta-potential]
+    zh_aliases: [zeta电位, Zeta 电势, 胶粒表面电荷]
+    standard_unit: mV
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: pH
+    zh_name: pH 值
+    en_aliases: [pH, pH value]
+    zh_aliases: [pH值, 酸碱度]
+    standard_unit: dimensionless
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: pva_content_wt_percent
+    zh_name: PVA 含量
+    en_aliases: [PVA content, polyvinyl alcohol content]
+    zh_aliases: [PVA添加量, 聚乙烯醇含量, 聚乙烯醇添加量]
+    standard_unit: wt%
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: pvp_content_wt_percent
+    zh_name: PVP 含量
+    en_aliases: [PVP content, polyvinylpyrrolidone content]
+    zh_aliases: [PVP添加量, 聚乙烯吡咯烷酮含量, 聚乙烯吡咯烷酮添加量]
+    standard_unit: wt%
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: peo_content_wt_percent
+    zh_name: PEO 含量
+    en_aliases: [PEO content, polyethylene oxide content]
+    zh_aliases: [PEO添加量, 聚氧化乙烯含量, 聚环氧乙烷含量]
+    standard_unit: wt%
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: aging_temperature_C
+    zh_name: 老化温度
+    en_aliases: [aging temperature, ageing temperature]
+    zh_aliases: [陈化温度, 熟化温度]
+    standard_unit: C
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: aging_time_h
+    zh_name: 老化时间
+    en_aliases: [aging time, ageing time]
+    zh_aliases: [陈化时间, 熟化时间]
+    standard_unit: h
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: concentration_temperature_C
+    zh_name: 浓缩温度
+    en_aliases: [concentration temperature, evaporation temperature]
+    zh_aliases: [减压浓缩温度, 浓缩水浴温度]
+    standard_unit: C
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: concentration_time_h
+    zh_name: 浓缩时间
+    en_aliases: [concentration time, evaporation time]
+    zh_aliases: [减压浓缩时间]
+    standard_unit: h
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: gelation_time_h
+    zh_name: 凝胶时间
+    en_aliases: [gelation time, gelling time]
+    zh_aliases: [成胶时间, 凝胶化时间]
+    standard_unit: h
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: drying_temperature_C
+    zh_name: 干燥温度
+    en_aliases: [drying temperature, dried temperature]
+    zh_aliases: [烘干温度, 干燥处理温度]
+    standard_unit: C
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: drying_time_h
+    zh_name: 干燥时间
+    en_aliases: [drying time, dried time]
+    zh_aliases: [烘干时间]
+    standard_unit: h
+    category: precursor_solution
+    is_core_statistical_field: true
+
+  - canonical_key: alumina_content_wt_percent
+    zh_name: 氧化铝含量
+    en_aliases: [Al2O3 content, alumina content]
+    zh_aliases: [Al2O3含量, 氧化铝质量分数]
+    standard_unit: wt%
+    category: composition
+    is_core_statistical_field: true
+
+  - canonical_key: silica_content_wt_percent
+    zh_name: 二氧化硅含量
+    en_aliases: [SiO2 content, silica content]
+    zh_aliases: [SiO2含量, 二氧化硅质量分数]
+    standard_unit: wt%
+    category: composition
+    is_core_statistical_field: true
+
+  - canonical_key: boria_content_wt_percent
+    zh_name: 氧化硼含量
+    en_aliases: [B2O3 content, boria content]
+    zh_aliases: [B2O3含量, 氧化硼质量分数]
+    standard_unit: wt%
+    category: composition
+    is_core_statistical_field: true
+
+  - canonical_key: zirconia_content_wt_percent
+    zh_name: 氧化锆含量
+    en_aliases: [ZrO2 content, zirconia content]
+    zh_aliases: [ZrO2含量, 氧化锆质量分数]
+    standard_unit: wt%
+    category: composition
+    is_core_statistical_field: true
+
+  - canonical_key: alumina_silica_molar_ratio
+    zh_name: 铝硅摩尔比
+    en_aliases: [Al/Si molar ratio, Al2O3/SiO2 molar ratio]
+    zh_aliases: [Al/Si摩尔比, 铝硅比, 氧化铝二氧化硅摩尔比]
+    standard_unit: mol/mol
+    category: composition
+    is_core_statistical_field: true
+
+  - canonical_key: spinneret_hole_diameter_mm
+    zh_name: 喷丝板孔径
+    en_aliases: [spinneret hole diameter, orifice diameter]
+    zh_aliases: [喷丝孔径, 喷丝孔直径]
+    standard_unit: mm
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: spinneret_hole_count
+    zh_name: 喷丝孔数
+    en_aliases: [spinneret hole count, number of orifices]
+    zh_aliases: [孔数, 喷丝板孔数]
+    standard_unit: count
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: needle_gauge
+    zh_name: 针头规格
+    en_aliases: [needle gauge, needle size]
+    zh_aliases: [针头型号, 针头尺寸]
+    standard_unit: gauge
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: nozzle_inner_diameter_mm
+    zh_name: 喷头内径
+    en_aliases: [nozzle inner diameter, needle inner diameter]
+    zh_aliases: [喷嘴内径, 针头内径]
+    standard_unit: mm
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: feed_pressure_MPa
+    zh_name: 进料压力
+    en_aliases: [feed pressure, extrusion pressure]
+    zh_aliases: [供料压力, 挤出压力, 纺丝压力]
+    standard_unit: MPa
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: applied_voltage_kV
+    zh_name: 工作电压
+    en_aliases: [applied voltage, working voltage, electrospinning voltage]
+    zh_aliases: [外加电场, 外加电压, 静电纺丝电压]
+    standard_unit: kV
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: air_pressure_MPa
+    zh_name: 风压
+    en_aliases: [air pressure, gas pressure]
+    zh_aliases: [气压, 气流压力, 压缩空气压力]
+    standard_unit: MPa
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: collector_distance_cm
+    zh_name: 接收距离
+    en_aliases: [collector distance, tip-to-collector distance, working distance]
+    zh_aliases: [喷头接收板距离, 针尖到接收器距离, 接收板距离]
+    standard_unit: cm
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: feed_rate_ml_h
+    zh_name: 进料速率
+    en_aliases: [feed rate, flow rate, injection rate]
+    zh_aliases: [推进速率, 注射速率, 供液速率]
+    standard_unit: ml/h
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: take_up_speed_m_min
+    zh_name: 收丝辊线速度
+    en_aliases: [take-up speed, winding speed, collecting roller speed]
+    zh_aliases: [收丝速度, 卷绕速度, 收丝辊速度]
+    standard_unit: m/min
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: drawing_speed_mm_min
+    zh_name: 提拉速度
+    en_aliases: [drawing speed, pulling speed]
+    zh_aliases: [拉伸速度, 拉拔速度]
+    standard_unit: mm/min
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: spinning_channel_temperature_C
+    zh_name: 纺丝甬道温度
+    en_aliases: [spinning channel temperature, drying channel temperature]
+    zh_aliases: [甬道温度, 纺丝通道温度]
+    standard_unit: C
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: hot_air_temperature_C
+    zh_name: 热风温度
+    en_aliases: [hot air temperature, drying air temperature]
+    zh_aliases: [热空气温度]
+    standard_unit: C
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: ambient_temperature_C
+    zh_name: 环境温度
+    en_aliases: [ambient temperature, room temperature]
+    zh_aliases: [操作箱温度, 室温, 环境控制温度]
+    standard_unit: C
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: relative_humidity_percent
+    zh_name: 相对湿度
+    en_aliases: [relative humidity, RH]
+    zh_aliases: [环境湿度, 操作箱湿度]
+    standard_unit: "%"
+    category: forming
+    is_core_statistical_field: true
+
+  - canonical_key: calcination_temperature_C
+    zh_name: 煅烧温度
+    en_aliases: [calcination temperature, calcined temperature]
+    zh_aliases: [煅烧目标温度, 低温煅烧温度]
+    standard_unit: C
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: sintering_temperature_C
+    zh_name: 烧结温度
+    en_aliases: [sintering temperature, firing temperature]
+    zh_aliases: [高温烧结温度, 陶瓷化温度]
+    standard_unit: C
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: holding_time_h
+    zh_name: 保温时间
+    en_aliases: [holding time, dwell time, soaking time]
+    zh_aliases: [保温, 恒温时间, 热处理时间]
+    standard_unit: h
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: heating_rate_C_min
+    zh_name: 升温速率
+    en_aliases: [heating rate, ramp rate]
+    zh_aliases: [升温速度, 升温速率]
+    standard_unit: C/min
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: start_temperature_C
+    zh_name: 起始温度
+    en_aliases: [start temperature, initial temperature]
+    zh_aliases: [初始温度, 起始热处理温度]
+    standard_unit: C
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: target_temperature_C
+    zh_name: 目标温度
+    en_aliases: [target temperature, final temperature]
+    zh_aliases: [目标热处理温度, 终点温度]
+    standard_unit: C
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: temperature_range_C
+    zh_name: 温度区间
+    en_aliases: [temperature range, temperature interval]
+    zh_aliases: [温度范围, 热处理区间]
+    standard_unit: C
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: dsc_peak_temperature_C
+    zh_name: DSC 峰温
+    en_aliases: [DSC peak temperature, exothermic peak, endothermic peak]
+    zh_aliases: [DSC峰温, 放热峰温度, 吸热峰温度]
+    standard_unit: C
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: mass_loss_wt_percent
+    zh_name: TG 失重率
+    en_aliases: [mass loss, weight loss, TG weight loss]
+    zh_aliases: [失重率, 热失重, 质量损失]
+    standard_unit: wt%
+    category: heat_treatment
+    is_core_statistical_field: true
+
+  - canonical_key: average_fiber_diameter_um
+    zh_name: 平均纤维直径
+    en_aliases: [average fiber diameter, mean fiber diameter, fiber diameter]
+    zh_aliases: [平均直径, 纤维平均直径, 纤维直径]
+    standard_unit: um
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: average_fiber_diameter_nm
+    zh_name: 平均纤维直径
+    en_aliases: [average nanofiber diameter, fiber diameter in nm]
+    zh_aliases: [纳米纤维直径, 平均纤维直径nm]
+    standard_unit: nm
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: fiber_length_m
+    zh_name: 纤维长度
+    en_aliases: [fiber length, filament length]
+    zh_aliases: [纤维长度, 单根纤维长度]
+    standard_unit: m
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: crystallite_size_nm
+    zh_name: 晶粒尺寸
+    en_aliases: [crystallite size, crystal size, grain size]
+    zh_aliases: [晶粒大小, 晶粒尺寸, 微晶尺寸]
+    standard_unit: nm
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: porosity_vol_percent
+    zh_name: 孔隙率
+    en_aliases: [porosity, pore fraction]
+    zh_aliases: [孔隙率, 孔体积分数]
+    standard_unit: vol%
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: average_pore_size_nm
+    zh_name: 平均孔径
+    en_aliases: [average pore size, pore diameter]
+    zh_aliases: [孔径, 平均孔径]
+    standard_unit: nm
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: pore_volume_cm3_g
+    zh_name: 孔容
+    en_aliases: [pore volume, total pore volume]
+    zh_aliases: [总孔容, 孔体积]
+    standard_unit: cm3/g
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: specific_surface_area_m2_g
+    zh_name: 比表面积
+    en_aliases: [specific surface area, BET surface area, SSA]
+    zh_aliases: [BET比表面积, 比表面]
+    standard_unit: m2/g
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: density_g_cm3
+    zh_name: 密度
+    en_aliases: [density, bulk density, apparent density]
+    zh_aliases: [体积密度, 表观密度]
+    standard_unit: g/cm3
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: linear_shrinkage_percent
+    zh_name: 线收缩率
+    en_aliases: [linear shrinkage, shrinkage]
+    zh_aliases: [线收缩, 收缩率]
+    standard_unit: "%"
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: volume_shrinkage_percent
+    zh_name: 体积收缩率
+    en_aliases: [volume shrinkage, volumetric shrinkage]
+    zh_aliases: [体积收缩, 体收缩率]
+    standard_unit: "%"
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: crystallization_temperature_C
+    zh_name: 晶化温度
+    en_aliases: [crystallization temperature, crystal transition temperature]
+    zh_aliases: [结晶温度, 相变晶化温度]
+    standard_unit: C
+    category: structure
+    is_core_statistical_field: true
+
+  - canonical_key: tensile_strength_MPa
+    zh_name: 拉伸强度
+    en_aliases: [tensile strength, breaking strength]
+    zh_aliases: [断裂强度, 抗拉强度, 单丝强度]
+    standard_unit: MPa
+    category: mechanical
+    is_core_statistical_field: true
+
+  - canonical_key: compressive_strength_MPa
+    zh_name: 抗压强度
+    en_aliases: [compressive strength, compression strength]
+    zh_aliases: [压缩强度]
+    standard_unit: MPa
+    category: mechanical
+    is_core_statistical_field: true
+
+  - canonical_key: flexural_strength_MPa
+    zh_name: 抗弯强度
+    en_aliases: [flexural strength, bending strength]
+    zh_aliases: [弯曲强度]
+    standard_unit: MPa
+    category: mechanical
+    is_core_statistical_field: true
+
+  - canonical_key: breaking_force_cN
+    zh_name: 断裂强力
+    en_aliases: [breaking force, fracture force, maximum load]
+    zh_aliases: [最大断裂强力, 断裂载荷]
+    standard_unit: cN
+    category: mechanical
+    is_core_statistical_field: true
+
+  - canonical_key: elastic_modulus_GPa
+    zh_name: 弹性模量
+    en_aliases: [elastic modulus, Young's modulus, tensile modulus]
+    zh_aliases: [杨氏模量, 模量]
+    standard_unit: GPa
+    category: mechanical
+    is_core_statistical_field: true
+
+  - canonical_key: elongation_at_break_percent
+    zh_name: 断裂伸长率
+    en_aliases: [elongation at break, strain at break, maximum strain]
+    zh_aliases: [断裂伸长, 断裂应变, 最大应变]
+    standard_unit: "%"
+    category: mechanical
+    is_core_statistical_field: true
+
+  - canonical_key: thermal_conductivity_W_mK
+    zh_name: 热导率
+    en_aliases: [thermal conductivity]
+    zh_aliases: [导热系数]
+    standard_unit: W/(m*K)
+    category: thermal
+    is_core_statistical_field: true
+
+  - canonical_key: strength_retention_percent
+    zh_name: 强度保持率
+    en_aliases: [strength retention, retained strength, residual strength ratio]
+    zh_aliases: [高温后强度保持率, 残余强度保持率]
+    standard_unit: "%"
+    category: thermal
+    is_core_statistical_field: true
+
+  - canonical_key: service_temperature_C
+    zh_name: 使用温度
+    en_aliases: [service temperature, use temperature, working temperature]
+    zh_aliases: [使用上限, 耐温上限, 服役温度]
+    standard_unit: C
+    category: thermal
+    is_core_statistical_field: true
+
+  - canonical_key: continuous_length_m
+    zh_name: 连续成纤长度
+    en_aliases: [continuous fiber length, collected length, spinning length]
+    zh_aliases: [连续长度, 收丝长度, 可连续纺丝长度]
+    standard_unit: m
+    category: production
+    is_core_statistical_field: true
+
+  - canonical_key: spinning_duration_h
+    zh_name: 连续纺丝时长
+    en_aliases: [spinning duration, continuous spinning time]
+    zh_aliases: [纺丝时长, 连续纺丝时间]
+    standard_unit: h
+    category: production
+    is_core_statistical_field: true
+
+  - canonical_key: sol_conversion_percent
+    zh_name: 溶胶转化率
+    en_aliases: [sol conversion, conversion yield]
+    zh_aliases: [单批次溶胶转化率, 转化率]
+    standard_unit: "%"
+    category: production
+    is_core_statistical_field: true
+
+  - canonical_key: fiber_water_content_percent
+    zh_name: 凝胶纤维含水量
+    en_aliases: [fiber water content, gel fiber moisture content]
+    zh_aliases: [含水量, 凝胶纤维水分]
+    standard_unit: "%"
+    category: production
+    is_core_statistical_field: true
+
+  - canonical_key: ftir_peak_position_cm_1
+    zh_name: FTIR 峰位
+    en_aliases: [FTIR peak position, infrared band, wavenumber]
+    zh_aliases: [红外峰位, 红外吸收峰, 波数]
+    standard_unit: cm^-1
+    category: spectroscopy
+    is_core_statistical_field: false
+
+  - canonical_key: xrd_peak_position_2theta_deg
+    zh_name: XRD 峰位
+    en_aliases: [XRD peak position, diffraction peak, 2 theta]
+    zh_aliases: [衍射峰位, 2θ, XRD主峰]
+    standard_unit: degree
+    category: spectroscopy
+    is_core_statistical_field: false
+
+  - canonical_key: nmr_chemical_shift_ppm
+    zh_name: NMR 化学位移
+    en_aliases: [NMR chemical shift, chemical shift]
+    zh_aliases: [核磁化学位移]
+    standard_unit: ppm
+    category: spectroscopy
+    is_core_statistical_field: false

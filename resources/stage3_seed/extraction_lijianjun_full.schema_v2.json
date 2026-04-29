@@ -1,0 +1,2320 @@
+[
+  {
+    "schema_version": "2.0",
+    "paper_basic_info": {
+      "paper_id": "paper_lijianjun_2021_dry_spinning_alpha_al2o3",
+      "source_file": "paper/干法纺丝制备α-Al_2O_3陶瓷纤维及其力学性能研究_李建军.pdf",
+      "title": "干法纺丝制备 α-Al2O3 陶瓷纤维及其力学性能研究",
+      "translated_title": "Study on Preparation and Mechanical Properties of alpha-Al2O3 Ceramic Fiber by Dry Spinning",
+      "authors": [
+        "李建军",
+        "郑顺金",
+        "焦秀玲",
+        "陈代荣"
+      ],
+      "year": 2021,
+      "doi": "10.16521/j.cnki.issn.1001-9642.2021.04.006",
+      "document_type": "journal_article",
+      "language": "zh",
+      "is_review": false,
+      "material_system": "alpha-Al2O3 continuous ceramic fiber from pseudo-boehmite-derived alumina sol",
+      "process_route": "aluminium isopropoxide + hydrogen peroxide hydrothermal pseudo-boehmite preparation -> alumina sol + PVA -> dry spinning -> staged calcination/sintering",
+      "research_object_form": "continuous_fiber",
+      "abstract_summary": "Pseudo-boehmite prepared by hydrothermal reaction of aluminium isopropoxide and hydrogen peroxide was used to synthesize spinnable alumina sol. Alumina gel fibers were prepared by dry spinning and converted to alpha-Al2O3 continuous ceramic fibers by sintering. Slow heating to 650 C followed by rapid sintering at 1300 C for 10 min gave uniform fibers about 10 um in diameter with maximum breaking strength of 1.37 GPa.",
+      "keywords": [
+        "dry spinning",
+        "alpha-Al2O3",
+        "ceramic fiber",
+        "alumina sol",
+        "pseudo-boehmite"
+      ]
+    },
+    "global_constants": {
+      "scope_note": "Only conditions shared by the main experiments in this paper are placed here.",
+      "raw_materials": [
+        {
+          "material_id": "mat_001",
+          "role": "aluminum_source",
+          "name": "异丙醇铝",
+          "formula_or_composition": "(C3H7O)3Al",
+          "purity_or_grade": null,
+          "supplier": null,
+          "amount": null,
+          "amount_unit": null,
+          "note": "Used with H2O2 to prepare pseudo-boehmite by hydrothermal reaction.",
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        },
+        {
+          "material_id": "mat_002",
+          "role": "oxidant_or_reagent",
+          "name": "过氧化氢",
+          "formula_or_composition": "H2O2",
+          "purity_or_grade": null,
+          "supplier": null,
+          "amount": null,
+          "amount_unit": null,
+          "note": "Used in hydrothermal reaction with aluminium isopropoxide.",
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        },
+        {
+          "material_id": "mat_003",
+          "role": "solvent",
+          "name": "蒸馏水",
+          "formula_or_composition": "H2O",
+          "purity_or_grade": null,
+          "supplier": null,
+          "amount": null,
+          "amount_unit": null,
+          "note": "Used in precursor preparation and sol dispersion.",
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        },
+        {
+          "material_id": "mat_004",
+          "role": "washing_solvent",
+          "name": "乙醇",
+          "formula_or_composition": null,
+          "purity_or_grade": null,
+          "supplier": null,
+          "amount": null,
+          "amount_unit": null,
+          "note": "Used together with deionized water to wash the precipitate.",
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        },
+        {
+          "material_id": "mat_005",
+          "role": "acid",
+          "name": "浓硝酸",
+          "formula_or_composition": "HNO3",
+          "purity_or_grade": "concentrated",
+          "supplier": null,
+          "amount": null,
+          "amount_unit": null,
+          "note": "Used to adjust the pH of the pseudo-boehmite suspension.",
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        },
+        {
+          "material_id": "mat_006",
+          "role": "polymer_additive",
+          "name": "聚乙烯醇",
+          "formula_or_composition": "PVA",
+          "purity_or_grade": "1799 type",
+          "supplier": null,
+          "amount": null,
+          "amount_unit": null,
+          "note": "Added to alumina sol as spinning additive.",
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        }
+      ],
+      "nominal_composition": [
+        {
+          "component": "Al2O3",
+          "value": null,
+          "unit": "wt%",
+          "basis": "high alumina alpha-Al2O3 fiber; exact Al2O3 content not reported in text layer",
+          "evidence_refs": [
+            "src_p1_intro"
+          ]
+        }
+      ],
+      "shared_process_summary": {
+        "precursor_route_summary": "Aluminium isopropoxide, distilled water and H2O2 were mixed to form a white suspension, reacted in a PTFE-lined autoclave at 90 C for 6 h with 65-75% filling, centrifuged, washed, dried at 90 C to obtain pseudo-boehmite powder, dispersed in water at 3000 rpm for 2 h, acidified with concentrated nitric acid, stirred 4 h to obtain alumina sol, then mixed with PVA and concentrated at 45 C for 18-24 h to obtain spinnable sol.",
+        "precursor_type": "spinnable alumina sol from pseudo-boehmite",
+        "forming_method": "dry_spinning",
+        "heat_treatment_route_summary": "Gel fibers were heated at 1-5 C/min to 650 C, held for 60 min, then rapidly transferred to a 1100-1350 C furnace for 5-10 min or 10 min depending on the experiment, followed by natural cooling.",
+        "testing_summary": "XRD, FTIR, TG-DSC, SEM and single-fiber tensile strength testing."
+      },
+      "shared_parameters": {
+        "precursor_solution": {
+          "pH": null,
+          "solid_content_wt_percent": null,
+          "viscosity_Pa_s": null,
+          "particle_size_nm": null,
+          "zeta_potential_mV": null,
+          "pva_content_wt_percent": null,
+          "pvp_content_wt_percent": null,
+          "peo_content_wt_percent": null,
+          "aging_temperature_C": null,
+          "aging_time_h": null,
+          "concentration_temperature_C": 45,
+          "concentration_time_h": null,
+          "gelation_time_h": null,
+          "drying_temperature_C": 90,
+          "drying_time_h": null
+        },
+        "forming": {
+          "spinneret_hole_diameter_mm": 0.1,
+          "spinneret_hole_count": null,
+          "needle_gauge": null,
+          "nozzle_inner_diameter_mm": null,
+          "feed_pressure_MPa": null,
+          "applied_voltage_kV": null,
+          "air_pressure_MPa": null,
+          "collector_distance_cm": null,
+          "feed_rate_ml_h": null,
+          "take_up_speed_m_min": 160,
+          "drawing_speed_mm_min": null,
+          "spinning_channel_temperature_C": 45,
+          "hot_air_temperature_C": 45,
+          "ambient_temperature_C": null,
+          "relative_humidity_percent": null,
+          "collector_type": "take-up roller"
+        },
+        "heat_treatment": {
+          "calcination_temperature_C": 650,
+          "sintering_temperature_C": null,
+          "holding_time_h": 1,
+          "heating_rate_C_min": null,
+          "atmosphere": null,
+          "cooling_method": "natural_cooling"
+        },
+        "product_structure": {
+          "average_fiber_diameter_um": null,
+          "average_fiber_diameter_nm": null,
+          "fiber_length_m": null,
+          "crystallite_size_nm": null,
+          "porosity_vol_percent": null,
+          "average_pore_size_nm": null,
+          "pore_volume_cm3_g": null,
+          "specific_surface_area_m2_g": null,
+          "density_g_cm3": null,
+          "linear_shrinkage_percent": null,
+          "volume_shrinkage_percent": null
+        },
+        "performance": {
+          "tensile_strength_MPa": null,
+          "compressive_strength_MPa": null,
+          "flexural_strength_MPa": null,
+          "breaking_force_cN": null,
+          "elastic_modulus_GPa": null,
+          "elongation_at_break_percent": null,
+          "thermal_conductivity_W_mK": null,
+          "strength_retention_percent": null,
+          "service_temperature_C": null
+        }
+      },
+      "heat_treatment_programs": [
+        {
+          "program_id": "ht_01_hydrothermal_precursor",
+          "stage_name": "pseudo-boehmite hydrothermal preparation",
+          "start_temperature_C": null,
+          "target_temperature_C": 90,
+          "heating_rate_C_min": null,
+          "holding_time_h": 6,
+          "atmosphere": null,
+          "cooling_method": "natural_cooling",
+          "purpose": "prepare pseudo-boehmite precursor powder",
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        },
+        {
+          "program_id": "ht_02_precursor_drying",
+          "stage_name": "precursor powder drying",
+          "start_temperature_C": null,
+          "target_temperature_C": 90,
+          "heating_rate_C_min": null,
+          "holding_time_h": null,
+          "atmosphere": null,
+          "cooling_method": null,
+          "purpose": "dry washed pseudo-boehmite precipitate",
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        },
+        {
+          "program_id": "ht_03_low_temperature_calcination",
+          "stage_name": "low-temperature calcination",
+          "start_temperature_C": null,
+          "target_temperature_C": 650,
+          "heating_rate_C_min": null,
+          "holding_time_h": 1,
+          "atmosphere": null,
+          "cooling_method": null,
+          "purpose": "remove PVA, water and hydroxyl groups before high-temperature sintering",
+          "evidence_refs": [
+            "src_p2_exp_1_2",
+            "src_p2_results_2_2"
+          ]
+        },
+        {
+          "program_id": "ht_04_high_temperature_sintering",
+          "stage_name": "rapid high-temperature sintering",
+          "start_temperature_C": null,
+          "target_temperature_C": null,
+          "heating_rate_C_min": null,
+          "holding_time_h": 0.1667,
+          "atmosphere": null,
+          "cooling_method": "natural_cooling",
+          "purpose": "convert gamma-Al2O3 to alpha-Al2O3 while limiting grain coarsening",
+          "evidence_refs": [
+            "src_p3_xrd",
+            "src_p6_mechanical"
+          ]
+        }
+      ],
+      "characterization_methods": [
+        {
+          "method": "XRD",
+          "sample_state": "xerogel fiber and sintered fibers",
+          "instrument": "Rigaku D/Max 2200PC",
+          "test_conditions": "CuKalpha; graphite monochromator; scan range 10-80 degrees; scan speed 10 degrees/min",
+          "measured_target": "phase evolution",
+          "evidence_refs": [
+            "src_p2_methods_1_3"
+          ]
+        },
+        {
+          "method": "FTIR",
+          "sample_state": "xerogel fiber and fibers sintered at different temperatures",
+          "instrument": "Nicolet 5DX-FTIR",
+          "test_conditions": "KBr pellet; 400-4000 cm^-1",
+          "measured_target": "functional groups and Al-O vibration evidence",
+          "evidence_refs": [
+            "src_p2_methods_1_3"
+          ]
+        },
+        {
+          "method": "TG_DSC",
+          "sample_state": "gel fiber",
+          "instrument": "Mettler Toledo SDTA851e",
+          "test_conditions": "room temperature to 1200 C; 10 C/min; synthetic air; flow rate 20 mL/min",
+          "measured_target": "mass loss and phase transition",
+          "evidence_refs": [
+            "src_p2_methods_1_3"
+          ]
+        },
+        {
+          "method": "SEM",
+          "sample_state": "gel fiber and sintered fibers",
+          "instrument": "Hitachi SU8010 cold field-emission SEM",
+          "test_conditions": null,
+          "measured_target": "surface morphology and cross-section microstructure",
+          "evidence_refs": [
+            "src_p2_methods_1_3"
+          ]
+        },
+        {
+          "method": "tensile_test",
+          "sample_state": "single fiber",
+          "instrument": "XG-1A fiber tensile strength tester",
+          "test_conditions": "tensile speed 1 mm/min; fiber diameter measured by microscope and averaged",
+          "measured_target": "breaking force and calculated breaking strength",
+          "evidence_refs": [
+            "src_p2_methods_1_3"
+          ]
+        }
+      ],
+      "global_observations": {
+        "tg_dsc_events": [
+          {
+            "event_id": "tg_01",
+            "temperature_range_C": "room_temperature-170",
+            "mass_loss_wt_percent": 7.86,
+            "dsc_peak_temperature_C": null,
+            "interpretation": "removal of free water and volatile components",
+            "evidence_refs": [
+              "src_p2_results_2_2",
+              "fig_02"
+            ]
+          },
+          {
+            "event_id": "tg_02",
+            "temperature_range_C": "170-390",
+            "mass_loss_wt_percent": 34.18,
+            "dsc_peak_temperature_C": 203.7,
+            "interpretation": "dehydration condensation of gamma-AlOOH hydroxyl groups and decomposition of PVA",
+            "evidence_refs": [
+              "src_p2_results_2_2",
+              "fig_02"
+            ]
+          },
+          {
+            "event_id": "tg_03",
+            "temperature_range_C": ">390",
+            "mass_loss_wt_percent": null,
+            "dsc_peak_temperature_C": 1057.8,
+            "interpretation": "remaining hydroxyl dehydration and gamma-Al2O3 to alpha-Al2O3 transition",
+            "evidence_refs": [
+              "src_p2_results_2_2",
+              "fig_02"
+            ]
+          }
+        ],
+        "spectroscopic_evidence": [
+          {
+            "evidence_id": "ftir_01",
+            "method": "FTIR",
+            "peak_position": 3440,
+            "peak_unit": "cm^-1",
+            "assignment": "hydroxyl stretching vibration",
+            "interpretation": "free water, PVA and hydroxyl groups in gamma-AlOOH",
+            "evidence_refs": [
+              "src_p3_ftir",
+              "fig_04"
+            ]
+          },
+          {
+            "evidence_id": "ftir_02",
+            "method": "FTIR",
+            "peak_position": 1640,
+            "peak_unit": "cm^-1",
+            "assignment": "hydroxyl bending vibration",
+            "interpretation": "free water, PVA and hydroxyl groups in gamma-AlOOH",
+            "evidence_refs": [
+              "src_p3_ftir",
+              "fig_04"
+            ]
+          },
+          {
+            "evidence_id": "ftir_03",
+            "method": "FTIR",
+            "peak_position": 1442,
+            "peak_unit": "cm^-1",
+            "assignment": "C-H bending vibration in polymer",
+            "interpretation": "PVA-related organic residue in gel fiber",
+            "evidence_refs": [
+              "src_p4_ftir",
+              "fig_04"
+            ]
+          },
+          {
+            "evidence_id": "ftir_04",
+            "method": "FTIR",
+            "peak_position": 790,
+            "peak_unit": "cm^-1",
+            "assignment": "broad gamma-Al2O3-associated absorption",
+            "interpretation": "gamma-Al2O3 appears after calcination at 650 C",
+            "evidence_refs": [
+              "src_p4_ftir",
+              "fig_04"
+            ]
+          },
+          {
+            "evidence_id": "ftir_05",
+            "method": "FTIR",
+            "peak_position": 468,
+            "peak_unit": "cm^-1",
+            "assignment": "Al-O tetrahedral stretching vibration",
+            "interpretation": "alpha-Al2O3 generation after 1200 C sintering",
+            "evidence_refs": [
+              "src_p4_ftir",
+              "fig_04"
+            ]
+          },
+          {
+            "evidence_id": "ftir_06",
+            "method": "FTIR",
+            "peak_position": 518,
+            "peak_unit": "cm^-1",
+            "assignment": "Al-O octahedral stretching vibration",
+            "interpretation": "alpha-Al2O3 generation after 1200 C sintering",
+            "evidence_refs": [
+              "src_p4_ftir",
+              "fig_04"
+            ]
+          }
+        ],
+        "mechanism_notes": [
+          {
+            "note_id": "mech_01",
+            "claim": "Low crystallinity pseudo-boehmite with many hydroxyl groups and lattice defects yields small gamma-Al2O3 grains, enabling alpha-Al2O3 transformation at lower temperature and shorter time.",
+            "basis_type": "author_interpretation_based_on_XRD",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "src_p3_xrd"
+            ]
+          },
+          {
+            "note_id": "mech_02",
+            "claim": "Slow heating below 650 C allows water and polymer decomposition products to be removed gradually, reducing pores and cracks; rapid high-temperature sintering limits grain growth.",
+            "basis_type": "author_interpretation_based_on_SEM_and_process_comparison",
+            "confidence": 0.9,
+            "evidence_refs": [
+              "src_p5_heating_rate",
+              "fig_06",
+              "fig_08"
+            ]
+          }
+        ]
+      },
+      "additional_parameter_records": [
+        {
+          "canonical_key": "concentration_time_h",
+          "category": "precursor_solution",
+          "value": null,
+          "min_value": 18,
+          "max_value": 24,
+          "uncertainty": null,
+          "unit": "h",
+          "raw_text": "45 ℃水浴下减压浓缩 18 ～ 24 h",
+          "normalization_note": null,
+          "evidence_refs": [
+            "src_p2_exp_1_1"
+          ]
+        },
+        {
+          "canonical_key": "heating_rate_C_min",
+          "category": "heat_treatment",
+          "value": null,
+          "min_value": 1,
+          "max_value": 5,
+          "uncertainty": null,
+          "unit": "C/min",
+          "raw_text": "以 1 ～ 5 ℃·min-1 升温至 650 ℃",
+          "normalization_note": null,
+          "evidence_refs": [
+            "src_p2_exp_1_2"
+          ]
+        },
+        {
+          "canonical_key": "continuous_length_m",
+          "category": "production",
+          "value": null,
+          "min_value": 120,
+          "max_value": 300,
+          "uncertainty": null,
+          "unit": "m",
+          "raw_text": "每次缠绕在收丝辊上的纤维长度可达120～300 m",
+          "normalization_note": null,
+          "evidence_refs": [
+            "src_p2_results_2_1"
+          ]
+        },
+        {
+          "canonical_key": "spinning_duration_h",
+          "category": "production",
+          "value": null,
+          "min_value": 0.0139,
+          "max_value": 0.0278,
+          "uncertainty": null,
+          "unit": "h",
+          "raw_text": "纺丝过程可以连续进行50～100 s",
+          "normalization_note": "50-100 s converted to 0.0139-0.0278 h",
+          "evidence_refs": [
+            "src_p2_results_2_1"
+          ]
+        },
+        {
+          "canonical_key": "fiber_length_m",
+          "category": "structure",
+          "value": null,
+          "min_value": 0.6,
+          "max_value": 0.7,
+          "uncertainty": null,
+          "unit": "m",
+          "raw_text": "将纤维从收丝辊上切割成60～70 cm长的小段进行表征分析",
+          "normalization_note": "60-70 cm converted to 0.6-0.7 m",
+          "evidence_refs": [
+            "src_p2_results_2_1"
+          ]
+        }
+      ],
+      "extended_data": {
+        "autoclave_filling_percent_min": 65,
+        "autoclave_filling_percent_max": 75,
+        "dispersion_speed_rpm": 3000,
+        "dispersion_time_h": 2,
+        "sol_stirring_after_acidification_h": 4,
+        "pva_stirring_time_h": 10,
+        "thermoanalysis_air_flow_ml_min": 20,
+        "xrd_scan_range_deg": "10-80",
+        "xrd_scan_speed_deg_min": 10,
+        "ftir_range_cm_1": "400-4000",
+        "tensile_test_speed_mm_min": 1
+      }
+    },
+    "experiment_series": [
+      {
+        "series_id": "series_01_dry_spinning_formability",
+        "series_name": "dry spinning and gel fiber formability",
+        "series_type": "forming_parameter_variable",
+        "research_question": "Can the optimized alumina sol be continuously dry-spun into uniform gel fibers under the reported spinneret, channel temperature and take-up speed conditions?",
+        "controlled_variable_keys": [
+          "spinneret_hole_diameter_mm",
+          "spinning_channel_temperature_C",
+          "take_up_speed_m_min"
+        ],
+        "independent_variables": [
+          {
+            "canonical_key": null,
+            "display_name": "optimized dry spinning condition",
+            "unit": null,
+            "variable_type": "categorical",
+            "value_scope": "single optimized condition",
+            "evidence_refs": [
+              "src_p2_exp_1_2"
+            ]
+          }
+        ],
+        "series_constants": {
+          "raw_material_refs": [
+            "mat_001",
+            "mat_002",
+            "mat_006"
+          ],
+          "process_summary": "Spinnable alumina sol was extruded from a 0.10 mm spinneret into a hot-air spinning channel and drawn by a take-up roller.",
+          "parameter_records": [
+            {
+              "canonical_key": "spinneret_hole_diameter_mm",
+              "value": 0.1,
+              "min_value": null,
+              "max_value": null,
+              "unit": "mm",
+              "raw_text": "喷丝板孔径0.10 mm",
+              "evidence_refs": [
+                "src_p2_exp_1_2"
+              ]
+            },
+            {
+              "canonical_key": "spinning_channel_temperature_C",
+              "value": 45,
+              "min_value": 40,
+              "max_value": 50,
+              "unit": "C",
+              "raw_text": "纺丝甬道空气温度为45 ℃ ±5 ℃",
+              "evidence_refs": [
+                "src_p2_exp_1_2"
+              ]
+            },
+            {
+              "canonical_key": "take_up_speed_m_min",
+              "value": 160,
+              "min_value": null,
+              "max_value": null,
+              "unit": "m/min",
+              "raw_text": "收丝辊线速度为160 m·min-1",
+              "evidence_refs": [
+                "src_p2_exp_1_2"
+              ]
+            }
+          ],
+          "heat_treatment_program_refs": [],
+          "test_condition_summary": null,
+          "extended_data": {}
+        },
+        "data_points": [
+          {
+            "sample_id": "sample_s01_gel_fiber",
+            "sample_label": "gel fiber under optimized dry-spinning condition",
+            "sample_role": "gel_fiber_product",
+            "independent_variable_values": [
+              {
+                "canonical_key": null,
+                "value": "optimized condition",
+                "min_value": null,
+                "max_value": null,
+                "unit": null,
+                "raw_text": "按照上述优化后的纺丝工艺条件进行干法纺丝",
+                "evidence_refs": [
+                  "src_p2_results_2_1"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "precursor_solution": {
+                "pH": null,
+                "solid_content_wt_percent": null,
+                "viscosity_Pa_s": null,
+                "particle_size_nm": null,
+                "zeta_potential_mV": null,
+                "pva_content_wt_percent": null,
+                "pvp_content_wt_percent": null,
+                "peo_content_wt_percent": null
+              },
+              "forming": {
+                "spinneret_hole_diameter_mm": 0.1,
+                "spinneret_hole_count": null,
+                "needle_gauge": null,
+                "feed_pressure_MPa": null,
+                "applied_voltage_kV": null,
+                "air_pressure_MPa": null,
+                "collector_distance_cm": null,
+                "feed_rate_ml_h": null,
+                "take_up_speed_m_min": 160,
+                "spinning_channel_temperature_C": 45,
+                "relative_humidity_percent": null
+              },
+              "heat_treatment": {
+                "calcination_temperature_C": null,
+                "sintering_temperature_C": null,
+                "holding_time_h": null,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": null
+              }
+            },
+            "results": {
+              "formability": {
+                "continuous_spinning": true,
+                "continuous_length_m": null,
+                "spinnability_description": "Uniform fine streams formed at the spinneret outlet; spinning could continue for 50-100 s without fiber breakage; each take-up run produced 120-300 m fiber.",
+                "surface_quality_description": "white translucent gel fibers"
+              },
+              "phase_and_chemistry": {
+                "main_phase": "gamma-AlOOH / boehmite in xerogel fiber before sintering",
+                "secondary_phase": null,
+                "crystallization_temperature_C": null,
+                "phase_transition_description": null,
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {
+                "average_fiber_diameter_um": null,
+                "average_fiber_diameter_nm": null,
+                "fiber_length_m": null,
+                "crystallite_size_nm": null,
+                "porosity_vol_percent": null,
+                "average_pore_size_nm": null,
+                "pore_volume_cm3_g": null,
+                "specific_surface_area_m2_g": null,
+                "density_g_cm3": null,
+                "linear_shrinkage_percent": null,
+                "volume_shrinkage_percent": null,
+                "morphology_description": "xerogel fiber surface was smooth and dense; cross-section was circular; no obvious pores or cracks were observed"
+              },
+              "mechanical_properties": {
+                "tensile_strength_MPa": null,
+                "compressive_strength_MPa": null,
+                "flexural_strength_MPa": null,
+                "breaking_force_cN": null,
+                "elastic_modulus_GPa": null,
+                "elongation_at_break_percent": null,
+                "fracture_behavior_description": null
+              },
+              "thermal_properties": {
+                "thermal_conductivity_W_mK": null,
+                "service_temperature_C": null,
+                "strength_retention_percent": null,
+                "thermal_stability_description": null,
+                "morphology_retention_description": null
+              },
+              "mechanism_and_evidence": {
+                "spectroscopic_evidence_summary": null,
+                "author_mechanism_interpretation": null,
+                "mechanism_basis_type": null
+              }
+            },
+            "additional_parameter_records": [
+              {
+                "canonical_key": "continuous_length_m",
+                "category": "production",
+                "value": null,
+                "min_value": 120,
+                "max_value": 300,
+                "uncertainty": null,
+                "unit": "m",
+                "raw_text": "每次缠绕在收丝辊上的纤维长度可达120～300 m",
+                "normalization_note": null,
+                "evidence_refs": [
+                  "src_p2_results_2_1"
+                ]
+              },
+              {
+                "canonical_key": "spinning_duration_h",
+                "category": "production",
+                "value": null,
+                "min_value": 0.0139,
+                "max_value": 0.0278,
+                "uncertainty": null,
+                "unit": "h",
+                "raw_text": "纺丝过程可以连续进行50～100 s",
+                "normalization_note": "seconds converted to hours",
+                "evidence_refs": [
+                  "src_p2_results_2_1"
+                ]
+              }
+            ],
+            "qualitative_observations": [
+              {
+                "observation_type": "formability",
+                "text": "uniform fine streams formed and fiber did not break during 50-100 s spinning",
+                "basis_type": "text_and_fig_1",
+                "evidence_refs": [
+                  "src_p2_results_2_1",
+                  "fig_01"
+                ]
+              }
+            ],
+            "evidence_refs": [
+              "src_p2_results_2_1",
+              "fig_01",
+              "fig_05"
+            ],
+            "extended_data": {}
+          }
+        ],
+        "series_summary": {
+          "trend_summary": "The optimized dry-spinning condition produced white translucent gel fibers and enabled continuous spinning for 50-100 s, with 120-300 m fiber collected per take-up run.",
+          "has_incomplete_data": true,
+          "note": "Feed pressure and precursor pH/PVA content were mentioned qualitatively but exact values were not reported."
+        }
+      },
+      {
+        "series_id": "series_02_ceramic_conversion_phase",
+        "series_name": "ceramic conversion and phase evolution with temperature",
+        "series_type": "heat_treatment_variable",
+        "research_question": "How do calcination/sintering temperatures affect mass loss, phase transition and FTIR evidence?",
+        "controlled_variable_keys": [
+          "calcination_temperature_C",
+          "sintering_temperature_C",
+          "holding_time_h"
+        ],
+        "independent_variables": [
+          {
+            "canonical_key": "calcination_temperature_C",
+            "display_name": "thermal treatment temperature",
+            "unit": "C",
+            "variable_type": "continuous_numeric",
+            "value_scope": "300, 650, 800, 1100, 1200 and higher temperatures discussed",
+            "evidence_refs": [
+              "src_p3_xrd",
+              "fig_03",
+              "fig_04"
+            ]
+          }
+        ],
+        "series_constants": {
+          "raw_material_refs": [
+            "mat_001",
+            "mat_002",
+            "mat_006"
+          ],
+          "process_summary": "Xerogel/gel fibers were thermally treated and characterized by TG-DSC, XRD and FTIR.",
+          "parameter_records": [],
+          "heat_treatment_program_refs": [
+            "ht_03_low_temperature_calcination",
+            "ht_04_high_temperature_sintering"
+          ],
+          "test_condition_summary": "TG-DSC: room temperature to 1200 C, 10 C/min, synthetic air. XRD and FTIR conditions are listed in global characterization methods.",
+          "extended_data": {}
+        },
+        "data_points": [
+          {
+            "sample_id": "sample_s02_xerogel",
+            "sample_label": "dry gel fiber",
+            "sample_role": "baseline",
+            "independent_variable_values": [],
+            "process_parameters": {
+              "precursor_solution": {},
+              "forming": {},
+              "heat_treatment": {
+                "calcination_temperature_C": null,
+                "sintering_temperature_C": null,
+                "holding_time_h": null,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": null
+              }
+            },
+            "results": {
+              "formability": {},
+              "phase_and_chemistry": {
+                "main_phase": "boehmite / gamma-AlOOH",
+                "secondary_phase": null,
+                "crystallization_temperature_C": null,
+                "phase_transition_description": "dry gel fiber showed broad boehmite peaks",
+                "chemical_state_description": "contains free water, PVA and hydroxyl groups"
+              },
+              "microstructure_and_pores": {
+                "morphology_description": null
+              },
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {
+                "spectroscopic_evidence_summary": "FTIR peaks at 3440 and 1640 cm^-1 were assigned to hydroxyl vibrations; C-H related polymer bands were also present.",
+                "author_mechanism_interpretation": null,
+                "mechanism_basis_type": "FTIR/XRD"
+              }
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "fig_03",
+              "fig_04"
+            ],
+            "extended_data": {}
+          },
+          {
+            "sample_id": "sample_s02_300C",
+            "sample_label": "300 C treated fiber",
+            "sample_role": "temperature_point",
+            "independent_variable_values": [
+              {
+                "canonical_key": "calcination_temperature_C",
+                "value": 300,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "凝胶纤维在 300 ℃烧结后为非晶态",
+                "evidence_refs": [
+                  "src_p3_xrd"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 300,
+                "sintering_temperature_C": null,
+                "holding_time_h": null,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": null
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {
+                "main_phase": "amorphous alumina",
+                "secondary_phase": null,
+                "crystallization_temperature_C": null,
+                "phase_transition_description": "boehmite-derived gel fiber became amorphous after 300 C treatment",
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {},
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {}
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "src_p3_xrd",
+              "fig_03"
+            ],
+            "extended_data": {}
+          },
+          {
+            "sample_id": "sample_s02_650C",
+            "sample_label": "650 C calcined fiber",
+            "sample_role": "temperature_point",
+            "independent_variable_values": [
+              {
+                "canonical_key": "calcination_temperature_C",
+                "value": 650,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "升温至 650 ℃时，开始出现结晶较弱的 γ-Al2O3 衍射峰",
+                "evidence_refs": [
+                  "src_p3_xrd"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": null,
+                "holding_time_h": 1,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": null
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {
+                "main_phase": "gamma-Al2O3",
+                "secondary_phase": null,
+                "crystallization_temperature_C": 650,
+                "phase_transition_description": "weak gamma-Al2O3 diffraction peaks appeared",
+                "chemical_state_description": "PVA, free water, adsorbed water and hydroxyls were largely removed before 650 C"
+              },
+              "microstructure_and_pores": {
+                "morphology_description": "surface smooth and dense; cross-section circular, dense, without obvious pores or cracks"
+              },
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {
+                "spectroscopic_evidence_summary": "650 C treatment weakened hydroxyl/PVA bands and produced a broad 790 cm^-1 gamma-Al2O3 band.",
+                "author_mechanism_interpretation": "PVA and water/hydroxyl removal before 650 C reduces later defects.",
+                "mechanism_basis_type": "FTIR/TG-DSC/SEM"
+              }
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "src_p3_xrd",
+              "src_p4_ftir",
+              "src_p5_sem_650_800_1100",
+              "fig_03",
+              "fig_04",
+              "fig_06"
+            ],
+            "extended_data": {}
+          },
+          {
+            "sample_id": "sample_s02_800C",
+            "sample_label": "800 C treated fiber",
+            "sample_role": "temperature_point",
+            "independent_variable_values": [
+              {
+                "canonical_key": "calcination_temperature_C",
+                "value": 800,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "至 800 ℃时出现晶化较好的γ-Al2O3 的衍射峰",
+                "evidence_refs": [
+                  "src_p3_xrd"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 800,
+                "sintering_temperature_C": null,
+                "holding_time_h": null,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": null
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {
+                "main_phase": "gamma-Al2O3",
+                "secondary_phase": null,
+                "crystallization_temperature_C": 800,
+                "phase_transition_description": "better-crystallized gamma-Al2O3 diffraction peaks appeared at 800 C",
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {
+                "morphology_description": "fiber surface smooth; small and uniform grain size visible on surface"
+              },
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {}
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "src_p3_xrd",
+              "src_p5_sem_650_800_1100",
+              "fig_03",
+              "fig_06"
+            ],
+            "extended_data": {}
+          },
+          {
+            "sample_id": "sample_s02_1100C_10min",
+            "sample_label": "1100 C rapid sintering after 650 C",
+            "sample_role": "temperature_point",
+            "independent_variable_values": [
+              {
+                "canonical_key": "sintering_temperature_C",
+                "value": 1100,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "在1100 ℃快速烧结10 min后已部分转化为α-Al2O3",
+                "evidence_refs": [
+                  "src_p3_xrd"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1100,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {
+                "main_phase": "gamma-Al2O3",
+                "secondary_phase": "alpha-Al2O3",
+                "crystallization_temperature_C": null,
+                "phase_transition_description": "partially transformed to alpha-Al2O3 after rapid sintering at 1100 C for 10 min",
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {
+                "morphology_description": "fiber surface smooth; small and uniform grains visible"
+              },
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {}
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "src_p3_xrd",
+              "src_p5_sem_650_800_1100",
+              "fig_03",
+              "fig_06"
+            ],
+            "extended_data": {}
+          }
+        ],
+        "series_summary": {
+          "trend_summary": "The gel fiber transformed from boehmite to amorphous alumina, then gamma-Al2O3, and partially to alpha-Al2O3 at 1100 C after rapid sintering. TG-DSC and FTIR indicate removal of water/PVA/hydroxyls before or around 650 C.",
+          "has_incomplete_data": true,
+          "note": "Exact numerical peak intensities and crystallite sizes were not provided."
+        }
+      },
+      {
+        "series_id": "series_03_high_temperature_sintering_morphology",
+        "series_name": "high-temperature sintering temperature effect on alpha-Al2O3 fiber morphology",
+        "series_type": "heat_treatment_variable",
+        "research_question": "How do 1200, 1300 and 1350 C rapid sintering conditions after 650 C pretreatment affect alpha-Al2O3 fiber microstructure?",
+        "controlled_variable_keys": [
+          "calcination_temperature_C",
+          "holding_time_h",
+          "sintering_temperature_C"
+        ],
+        "independent_variables": [
+          {
+            "canonical_key": "sintering_temperature_C",
+            "display_name": "high-temperature sintering temperature",
+            "unit": "C",
+            "variable_type": "continuous_numeric",
+            "value_scope": "1200, 1300, 1350",
+            "evidence_refs": [
+              "src_p5_sem_1200_1300_1350",
+              "fig_07"
+            ]
+          }
+        ],
+        "series_constants": {
+          "raw_material_refs": [
+            "mat_001",
+            "mat_002",
+            "mat_006"
+          ],
+          "process_summary": "Fibers calcined at 650 C were rapidly sintered for 10 min at high temperature.",
+          "parameter_records": [
+            {
+              "canonical_key": "calcination_temperature_C",
+              "value": 650,
+              "min_value": null,
+              "max_value": null,
+              "unit": "C",
+              "raw_text": "经650 ℃烧结后的纤维分别在1200 ℃、1300 ℃、1350 ℃烧结10 min",
+              "evidence_refs": [
+                "src_p5_sem_1200_1300_1350"
+              ]
+            },
+            {
+              "canonical_key": "holding_time_h",
+              "value": 0.1667,
+              "min_value": null,
+              "max_value": null,
+              "unit": "h",
+              "raw_text": "烧结 10 min",
+              "evidence_refs": [
+                "src_p5_sem_1200_1300_1350"
+              ]
+            }
+          ],
+          "heat_treatment_program_refs": [
+            "ht_03_low_temperature_calcination",
+            "ht_04_high_temperature_sintering"
+          ],
+          "test_condition_summary": "SEM morphology and XRD phase analysis.",
+          "extended_data": {}
+        },
+        "data_points": [
+          {
+            "sample_id": "sample_s03_1200C_10min",
+            "sample_label": "1200 C / 10 min",
+            "sample_role": "sintered_alpha_al2o3_fiber",
+            "independent_variable_values": [
+              {
+                "canonical_key": "sintering_temperature_C",
+                "value": 1200,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "1200 ℃烧结 10 min",
+                "evidence_refs": [
+                  "src_p5_sem_1200_1300_1350"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1200,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {
+                "main_phase": "alpha-Al2O3",
+                "secondary_phase": null,
+                "crystallization_temperature_C": null,
+                "phase_transition_description": "XRD analysis indicated alpha-Al2O3 at 1200 C",
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {
+                "average_fiber_diameter_um": null,
+                "average_fiber_diameter_nm": null,
+                "fiber_length_m": null,
+                "crystallite_size_nm": null,
+                "porosity_vol_percent": null,
+                "average_pore_size_nm": null,
+                "pore_volume_cm3_g": null,
+                "specific_surface_area_m2_g": null,
+                "density_g_cm3": null,
+                "linear_shrinkage_percent": null,
+                "volume_shrinkage_percent": null,
+                "morphology_description": "fiber retained original morphology; no obvious breaking or powdering; dense structure with few surface pores"
+              },
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {}
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "src_p5_sem_1200_1300_1350",
+              "fig_07"
+            ],
+            "extended_data": {}
+          },
+          {
+            "sample_id": "sample_s03_1300C_10min",
+            "sample_label": "1300 C / 10 min",
+            "sample_role": "sintered_alpha_al2o3_fiber_best_strength",
+            "independent_variable_values": [
+              {
+                "canonical_key": "sintering_temperature_C",
+                "value": 1300,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "1300 ℃烧结 10 min",
+                "evidence_refs": [
+                  "src_p5_sem_1200_1300_1350",
+                  "src_p6_mechanical"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1300,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": 1,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "formability": {},
+              "phase_and_chemistry": {
+                "main_phase": "alpha-Al2O3",
+                "secondary_phase": null,
+                "crystallization_temperature_C": null,
+                "phase_transition_description": "XRD analysis indicated alpha-Al2O3 at 1300 C",
+                "chemical_state_description": "EDS showed mainly Al and O; Fe impurity 0.01 wt%; no other impurity elements reported"
+              },
+              "microstructure_and_pores": {
+                "average_fiber_diameter_um": 10.2,
+                "average_fiber_diameter_nm": null,
+                "fiber_length_m": null,
+                "crystallite_size_nm": null,
+                "porosity_vol_percent": null,
+                "average_pore_size_nm": null,
+                "pore_volume_cm3_g": null,
+                "specific_surface_area_m2_g": null,
+                "density_g_cm3": null,
+                "linear_shrinkage_percent": null,
+                "volume_shrinkage_percent": null,
+                "morphology_description": "fiber retained original morphology after rapid high-temperature sintering; dense structure with few surface pores; diameter uniform"
+              },
+              "mechanical_properties": {
+                "tensile_strength_MPa": 1370,
+                "compressive_strength_MPa": null,
+                "flexural_strength_MPa": null,
+                "breaking_force_cN": null,
+                "elastic_modulus_GPa": null,
+                "elongation_at_break_percent": null,
+                "fracture_behavior_description": null
+              },
+              "thermal_properties": {
+                "thermal_conductivity_W_mK": null,
+                "service_temperature_C": null,
+                "strength_retention_percent": null,
+                "thermal_stability_description": null,
+                "morphology_retention_description": null
+              },
+              "mechanism_and_evidence": {
+                "spectroscopic_evidence_summary": null,
+                "author_mechanism_interpretation": "1300 C rapid sintering after slow heating to 650 C was identified as the optimal condition for dense and fine-grained alpha-Al2O3 fibers.",
+                "mechanism_basis_type": "SEM/XRD/mechanical_test"
+              }
+            },
+            "additional_parameter_records": [
+              {
+                "canonical_key": "average_fiber_diameter_um",
+                "category": "structure",
+                "value": 10.2,
+                "min_value": null,
+                "max_value": null,
+                "uncertainty": 0.26,
+                "unit": "um",
+                "raw_text": "统计分析了10组经1300 ℃烧结后单根纤维样品，平均直径为10.20 μm，标准差为0.26 μm，离散系数2.56%",
+                "normalization_note": "coefficient of variation 2.56% preserved in extended data",
+                "evidence_refs": [
+                  "src_p6_mechanical"
+                ]
+              },
+              {
+                "canonical_key": "tensile_strength_MPa",
+                "category": "mechanical",
+                "value": 1370,
+                "min_value": null,
+                "max_value": null,
+                "uncertainty": null,
+                "unit": "MPa",
+                "raw_text": "断裂强度为 1.37 GPa",
+                "normalization_note": "1.37 GPa converted to 1370 MPa",
+                "evidence_refs": [
+                  "src_p6_mechanical",
+                  "table_01"
+                ]
+              }
+            ],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "src_p5_sem_1200_1300_1350",
+              "src_p6_mechanical",
+              "fig_07",
+              "table_01"
+            ],
+            "extended_data": {
+              "fiber_diameter_standard_deviation_um": 0.26,
+              "fiber_diameter_coefficient_of_variation_percent": 2.56,
+              "fe_impurity_wt_percent": 0.01
+            }
+          },
+          {
+            "sample_id": "sample_s03_1350C_10min",
+            "sample_label": "1350 C / 10 min",
+            "sample_role": "sintered_alpha_al2o3_fiber_overfired",
+            "independent_variable_values": [
+              {
+                "canonical_key": "sintering_temperature_C",
+                "value": 1350,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "1350 ℃烧结 10 min",
+                "evidence_refs": [
+                  "src_p5_sem_1200_1300_1350"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1350,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {
+                "main_phase": "alpha-Al2O3",
+                "secondary_phase": null,
+                "crystallization_temperature_C": null,
+                "phase_transition_description": "XRD analysis indicated alpha-Al2O3 at 1350 C",
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {
+                "average_fiber_diameter_um": null,
+                "average_fiber_diameter_nm": null,
+                "fiber_length_m": null,
+                "crystallite_size_nm": null,
+                "porosity_vol_percent": null,
+                "average_pore_size_nm": null,
+                "pore_volume_cm3_g": null,
+                "specific_surface_area_m2_g": null,
+                "density_g_cm3": null,
+                "linear_shrinkage_percent": null,
+                "volume_shrinkage_percent": null,
+                "morphology_description": "fiber retained overall morphology, but uneven grains developed nanoscale pores between grains"
+              },
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {
+                "author_mechanism_interpretation": "Excessively high temperature can cause grain coarsening and nanoscale pores, which may reduce fiber strength.",
+                "mechanism_basis_type": "SEM/author_interpretation"
+              }
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [
+              {
+                "observation_type": "over_sintering_defect",
+                "text": "nanoscale pores appeared between uneven grains at 1350 C",
+                "basis_type": "SEM",
+                "evidence_refs": [
+                  "fig_07",
+                  "src_p5_sem_1200_1300_1350"
+                ]
+              }
+            ],
+            "evidence_refs": [
+              "src_p5_sem_1200_1300_1350",
+              "fig_07"
+            ],
+            "extended_data": {}
+          }
+        ],
+        "series_summary": {
+          "trend_summary": "After high-temperature rapid sintering, the fibers transformed to alpha-Al2O3 and retained morphology. 1200-1300 C gave dense fibers with fewer pores; 1350 C caused uneven grains and nanoscale pores. The paper identifies 1300 C for 10 min as the optimal condition.",
+          "has_incomplete_data": true,
+          "note": "Table 1 values for 1200, 1250 and 1350 C were not extractable from the text layer; only the 1300 C strength was explicit in text."
+        }
+      },
+      {
+        "series_id": "series_04_low_temperature_heating_rate",
+        "series_name": "low-temperature heating rate effect before 650 C",
+        "series_type": "heat_treatment_variable",
+        "research_question": "How does the heating rate up to 650 C affect fiber surface roughness, cracks and pores?",
+        "controlled_variable_keys": [
+          "heating_rate_C_min",
+          "calcination_temperature_C",
+          "holding_time_h"
+        ],
+        "independent_variables": [
+          {
+            "canonical_key": "heating_rate_C_min",
+            "display_name": "升温速率",
+            "unit": "C/min",
+            "variable_type": "continuous_numeric",
+            "value_scope": "1 and 5",
+            "evidence_refs": [
+              "src_p5_heating_rate",
+              "fig_06",
+              "fig_08"
+            ]
+          }
+        ],
+        "series_constants": {
+          "raw_material_refs": [
+            "mat_001",
+            "mat_002",
+            "mat_006"
+          ],
+          "process_summary": "Gel fibers were heated to 650 C and held for 1 h using different heating rates.",
+          "parameter_records": [
+            {
+              "canonical_key": "calcination_temperature_C",
+              "value": 650,
+              "min_value": null,
+              "max_value": null,
+              "unit": "C",
+              "raw_text": "升温至650℃并保温1 h",
+              "evidence_refs": [
+                "src_p5_heating_rate"
+              ]
+            },
+            {
+              "canonical_key": "holding_time_h",
+              "value": 1,
+              "min_value": null,
+              "max_value": null,
+              "unit": "h",
+              "raw_text": "保温 1 h",
+              "evidence_refs": [
+                "src_p5_heating_rate"
+              ]
+            }
+          ],
+          "heat_treatment_program_refs": [
+            "ht_03_low_temperature_calcination"
+          ],
+          "test_condition_summary": "SEM comparison between fibers heated at 1 C/min and 5 C/min to 650 C.",
+          "extended_data": {}
+        },
+        "data_points": [
+          {
+            "sample_id": "sample_s04_1Cmin_650C",
+            "sample_label": "1 C/min to 650 C",
+            "sample_role": "slow_heating_reference",
+            "independent_variable_values": [
+              {
+                "canonical_key": "heating_rate_C_min",
+                "value": 1,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C/min",
+                "raw_text": "以 1 ℃·min-1 升温至650 ℃的纤维",
+                "evidence_refs": [
+                  "src_p5_heating_rate"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": null,
+                "holding_time_h": 1,
+                "heating_rate_C_min": 1,
+                "atmosphere": null,
+                "cooling_method": null
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {
+                "main_phase": "gamma-Al2O3",
+                "secondary_phase": null,
+                "crystallization_temperature_C": 650,
+                "phase_transition_description": null,
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {
+                "morphology_description": "surface smooth and dense; cross-section circular and dense; no obvious pores or cracks"
+              },
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {}
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "fig_06",
+              "src_p5_heating_rate"
+            ],
+            "extended_data": {}
+          },
+          {
+            "sample_id": "sample_s04_5Cmin_650C",
+            "sample_label": "5 C/min to 650 C",
+            "sample_role": "fast_heating_comparison",
+            "independent_variable_values": [
+              {
+                "canonical_key": "heating_rate_C_min",
+                "value": 5,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C/min",
+                "raw_text": "以 5 ℃·min-1 升温至 650 ℃并保温 1 h",
+                "evidence_refs": [
+                  "src_p5_heating_rate"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": null,
+                "holding_time_h": 1,
+                "heating_rate_C_min": 5,
+                "atmosphere": null,
+                "cooling_method": null
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {
+                "main_phase": "gamma-Al2O3",
+                "secondary_phase": null,
+                "crystallization_temperature_C": 650,
+                "phase_transition_description": null,
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {
+                "morphology_description": "fiber surface became rough and showed cracking and pores"
+              },
+              "mechanical_properties": {},
+              "thermal_properties": {},
+              "mechanism_and_evidence": {
+                "author_mechanism_interpretation": "Fast heating removes volatile matter and polymer decomposition products too quickly, forming pores; slower heating helps obtain dense fibers.",
+                "mechanism_basis_type": "SEM/author_interpretation"
+              }
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [
+              {
+                "observation_type": "defect",
+                "text": "rough surface, cracks and pores appeared after 5 C/min heating to 650 C",
+                "basis_type": "SEM",
+                "evidence_refs": [
+                  "fig_08",
+                  "src_p5_heating_rate"
+                ]
+              }
+            ],
+            "evidence_refs": [
+              "fig_08",
+              "src_p5_heating_rate"
+            ],
+            "extended_data": {}
+          }
+        ],
+        "series_summary": {
+          "trend_summary": "A slower heating rate below 650 C is necessary for dense fibers. The 5 C/min condition produced rough surfaces, cracks and pores, while the 1 C/min comparison remained dense.",
+          "has_incomplete_data": false,
+          "note": null
+        }
+      },
+      {
+        "series_id": "series_05_mechanical_strength_vs_sintering_temperature",
+        "series_name": "breaking strength at different final sintering temperatures",
+        "series_type": "heat_treatment_variable",
+        "research_question": "How does final sintering temperature affect breaking strength of alpha-Al2O3 continuous fibers?",
+        "controlled_variable_keys": [
+          "sintering_temperature_C",
+          "tensile_strength_MPa"
+        ],
+        "independent_variables": [
+          {
+            "canonical_key": "sintering_temperature_C",
+            "display_name": "final sintering temperature",
+            "unit": "C",
+            "variable_type": "continuous_numeric",
+            "value_scope": "1200, 1250, 1300, 1350",
+            "evidence_refs": [
+              "src_p6_mechanical",
+              "table_01"
+            ]
+          }
+        ],
+        "series_constants": {
+          "raw_material_refs": [
+            "mat_001",
+            "mat_002",
+            "mat_006"
+          ],
+          "process_summary": "Gel fibers were heated at 1 C/min to 650 C, then rapidly sintered at 1200, 1250, 1300 or 1350 C for 10 min and naturally cooled.",
+          "parameter_records": [
+            {
+              "canonical_key": "heating_rate_C_min",
+              "value": 1,
+              "min_value": null,
+              "max_value": null,
+              "unit": "C/min",
+              "raw_text": "按照1 ℃·min-1 升温至650 ℃",
+              "evidence_refs": [
+                "src_p6_mechanical"
+              ]
+            },
+            {
+              "canonical_key": "calcination_temperature_C",
+              "value": 650,
+              "min_value": null,
+              "max_value": null,
+              "unit": "C",
+              "raw_text": "升温至650 ℃",
+              "evidence_refs": [
+                "src_p6_mechanical"
+              ]
+            },
+            {
+              "canonical_key": "holding_time_h",
+              "value": 0.1667,
+              "min_value": null,
+              "max_value": null,
+              "unit": "h",
+              "raw_text": "高温炉中快速烧结 10 min",
+              "evidence_refs": [
+                "src_p6_mechanical"
+              ]
+            }
+          ],
+          "heat_treatment_program_refs": [
+            "ht_03_low_temperature_calcination",
+            "ht_04_high_temperature_sintering"
+          ],
+          "test_condition_summary": "Single-fiber breaking strength test; 10 groups were statistically analyzed for 1300 C sample.",
+          "extended_data": {}
+        },
+        "data_points": [
+          {
+            "sample_id": "sample_s05_1200C",
+            "sample_label": "1200 C / 10 min",
+            "sample_role": "strength_table_row_unread",
+            "independent_variable_values": [
+              {
+                "canonical_key": "sintering_temperature_C",
+                "value": 1200,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "1200 ℃",
+                "evidence_refs": [
+                  "table_01"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1200,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": 1,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "mechanical_properties": {
+                "tensile_strength_MPa": null,
+                "compressive_strength_MPa": null,
+                "flexural_strength_MPa": null,
+                "breaking_force_cN": null,
+                "elastic_modulus_GPa": null,
+                "elongation_at_break_percent": null,
+                "fracture_behavior_description": null
+              }
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "table_01"
+            ],
+            "extended_data": {
+              "note": "Table row exists in Table 1, but numeric strength was not recoverable from the text layer."
+            }
+          },
+          {
+            "sample_id": "sample_s05_1250C",
+            "sample_label": "1250 C / 10 min",
+            "sample_role": "strength_table_row_unread",
+            "independent_variable_values": [
+              {
+                "canonical_key": "sintering_temperature_C",
+                "value": 1250,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "1250 ℃",
+                "evidence_refs": [
+                  "src_p6_mechanical",
+                  "table_01"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1250,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": 1,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "mechanical_properties": {
+                "tensile_strength_MPa": null,
+                "compressive_strength_MPa": null,
+                "flexural_strength_MPa": null,
+                "breaking_force_cN": null,
+                "elastic_modulus_GPa": null,
+                "elongation_at_break_percent": null,
+                "fracture_behavior_description": null
+              }
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "src_p6_mechanical",
+              "table_01"
+            ],
+            "extended_data": {
+              "note": "Table row exists in Table 1, but numeric strength was not recoverable from the text layer."
+            }
+          },
+          {
+            "sample_id": "sample_s05_1300C",
+            "sample_label": "1300 C / 10 min",
+            "sample_role": "optimal_strength_point",
+            "independent_variable_values": [
+              {
+                "canonical_key": "sintering_temperature_C",
+                "value": 1300,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "1300 ℃下烧结 10 min",
+                "evidence_refs": [
+                  "src_p1_abstract",
+                  "src_p6_mechanical",
+                  "table_01"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1300,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": 1,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "microstructure_and_pores": {
+                "average_fiber_diameter_um": 10.2,
+                "morphology_description": "uniform diameter; dense fiber"
+              },
+              "mechanical_properties": {
+                "tensile_strength_MPa": 1370,
+                "compressive_strength_MPa": null,
+                "flexural_strength_MPa": null,
+                "breaking_force_cN": null,
+                "elastic_modulus_GPa": null,
+                "elongation_at_break_percent": null,
+                "fracture_behavior_description": null
+              }
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "src_p1_abstract",
+              "src_p6_mechanical",
+              "table_01"
+            ],
+            "extended_data": {
+              "fiber_diameter_standard_deviation_um": 0.26,
+              "fiber_diameter_coefficient_of_variation_percent": 2.56,
+              "number_of_fiber_groups_measured": 10
+            }
+          },
+          {
+            "sample_id": "sample_s05_1350C",
+            "sample_label": "1350 C / 10 min",
+            "sample_role": "strength_table_row_unread",
+            "independent_variable_values": [
+              {
+                "canonical_key": "sintering_temperature_C",
+                "value": 1350,
+                "min_value": null,
+                "max_value": null,
+                "unit": "C",
+                "raw_text": "1350 ℃",
+                "evidence_refs": [
+                  "table_01"
+                ]
+              }
+            ],
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1350,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": 1,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "mechanical_properties": {
+                "tensile_strength_MPa": null,
+                "compressive_strength_MPa": null,
+                "flexural_strength_MPa": null,
+                "breaking_force_cN": null,
+                "elastic_modulus_GPa": null,
+                "elongation_at_break_percent": null,
+                "fracture_behavior_description": null
+              }
+            },
+            "additional_parameter_records": [],
+            "qualitative_observations": [],
+            "evidence_refs": [
+              "table_01"
+            ],
+            "extended_data": {
+              "note": "Table row exists in Table 1, but numeric strength was not recoverable from the text layer."
+            }
+          }
+        ],
+        "series_summary": {
+          "trend_summary": "The text identifies 1300 C / 10 min after slow heating to 650 C as the optimal condition, with breaking strength 1.37 GPa and average fiber diameter 10.20 um.",
+          "has_incomplete_data": true,
+          "note": "Table 1 is present but its numeric values except the 1300 C optimum were not extracted by the PDF text layer."
+        }
+      }
+    ],
+    "evidence_objects": [
+      {
+        "evidence_object_id": "ev_fig_01",
+        "figure_id": "fig_01",
+        "figure_type": "optical_photo",
+        "page": 3,
+        "caption": "(a) 溶胶成丝过程, (b) 凝胶纤维的光学照片 / Optical photographs of fiber formation process and gel fibers after collection.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "fiber_photo",
+        "object_label": "fiber formation process and gel fibers",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s01_gel_fiber"
+        ],
+        "linked_canonical_keys": []
+      },
+      {
+        "evidence_object_id": "ev_fig_02",
+        "figure_id": "fig_02",
+        "figure_type": "TG_DSC",
+        "page": 3,
+        "caption": "干凝胶纤维的热重-差热曲线 / TG and DSC curves of the xerogel fiber.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "curve",
+        "object_label": "TG-DSC curve",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s02_xerogel"
+        ],
+        "linked_canonical_keys": [
+          "mass_loss_wt_percent",
+          "dsc_peak_temperature_C"
+        ]
+      },
+      {
+        "evidence_object_id": "ev_fig_03",
+        "figure_id": "fig_03",
+        "figure_type": "XRD",
+        "page": 3,
+        "caption": "干凝胶纤维及在不同温度烧结后的 XRD 图形 / XRD patterns of xerogel fibers and samples after sintered at different temperatures.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "xrd_pattern",
+        "object_label": "phase evolution with sintering temperature",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s02_xerogel",
+          "sample_s02_300C",
+          "sample_s02_650C",
+          "sample_s02_800C",
+          "sample_s02_1100C_10min"
+        ],
+        "linked_canonical_keys": [
+          "calcination_temperature_C",
+          "sintering_temperature_C"
+        ]
+      },
+      {
+        "evidence_object_id": "ev_fig_04",
+        "figure_id": "fig_04",
+        "figure_type": "FTIR",
+        "page": 3,
+        "caption": "干凝胶纤维及在不同温度烧结后的红外光谱 / IR spectra of xerogel fiber and samples sintered at different temperatures.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "ftir_spectrum",
+        "object_label": "FTIR evidence for hydroxyl/PVA removal and alpha-Al2O3 generation",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s02_xerogel",
+          "sample_s02_650C"
+        ],
+        "linked_canonical_keys": [
+          "ftir_peak_position_cm_1"
+        ]
+      },
+      {
+        "evidence_object_id": "ev_fig_05",
+        "figure_id": "fig_05",
+        "figure_type": "SEM",
+        "page": 4,
+        "caption": "干凝胶纤维的表面及截面的 SEM 形貌 / SEM images of the surfaces and cross sections of xerogel fibers.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "fiber_surface_cross_section",
+        "object_label": "xerogel fiber SEM",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s01_gel_fiber"
+        ],
+        "linked_canonical_keys": []
+      },
+      {
+        "evidence_object_id": "ev_fig_06",
+        "figure_id": "fig_06",
+        "figure_type": "SEM",
+        "page": 4,
+        "caption": "不同温度下烧结后的纤维 SEM 形貌: 650 C surface/cross-section, 800 C and 1100 C.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "fiber_surface_cross_section",
+        "object_label": "650, 800 and 1100 C sintered fiber SEM",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s02_650C",
+          "sample_s02_800C",
+          "sample_s02_1100C_10min",
+          "sample_s04_1Cmin_650C"
+        ],
+        "linked_canonical_keys": [
+          "calcination_temperature_C",
+          "sintering_temperature_C"
+        ]
+      },
+      {
+        "evidence_object_id": "ev_fig_07",
+        "figure_id": "fig_07",
+        "figure_type": "SEM",
+        "page": 5,
+        "caption": "不同温度下烧结后的纤维 SEM 形貌: 1200 C, 1300 C and 1350 C.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "fiber_surface_cross_section",
+        "object_label": "1200, 1300 and 1350 C sintered alpha-Al2O3 fiber SEM",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s03_1200C_10min",
+          "sample_s03_1300C_10min",
+          "sample_s03_1350C_10min"
+        ],
+        "linked_canonical_keys": [
+          "sintering_temperature_C"
+        ]
+      },
+      {
+        "evidence_object_id": "ev_fig_08",
+        "figure_id": "fig_08",
+        "figure_type": "SEM",
+        "page": 6,
+        "caption": "以 5 C/min 升温至 650 C 烧结后的纤维 SEM 形貌 / SEM images of gel fibers by heating at 5 C/min up to 650 C for 60 min.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "fiber_surface",
+        "object_label": "5 C/min to 650 C defect morphology",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s04_5Cmin_650C"
+        ],
+        "linked_canonical_keys": [
+          "heating_rate_C_min"
+        ]
+      },
+      {
+        "evidence_object_id": "ev_table_01",
+        "figure_id": "table_01",
+        "figure_type": "table",
+        "page": 6,
+        "caption": "不同烧结温度下 alpha-Al2O3 连续纤维的断裂强度 / The breaking strength of sintered alpha-Al2O3 fibers at different temperatures.",
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": "strength_table",
+        "object_label": "breaking strength at different temperatures",
+        "bbox": null,
+        "linked_sample_ids": [
+          "sample_s05_1200C",
+          "sample_s05_1250C",
+          "sample_s05_1300C",
+          "sample_s05_1350C"
+        ],
+        "linked_canonical_keys": [
+          "sintering_temperature_C",
+          "tensile_strength_MPa"
+        ]
+      }
+    ],
+    "multimodal_extractions": [],
+    "cross_modal_links": [
+      {
+        "link_id": "link_001",
+        "sample_id": "sample_s01_gel_fiber",
+        "linked_figure_id": "fig_01",
+        "linked_panel_id": null,
+        "linked_curve_id": null,
+        "linked_object_id": null,
+        "linked_extraction_id": null,
+        "linked_canonical_key": null,
+        "link_basis": "Figure caption and nearby text describe gel fiber formation and collection.",
+        "confidence": 0.92,
+        "status": "linked"
+      },
+      {
+        "link_id": "link_002",
+        "sample_id": "sample_s02_xerogel",
+        "linked_figure_id": "fig_02",
+        "linked_panel_id": null,
+        "linked_curve_id": null,
+        "linked_object_id": null,
+        "linked_extraction_id": null,
+        "linked_canonical_key": "mass_loss_wt_percent",
+        "link_basis": "Text explicitly states TG-DSC events from Fig. 2.",
+        "confidence": 0.95,
+        "status": "linked"
+      },
+      {
+        "link_id": "link_003",
+        "sample_id": "sample_s02_650C",
+        "linked_figure_id": "fig_06",
+        "linked_panel_id": null,
+        "linked_curve_id": null,
+        "linked_object_id": null,
+        "linked_extraction_id": null,
+        "linked_canonical_key": "calcination_temperature_C",
+        "link_basis": "Caption and text identify 650 C SEM surface/cross-section.",
+        "confidence": 0.9,
+        "status": "linked"
+      },
+      {
+        "link_id": "link_004",
+        "sample_id": "sample_s03_1300C_10min",
+        "linked_figure_id": "fig_07",
+        "linked_panel_id": null,
+        "linked_curve_id": null,
+        "linked_object_id": null,
+        "linked_extraction_id": null,
+        "linked_canonical_key": "sintering_temperature_C",
+        "link_basis": "Fig. 7 caption identifies 1300 C SEM panels; text links 1300 C to dense morphology.",
+        "confidence": 0.88,
+        "status": "linked"
+      },
+      {
+        "link_id": "link_005",
+        "sample_id": "sample_s05_1300C",
+        "linked_figure_id": "table_01",
+        "linked_panel_id": null,
+        "linked_curve_id": null,
+        "linked_object_id": null,
+        "linked_extraction_id": null,
+        "linked_canonical_key": "tensile_strength_MPa",
+        "link_basis": "Text around Table 1 explicitly states that 1300 C gives breaking strength 1.37 GPa.",
+        "confidence": 0.95,
+        "status": "linked"
+      }
+    ],
+    "data_provenance": {
+      "primary_sources_summary": "Core data were extracted from the abstract, experimental sections 1.1-1.3, results sections 2.1-2.5, figure captions Fig. 1-8, and Table 1 title. Numeric Table 1 values other than the explicitly stated 1300 C optimum were not recovered from the text layer.",
+      "source_details": [
+        {
+          "source_id": "src_p1_abstract",
+          "item": "abstract core result",
+          "section": "Abstract / 摘要",
+          "page": 1,
+          "figure_id": null,
+          "table_id": null,
+          "caption_or_context": "Slow heating to 650 C followed by 1300 C sintering for 10 min produced fibers about 10 um in diameter with maximum breaking strength 1.37 GPa.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.97
+        },
+        {
+          "source_id": "src_p2_exp_1_1",
+          "item": "sol preparation",
+          "section": "1.1 溶胶的制备",
+          "page": 2,
+          "figure_id": null,
+          "table_id": null,
+          "caption_or_context": "Hydrothermal pseudo-boehmite preparation, washing, drying, dispersion, pH adjustment, PVA addition and concentration.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.95
+        },
+        {
+          "source_id": "src_p2_exp_1_2",
+          "item": "dry spinning and sintering setup",
+          "section": "1.2 干法纺丝制备凝胶纤维及烧结",
+          "page": 2,
+          "figure_id": null,
+          "table_id": null,
+          "caption_or_context": "Spinneret hole 0.10 mm; channel temperature 45 C +/- 5 C; take-up speed 160 m/min; heat to 650 C at 1-5 C/min and hold 60 min; rapid sintering at 1100-1350 C.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.96
+        },
+        {
+          "source_id": "src_p2_methods_1_3",
+          "item": "characterization methods",
+          "section": "1.3 测试与表征",
+          "page": 2,
+          "figure_id": null,
+          "table_id": null,
+          "caption_or_context": "XRD, FTIR, TG-DSC, SEM and tensile test conditions.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.95
+        },
+        {
+          "source_id": "src_p2_results_2_1",
+          "item": "gel fiber preparation result",
+          "section": "2.1 凝胶纤维的制备",
+          "page": 2,
+          "figure_id": "fig_01",
+          "table_id": null,
+          "caption_or_context": "Continuous spinning for 50-100 s; 120-300 m fiber collected each time; white translucent gel fibers.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.95
+        },
+        {
+          "source_id": "src_p2_results_2_2",
+          "item": "TG-DSC results",
+          "section": "2.2 凝胶纤维的烧结",
+          "page": 2,
+          "figure_id": "fig_02",
+          "table_id": null,
+          "caption_or_context": "Three mass-loss stages and DSC peaks at 203.7 C and 1057.8 C.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.96
+        },
+        {
+          "source_id": "src_p3_xrd",
+          "item": "XRD phase evolution",
+          "section": "2.2 凝胶纤维的烧结",
+          "page": 3,
+          "figure_id": "fig_03",
+          "table_id": null,
+          "caption_or_context": "XRD indicates boehmite xerogel, amorphous at 300 C, weak gamma at 650 C, better gamma at 800 C, partial alpha at 1100 C, and alpha after higher rapid sintering.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.94
+        },
+        {
+          "source_id": "src_p3_ftir",
+          "item": "FTIR low-temperature evidence",
+          "section": "2.2 凝胶纤维的烧结",
+          "page": 3,
+          "figure_id": "fig_04",
+          "table_id": null,
+          "caption_or_context": "FTIR bands at 3440 and 1640 cm^-1 assigned to hydroxyl-related vibrations.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.91
+        },
+        {
+          "source_id": "src_p4_ftir",
+          "item": "FTIR alpha-Al2O3 evidence",
+          "section": "2.2 凝胶纤维的烧结",
+          "page": 4,
+          "figure_id": "fig_04",
+          "table_id": null,
+          "caption_or_context": "Bands after 1200 C at 468, 518 and 600-900 cm^-1 indicate alpha-Al2O3 generation.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.92
+        },
+        {
+          "source_id": "src_p4_sem_xerogel",
+          "item": "xerogel fiber SEM",
+          "section": "2.3 纤维的微观结构",
+          "page": 4,
+          "figure_id": "fig_05",
+          "table_id": null,
+          "caption_or_context": "Dry gel fiber surface was smooth and dense; cross-section circular; no obvious pores or cracks.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.93
+        },
+        {
+          "source_id": "src_p5_sem_650_800_1100",
+          "item": "SEM at 650, 800, 1100 C",
+          "section": "2.3 纤维的微观结构",
+          "page": 5,
+          "figure_id": "fig_06",
+          "table_id": null,
+          "caption_or_context": "650 C fiber smooth/dense; 800 and 1100 C fibers mainly gamma-Al2O3, smooth with small uniform grains.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.92
+        },
+        {
+          "source_id": "src_p5_sem_1200_1300_1350",
+          "item": "SEM at 1200, 1300, 1350 C",
+          "section": "2.3 纤维的微观结构",
+          "page": 5,
+          "figure_id": "fig_07",
+          "table_id": null,
+          "caption_or_context": "After rapid high-temperature calcination, fibers retained morphology and were alpha-Al2O3; 1350 C caused nanoscale pores between uneven grains.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.92
+        },
+        {
+          "source_id": "src_p5_heating_rate",
+          "item": "heating rate effect",
+          "section": "2.4 不同升温速率的影响",
+          "page": 5,
+          "figure_id": "fig_08",
+          "table_id": null,
+          "caption_or_context": "5 C/min to 650 C caused rough surface, cracks and pores; slower heating was favorable.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.94
+        },
+        {
+          "source_id": "src_p6_mechanical",
+          "item": "mechanical strength",
+          "section": "2.5 纤维的力学性能",
+          "page": 6,
+          "figure_id": null,
+          "table_id": "table_01",
+          "caption_or_context": "Best condition was 650 C then 1300 C for 10 min; breaking strength 1.37 GPa; 10 groups after 1300 C had average diameter 10.20 um, SD 0.26 um and CV 2.56%.",
+          "extraction_method": "pdf_text",
+          "confidence": 0.96
+        }
+      ],
+      "normalization_log": [
+        {
+          "canonical_key": "holding_time_h",
+          "original_value": 60,
+          "original_unit": "min",
+          "normalized_value": 1,
+          "normalized_unit": "h",
+          "rule": "min to h divide by 60"
+        },
+        {
+          "canonical_key": "holding_time_h",
+          "original_value": 10,
+          "original_unit": "min",
+          "normalized_value": 0.1667,
+          "normalized_unit": "h",
+          "rule": "min to h divide by 60"
+        },
+        {
+          "canonical_key": "tensile_strength_MPa",
+          "original_value": 1.37,
+          "original_unit": "GPa",
+          "normalized_value": 1370,
+          "normalized_unit": "MPa",
+          "rule": "GPa to MPa multiply by 1000"
+        },
+        {
+          "canonical_key": "fiber_length_m",
+          "original_value": "60-70",
+          "original_unit": "cm",
+          "normalized_value": "0.6-0.7",
+          "normalized_unit": "m",
+          "rule": "cm to m divide by 100"
+        },
+        {
+          "canonical_key": "spinning_duration_h",
+          "original_value": "50-100",
+          "original_unit": "s",
+          "normalized_value": "0.0139-0.0278",
+          "normalized_unit": "h",
+          "rule": "s to h divide by 3600"
+        }
+      ],
+      "quality_flags": [
+        "table_1_numeric_values_except_1300C_not_recovered_from_text_layer",
+        "feed_pressure_mentioned_as_certain_pressure_but_no_numeric_value",
+        "pH_adjustment_mentioned_but_no_numeric_pH_value",
+        "PVA_amount_mentioned_as_appropriate_amount_but_no_numeric_value",
+        "some figure panels lack explicit panel IDs in text extraction"
+      ]
+    }
+  }
+]

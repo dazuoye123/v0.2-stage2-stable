@@ -17,6 +17,7 @@ import yaml
 CONFIG_FILES = [
     "stage1_mineru.yaml",
     "stage2_figures.yaml",
+    "dspy.yaml",
     "caption_rules.yaml",
     "review_rules.yaml",
     "output_schema.yaml",

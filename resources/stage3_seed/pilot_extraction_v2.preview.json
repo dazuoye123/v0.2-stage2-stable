@@ -1,0 +1,375 @@
+[
+  {
+    "schema_version": "2.0-preview",
+    "paper_basic_info": {
+      "paper_id": "paper_001",
+      "source_file": "paper/24934848-6942-4062-97e1-8e37168d7d0c_origin.pdf",
+      "title": "Multinuclear Magnetic Resonance Study on Aluminium Sec-butoxide Chelated with Ethyl Acetoacetate in Various Amounts",
+      "authors": ["Stanislav Kurajica", "Tatjana Gazivoda Kraljevic", "Gregor Mali", "Ivan Simcic", "Vilko Mandic", "Iva Minga"],
+      "year": 2019,
+      "doi": "10.5562/cca3426",
+      "document_type": "journal_article",
+      "language": "en",
+      "is_review": false,
+      "material_system": "aluminium sec-butoxide chelated with ethyl acetoacetate",
+      "process_route": "sol-gel precursor chelation + NMR characterization",
+      "research_object_form": "precursor_sol"
+    },
+    "global_constants": {
+      "raw_materials": [
+        {
+          "role": "aluminum_source",
+          "name": "aluminium sec-butoxide",
+          "formula_or_composition": "Al(OsBu)3",
+          "purity_or_grade": "97%",
+          "supplier": "Aldrich",
+          "evidence_refs": ["src_paper_001_exp"]
+        },
+        {
+          "role": "chelating_agent",
+          "name": "ethyl acetoacetate",
+          "formula_or_composition": "C6H10O3",
+          "purity_or_grade": "99%",
+          "supplier": "Fluka",
+          "evidence_refs": ["src_paper_001_exp"]
+        }
+      ],
+      "shared_process_summary": {
+        "precursor_route_summary": "ASB was mixed with different amounts of EAA and stirred in a closed reactor at room temperature for 24 h.",
+        "precursor_type": "aluminium alkoxide chelate",
+        "forming_method": null,
+        "heat_treatment_route_summary": null,
+        "testing_summary": "1H, 13C, 27Al NMR and 2D COSY, HSQC, DOSY."
+      },
+      "extended_data": {
+        "eaa_asb_molar_ratios": [0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+        "sample_labels": ["EA0.5", "EA1.0", "EA1.5", "EA2.0", "EA2.5", "EA3.0"],
+        "note": "EAA/ASB molar ratio is not yet in ontology.yaml; candidate ontology extension may be needed for precursor chemistry papers."
+      }
+    },
+    "experiment_series": [
+      {
+        "series_id": "series_001_01",
+        "series_name": "EAA/ASB chelation ratio series",
+        "series_type": "composition_variable",
+        "research_question": "How does EAA amount affect aluminium coordination and chelate species observed by NMR?",
+        "independent_variables": [
+          {
+            "canonical_key": null,
+            "display_name": "EAA/ASB molar ratio",
+            "unit": "mol/mol",
+            "variable_type": "continuous_numeric",
+            "value_scope": "0.5 to 3.0"
+          }
+        ],
+        "data_points": [
+          {"sample_id": "sample_001_s01_01", "sample_label": "EA0.5", "independent_variable_values": [{"canonical_key": null, "value": 0.5, "unit": "mol/mol"}]},
+          {"sample_id": "sample_001_s01_02", "sample_label": "EA1.0", "independent_variable_values": [{"canonical_key": null, "value": 1.0, "unit": "mol/mol"}]},
+          {"sample_id": "sample_001_s01_03", "sample_label": "EA1.5", "independent_variable_values": [{"canonical_key": null, "value": 1.5, "unit": "mol/mol"}]},
+          {"sample_id": "sample_001_s01_04", "sample_label": "EA2.0", "independent_variable_values": [{"canonical_key": null, "value": 2.0, "unit": "mol/mol"}]},
+          {"sample_id": "sample_001_s01_05", "sample_label": "EA2.5", "independent_variable_values": [{"canonical_key": null, "value": 2.5, "unit": "mol/mol"}]},
+          {"sample_id": "sample_001_s01_06", "sample_label": "EA3.0", "independent_variable_values": [{"canonical_key": null, "value": 3.0, "unit": "mol/mol"}]}
+        ]
+      }
+    ],
+    "evidence_objects": [
+      {"figure_id": "fig_001_03", "figure_type": "NMR", "page": 4, "caption": "1H NMR spectra of samples EA0.5-EA3.0 in CDCl3."},
+      {"figure_id": "fig_001_05", "figure_type": "NMR", "page": 5, "caption": "27Al NMR spectra of samples EA0.5-EA3.0 in CDCl3."},
+      {"figure_id": "table_001_01", "figure_type": "table", "page": 6, "caption": "Share of aluminium atoms in various coordinations for samples EA0.5-EA3.0."}
+    ],
+    "data_provenance": {
+      "quality_flags": ["precursor_chemistry_not_fiber_preparation", "ontology_extension_needed_for_eaa_asb_ratio"]
+    }
+  },
+  {
+    "schema_version": "2.0-preview",
+    "paper_basic_info": {
+      "paper_id": "paper_002",
+      "source_file": "paper/多晶型氧化铝连续纤维的研制及性能.pdf",
+      "title": "多晶型氧化铝连续纤维的研制及性能",
+      "authors": [],
+      "year": null,
+      "doi": null,
+      "document_type": "thesis",
+      "language": "zh",
+      "is_review": false,
+      "material_system": "alpha-Al2O3 and mullite based polycrystalline alumina continuous fiber",
+      "process_route": "alumina sol + mullite sol + sol-gel dry spinning + two-step ceramic conversion",
+      "research_object_form": "continuous_fiber"
+    },
+    "global_constants": {
+      "shared_process_summary": {
+        "precursor_route_summary": "Self-made alumina sol and mullite sol were mixed with spinning additive, then concentrated and aged under reduced pressure to obtain spinnable sol.",
+        "forming_method": "dry_spinning",
+        "heat_treatment_route_summary": "Two-step ceramic conversion: slow low-temperature treatment up to about 1000 C followed by rapid high-temperature sintering in the 1200-1500 C range.",
+        "testing_summary": "Particle size, NMR, zeta potential, rheology, FTIR, XRD, SEM and tensile performance are described."
+      },
+      "shared_parameters": {
+        "precursor_solution": {
+          "solid_content_wt_percent": 36,
+          "viscosity_Pa_s": 400,
+          "zeta_potential_mV": null
+        },
+        "forming": {
+          "spinneret_hole_count": 400
+        },
+        "product_structure": {
+          "average_fiber_diameter_um": null
+        },
+        "thermal_properties": {
+          "strength_retention_percent": null
+        }
+      },
+      "additional_parameter_records": [
+        {"canonical_key": "zeta_potential_mV", "min_value": 15, "unit": "mV", "raw_text": "Zeta 电位大于 15 mV"},
+        {"canonical_key": "continuous_length_m", "value": 40000, "unit": "m", "raw_text": "有序收集的凝胶连续纤维可长达 40000 米"},
+        {"canonical_key": "spinning_duration_h", "value": 13.5, "unit": "h", "raw_text": "连续纺丝时长可达 13.5 h"},
+        {"canonical_key": "average_fiber_diameter_um", "min_value": 18, "max_value": 21, "unit": "um", "raw_text": "平均直径 18-21 um"},
+        {"canonical_key": "strength_retention_percent", "min_value": 80, "unit": "%", "raw_text": "1200 C 空气气氛保温 50 h 后仍有 80% 以上强度保持率"}
+      ]
+    },
+    "experiment_series": [
+      {
+        "series_id": "series_002_01",
+        "series_name": "spinnable sol and gel fiber preparation",
+        "series_type": "precursor_property_variable",
+        "research_question": "How do sol aging, concentration and spinning conditions affect gel continuous fiber stability?",
+        "data_points": []
+      },
+      {
+        "series_id": "series_002_02",
+        "series_name": "two-step ceramic conversion",
+        "series_type": "heat_treatment_variable",
+        "research_question": "How do ceramic conversion conditions affect phase, microstructure and strength retention?",
+        "data_points": []
+      },
+      {
+        "series_id": "series_002_03",
+        "series_name": "scale-up spinning batch records",
+        "series_type": "scale_up_batch_variable",
+        "research_question": "How do multi-channel temperature, humidity and pressure records relate to collected fiber mass and water content?",
+        "data_points": []
+      }
+    ],
+    "data_provenance": {
+      "quality_flags": ["text_is_readable_but_heavily_spaced", "tables_need_dedicated_parser_or_manual_review"]
+    }
+  },
+  {
+    "schema_version": "2.0-preview",
+    "paper_basic_info": {
+      "paper_id": "paper_003",
+      "source_file": "paper/干法纺丝制备α-Al_2O_3陶瓷纤维及其力学性能研究_李建军.pdf",
+      "title": "干法纺丝制备 alpha-Al2O3 陶瓷纤维及其力学性能研究",
+      "authors": ["李建军", "郑顺金", "焦秀玲", "陈代荣"],
+      "year": 2021,
+      "doi": null,
+      "document_type": "journal_article",
+      "language": "zh",
+      "is_review": false,
+      "material_system": "alpha-Al2O3 continuous ceramic fiber",
+      "process_route": "boehmite-derived alumina sol + PVA + dry spinning + sintering",
+      "research_object_form": "continuous_fiber"
+    },
+    "global_constants": {
+      "raw_materials": [
+        {"role": "aluminum_source", "name": "aluminium isopropoxide", "evidence_refs": ["src_paper_003_abs"]},
+        {"role": "oxidant_or_reagent", "name": "hydrogen peroxide", "evidence_refs": ["src_paper_003_abs"]},
+        {"role": "polymer_additive", "name": "PVA 1799", "evidence_refs": ["src_paper_003_exp"]}
+      ],
+      "shared_parameters": {
+        "precursor_solution": {
+          "concentration_temperature_C": 45,
+          "concentration_time_h": null
+        },
+        "forming": {
+          "spinneret_hole_diameter_mm": 0.10,
+          "spinning_channel_temperature_C": 45,
+          "take_up_speed_m_min": 160
+        }
+      },
+      "additional_parameter_records": [
+        {"canonical_key": "concentration_time_h", "min_value": 18, "max_value": 24, "unit": "h", "raw_text": "45 C 水浴下减压浓缩 18-24 h"},
+        {"canonical_key": "heating_rate_C_min", "min_value": 1, "max_value": 5, "unit": "C/min", "raw_text": "以 1-5 C/min 升温至 650 C"},
+        {"canonical_key": "calcination_temperature_C", "value": 650, "unit": "C", "raw_text": "升温至 650 C，保温 60 min"},
+        {"canonical_key": "holding_time_h", "value": 1, "unit": "h", "raw_text": "60 min converted to 1 h"},
+        {"canonical_key": "mass_loss_wt_percent", "value": 7.86, "unit": "wt%", "raw_text": "room temperature to 170 C mass loss about 7.86%"},
+        {"canonical_key": "mass_loss_wt_percent", "value": 34.18, "unit": "wt%", "raw_text": "170-390 C mass loss about 34.18%"},
+        {"canonical_key": "dsc_peak_temperature_C", "value": 203.7, "unit": "C", "raw_text": "DSC exothermic peak at 203.7 C"},
+        {"canonical_key": "dsc_peak_temperature_C", "value": 1057.8, "unit": "C", "raw_text": "DSC exothermic peak at 1057.8 C"}
+      ]
+    },
+    "experiment_series": [
+      {
+        "series_id": "series_003_01",
+        "series_name": "sintering temperature series after 650 C pretreatment",
+        "series_type": "heat_treatment_variable",
+        "research_question": "How does high-temperature sintering affect phase, morphology and strength?",
+        "independent_variables": [
+          {"canonical_key": "sintering_temperature_C", "display_name": "烧结温度", "unit": "C", "variable_type": "continuous_numeric", "value_scope": "1100-1350 C"}
+        ],
+        "data_points": [
+          {
+            "sample_id": "sample_003_s01_1300",
+            "sample_label": "1300 C / 10 min",
+            "process_parameters": {
+              "heat_treatment": {
+                "calcination_temperature_C": 650,
+                "sintering_temperature_C": 1300,
+                "holding_time_h": 0.1667,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": "natural_cooling"
+              }
+            },
+            "results": {
+              "phase_and_chemistry": {"main_phase": "alpha-Al2O3"},
+              "microstructure_and_pores": {"average_fiber_diameter_um": 10, "morphology_description": "uniform fiber diameter"},
+              "mechanical_properties": {"tensile_strength_MPa": 1370}
+            },
+            "evidence_refs": ["src_paper_003_abs"]
+          }
+        ]
+      }
+    ],
+    "evidence_objects": [
+      {"figure_id": "fig_003_01", "figure_type": "optical_photo", "page": 3, "caption": "Optical photographs of fiber formation process and gel fibers after collection."},
+      {"figure_id": "fig_003_02", "figure_type": "TG_DSC", "page": 3, "caption": "TG and DSC curves of the xerogel fiber."},
+      {"figure_id": "fig_003_03", "figure_type": "XRD", "page": 3, "caption": "XRD patterns of xerogel fibers and samples."},
+      {"figure_id": "fig_003_07", "figure_type": "SEM", "page": 5, "caption": "SEM images of sintered fibers at different temperatures."}
+    ],
+    "data_provenance": {
+      "normalization_log": [
+        {"canonical_key": "tensile_strength_MPa", "original_value": 1.37, "original_unit": "GPa", "normalized_value": 1370, "normalized_unit": "MPa", "rule": "GPa to MPa multiply by 1000"},
+        {"canonical_key": "holding_time_h", "original_value": 10, "original_unit": "min", "normalized_value": 0.1667, "normalized_unit": "h", "rule": "min to h divide by 60"}
+      ],
+      "quality_flags": ["preview_extraction_only", "some heat treatment values are ranges"]
+    }
+  },
+  {
+    "schema_version": "2.0-preview",
+    "paper_basic_info": {
+      "paper_id": "paper_004",
+      "source_file": "paper/柔性α-Al_2O_3纳米结构纤维的制备与表征_贾玉娜.pdf",
+      "title": "柔性 alpha-Al2O3 纳米结构纤维的制备与表征",
+      "authors": ["贾玉娜", "陈代荣", "焦秀玲"],
+      "year": 2011,
+      "doi": null,
+      "document_type": "journal_article",
+      "language": "zh",
+      "is_review": false,
+      "material_system": "alpha-Al2O3 nanostructured fiber",
+      "process_route": "sol-gel precursor + PVP + electrospinning + staged calcination",
+      "research_object_form": "nanofiber"
+    },
+    "global_constants": {
+      "raw_materials": [
+        {"role": "aluminum_source", "name": "AlCl3.6H2O"},
+        {"role": "aluminum_source", "name": "aluminium isopropoxide"},
+        {"role": "polymer_additive", "name": "PVP", "purity_or_grade": "Mw=1.3e6"},
+        {"role": "acid", "name": "acetic acid"},
+        {"role": "acid", "name": "hydrochloric acid"}
+      ],
+      "shared_parameters": {
+        "precursor_solution": {
+          "pH": 2,
+          "particle_size_nm": 10
+        },
+        "forming": {
+          "applied_voltage_kV": 18,
+          "collector_distance_cm": 20,
+          "feed_rate_ml_h": 2.8,
+          "ambient_temperature_C": 30,
+          "collector_type": "toothed collector"
+        }
+      },
+      "heat_treatment_programs": [
+        {"program_id": "ht_004_01", "target_temperature_C": 600, "heating_rate_C_min": 1, "holding_time_h": 2, "purpose": "xerogel to intermediate alumina"},
+        {"program_id": "ht_004_02", "target_temperature_C": 800, "heating_rate_C_min": 5, "holding_time_h": 2, "purpose": "gamma-Al2O3 formation"},
+        {"program_id": "ht_004_03", "target_temperature_C": 1200, "holding_time_h": 2, "cooling_method": "natural_cooling", "purpose": "alpha-Al2O3 nanostructured fiber"}
+      ],
+      "additional_parameter_records": [
+        {"canonical_key": "viscosity_Pa_s", "min_value": 0.27, "max_value": 0.38, "unit": "Pa*s", "raw_text": "最适宜的纺丝黏度为 0.27-0.38 Pa*s"},
+        {"canonical_key": "pvp_content_wt_percent", "min_value": 1, "max_value": 2, "unit": "wt%", "raw_text": "PVP 质量分数为 1%-2%"},
+        {"canonical_key": "mass_loss_wt_percent", "value": 66, "unit": "wt%", "raw_text": "TG total mass loss is 66%"}
+      ]
+    },
+    "experiment_series": [
+      {
+        "series_id": "series_004_01",
+        "series_name": "calcination temperature and phase transition",
+        "series_type": "heat_treatment_variable",
+        "independent_variables": [
+          {"canonical_key": "calcination_temperature_C", "display_name": "煅烧温度", "unit": "C", "variable_type": "continuous_numeric", "value_scope": "600, 800, 1200 C"}
+        ],
+        "data_points": [
+          {"sample_id": "sample_004_s01_600", "sample_label": "600 C", "results": {"phase_and_chemistry": {"main_phase": "amorphous alumina"}}},
+          {"sample_id": "sample_004_s01_800", "sample_label": "800 C", "results": {"phase_and_chemistry": {"main_phase": "gamma-Al2O3"}}},
+          {"sample_id": "sample_004_s01_1200", "sample_label": "1200 C", "results": {"phase_and_chemistry": {"main_phase": "alpha-Al2O3"}}}
+        ]
+      },
+      {
+        "series_id": "series_004_02",
+        "series_name": "fiber diameter and tensile behavior",
+        "series_type": "characterization_only",
+        "data_points": [
+          {
+            "sample_id": "sample_004_s02_single_10p4um",
+            "sample_label": "single fiber diameter 10.4 um",
+            "results": {
+              "microstructure_and_pores": {"average_fiber_diameter_um": 10.4},
+              "mechanical_properties": {"breaking_force_cN": 1.206, "tensile_strength_MPa": 142.5, "elongation_at_break_percent": 1.49}
+            }
+          },
+          {
+            "sample_id": "sample_004_s02_mean_7p5um",
+            "sample_label": "fibers diameter 7.5 um",
+            "results": {
+              "microstructure_and_pores": {"average_fiber_diameter_um": 7.5},
+              "mechanical_properties": {"tensile_strength_MPa": 407.7, "elongation_at_break_percent": 2.5}
+            }
+          }
+        ]
+      }
+    ],
+    "evidence_objects": [
+      {"figure_id": "fig_004_01", "figure_type": "SEM", "caption": "SEM image of sol precursor."},
+      {"figure_id": "fig_004_03", "figure_type": "XRD", "caption": "XRD patterns of xerogel fibers by heat treatment at 600 C, 800 C and 1200 C."},
+      {"figure_id": "fig_004_04", "figure_type": "TG", "caption": "TG curve of xerogel fibers."},
+      {"figure_id": "fig_004_06", "figure_type": "SEM", "caption": "SEM images of gamma-Al2O3 and alpha-Al2O3 fibers."},
+      {"figure_id": "fig_004_07", "figure_type": "mechanical_curve", "caption": "Load-displacement curve of the single alpha-Al2O3 fiber."}
+    ],
+    "data_provenance": {
+      "normalization_log": [
+        {"canonical_key": "breaking_force_cN", "original_value": 12.06, "original_unit": "mN", "normalized_value": 1.206, "normalized_unit": "cN", "rule": "mN to cN divide by 10"}
+      ],
+      "quality_flags": ["preview_extraction_only"]
+    }
+  },
+  {
+    "schema_version": "2.0-preview",
+    "paper_basic_info": {
+      "paper_id": "paper_005",
+      "source_file": "paper/纤维用铝溶胶前驱体的制备及表征_牛延强 (1).pdf",
+      "title": "纤维用铝溶胶前驱体的制备及表征",
+      "authors": ["牛延强"],
+      "year": null,
+      "doi": null,
+      "document_type": "thesis_or_dissertation",
+      "language": "zh",
+      "is_review": false,
+      "material_system": "alumina sol precursor for fiber",
+      "process_route": "not extracted; OCR required",
+      "research_object_form": "precursor_sol"
+    },
+    "global_constants": {},
+    "experiment_series": [],
+    "evidence_objects": [],
+    "multimodal_extractions": [],
+    "cross_modal_links": [],
+    "data_provenance": {
+      "primary_sources_summary": "pypdf extracted zero text characters from all 83 pages.",
+      "quality_flags": ["ocr_required", "no_text_layer_detected", "cannot_run_text_only_pipeline"]
+    }
+  }
+]

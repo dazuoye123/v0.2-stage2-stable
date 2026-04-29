@@ -1,0 +1,424 @@
+[
+  {
+    "schema_version": "2.0",
+    "paper_basic_info": {
+      "paper_id": null,
+      "source_file": null,
+      "title": null,
+      "translated_title": null,
+      "authors": [],
+      "year": null,
+      "doi": null,
+      "document_type": null,
+      "language": null,
+      "is_review": null,
+      "material_system": null,
+      "process_route": null,
+      "research_object_form": null,
+      "abstract_summary": null,
+      "keywords": []
+    },
+    "global_constants": {
+      "scope_note": "Only information shared by all experiment series in this paper should be placed here.",
+      "raw_materials": [
+        {
+          "material_id": null,
+          "role": null,
+          "name": null,
+          "formula_or_composition": null,
+          "purity_or_grade": null,
+          "supplier": null,
+          "amount": null,
+          "amount_unit": null,
+          "note": null,
+          "evidence_refs": []
+        }
+      ],
+      "nominal_composition": [
+        {
+          "component": null,
+          "value": null,
+          "unit": null,
+          "basis": null,
+          "evidence_refs": []
+        }
+      ],
+      "shared_process_summary": {
+        "precursor_route_summary": null,
+        "precursor_type": null,
+        "forming_method": null,
+        "heat_treatment_route_summary": null,
+        "testing_summary": null
+      },
+      "shared_parameters": {
+        "precursor_solution": {
+          "pH": null,
+          "solid_content_wt_percent": null,
+          "viscosity_Pa_s": null,
+          "particle_size_nm": null,
+          "zeta_potential_mV": null,
+          "pva_content_wt_percent": null,
+          "pvp_content_wt_percent": null,
+          "peo_content_wt_percent": null,
+          "aging_temperature_C": null,
+          "aging_time_h": null,
+          "concentration_temperature_C": null,
+          "concentration_time_h": null,
+          "gelation_time_h": null,
+          "drying_temperature_C": null,
+          "drying_time_h": null
+        },
+        "forming": {
+          "spinneret_hole_diameter_mm": null,
+          "spinneret_hole_count": null,
+          "needle_gauge": null,
+          "nozzle_inner_diameter_mm": null,
+          "feed_pressure_MPa": null,
+          "applied_voltage_kV": null,
+          "air_pressure_MPa": null,
+          "collector_distance_cm": null,
+          "feed_rate_ml_h": null,
+          "take_up_speed_m_min": null,
+          "drawing_speed_mm_min": null,
+          "spinning_channel_temperature_C": null,
+          "hot_air_temperature_C": null,
+          "ambient_temperature_C": null,
+          "relative_humidity_percent": null,
+          "collector_type": null
+        },
+        "heat_treatment": {
+          "calcination_temperature_C": null,
+          "sintering_temperature_C": null,
+          "holding_time_h": null,
+          "heating_rate_C_min": null,
+          "atmosphere": null,
+          "cooling_method": null
+        },
+        "product_structure": {
+          "average_fiber_diameter_um": null,
+          "average_fiber_diameter_nm": null,
+          "fiber_length_m": null,
+          "crystallite_size_nm": null,
+          "porosity_vol_percent": null,
+          "average_pore_size_nm": null,
+          "pore_volume_cm3_g": null,
+          "specific_surface_area_m2_g": null,
+          "density_g_cm3": null,
+          "linear_shrinkage_percent": null,
+          "volume_shrinkage_percent": null
+        },
+        "performance": {
+          "tensile_strength_MPa": null,
+          "compressive_strength_MPa": null,
+          "flexural_strength_MPa": null,
+          "breaking_force_cN": null,
+          "elastic_modulus_GPa": null,
+          "elongation_at_break_percent": null,
+          "thermal_conductivity_W_mK": null,
+          "strength_retention_percent": null,
+          "service_temperature_C": null
+        }
+      },
+      "heat_treatment_programs": [
+        {
+          "program_id": null,
+          "stage_name": null,
+          "start_temperature_C": null,
+          "target_temperature_C": null,
+          "heating_rate_C_min": null,
+          "holding_time_h": null,
+          "atmosphere": null,
+          "cooling_method": null,
+          "purpose": null,
+          "evidence_refs": []
+        }
+      ],
+      "characterization_methods": [
+        {
+          "method": null,
+          "sample_state": null,
+          "instrument": null,
+          "test_conditions": null,
+          "measured_target": null,
+          "evidence_refs": []
+        }
+      ],
+      "global_observations": {
+        "tg_dsc_events": [
+          {
+            "event_id": null,
+            "temperature_range_C": null,
+            "mass_loss_wt_percent": null,
+            "dsc_peak_temperature_C": null,
+            "interpretation": null,
+            "evidence_refs": []
+          }
+        ],
+        "spectroscopic_evidence": [
+          {
+            "evidence_id": null,
+            "method": null,
+            "peak_position": null,
+            "peak_unit": null,
+            "assignment": null,
+            "interpretation": null,
+            "evidence_refs": []
+          }
+        ],
+        "mechanism_notes": [
+          {
+            "note_id": null,
+            "claim": null,
+            "basis_type": null,
+            "confidence": null,
+            "evidence_refs": []
+          }
+        ]
+      },
+      "extended_data": {}
+    },
+    "experiment_series": [
+      {
+        "series_id": null,
+        "series_name": null,
+        "series_type": null,
+        "research_question": null,
+        "controlled_variable_keys": [],
+        "independent_variables": [
+          {
+            "canonical_key": null,
+            "display_name": null,
+            "unit": null,
+            "variable_type": null,
+            "value_scope": null,
+            "evidence_refs": []
+          }
+        ],
+        "series_constants": {
+          "raw_material_refs": [],
+          "process_summary": null,
+          "parameter_records": [
+            {
+              "canonical_key": null,
+              "value": null,
+              "min_value": null,
+              "max_value": null,
+              "unit": null,
+              "raw_text": null,
+              "evidence_refs": []
+            }
+          ],
+          "heat_treatment_program_refs": [],
+          "test_condition_summary": null,
+          "extended_data": {}
+        },
+        "data_points": [
+          {
+            "sample_id": null,
+            "sample_label": null,
+            "sample_role": null,
+            "independent_variable_values": [
+              {
+                "canonical_key": null,
+                "value": null,
+                "min_value": null,
+                "max_value": null,
+                "unit": null,
+                "raw_text": null,
+                "evidence_refs": []
+              }
+            ],
+            "process_parameters": {
+              "precursor_solution": {
+                "pH": null,
+                "solid_content_wt_percent": null,
+                "viscosity_Pa_s": null,
+                "particle_size_nm": null,
+                "zeta_potential_mV": null,
+                "pva_content_wt_percent": null,
+                "pvp_content_wt_percent": null,
+                "peo_content_wt_percent": null
+              },
+              "forming": {
+                "spinneret_hole_diameter_mm": null,
+                "spinneret_hole_count": null,
+                "needle_gauge": null,
+                "feed_pressure_MPa": null,
+                "applied_voltage_kV": null,
+                "air_pressure_MPa": null,
+                "collector_distance_cm": null,
+                "feed_rate_ml_h": null,
+                "take_up_speed_m_min": null,
+                "spinning_channel_temperature_C": null,
+                "relative_humidity_percent": null
+              },
+              "heat_treatment": {
+                "calcination_temperature_C": null,
+                "sintering_temperature_C": null,
+                "holding_time_h": null,
+                "heating_rate_C_min": null,
+                "atmosphere": null,
+                "cooling_method": null
+              }
+            },
+            "results": {
+              "formability": {
+                "continuous_spinning": null,
+                "continuous_length_m": null,
+                "spinnability_description": null,
+                "surface_quality_description": null
+              },
+              "phase_and_chemistry": {
+                "main_phase": null,
+                "secondary_phase": null,
+                "crystallization_temperature_C": null,
+                "phase_transition_description": null,
+                "chemical_state_description": null
+              },
+              "microstructure_and_pores": {
+                "average_fiber_diameter_um": null,
+                "average_fiber_diameter_nm": null,
+                "fiber_length_m": null,
+                "crystallite_size_nm": null,
+                "porosity_vol_percent": null,
+                "average_pore_size_nm": null,
+                "pore_volume_cm3_g": null,
+                "specific_surface_area_m2_g": null,
+                "density_g_cm3": null,
+                "linear_shrinkage_percent": null,
+                "volume_shrinkage_percent": null,
+                "morphology_description": null
+              },
+              "mechanical_properties": {
+                "tensile_strength_MPa": null,
+                "compressive_strength_MPa": null,
+                "flexural_strength_MPa": null,
+                "breaking_force_cN": null,
+                "elastic_modulus_GPa": null,
+                "elongation_at_break_percent": null,
+                "fracture_behavior_description": null
+              },
+              "thermal_properties": {
+                "thermal_conductivity_W_mK": null,
+                "service_temperature_C": null,
+                "strength_retention_percent": null,
+                "thermal_stability_description": null,
+                "morphology_retention_description": null
+              },
+              "mechanism_and_evidence": {
+                "spectroscopic_evidence_summary": null,
+                "author_mechanism_interpretation": null,
+                "mechanism_basis_type": null
+              }
+            },
+            "additional_parameter_records": [
+              {
+                "canonical_key": null,
+                "category": null,
+                "value": null,
+                "min_value": null,
+                "max_value": null,
+                "uncertainty": null,
+                "unit": null,
+                "raw_text": null,
+                "normalization_note": null,
+                "evidence_refs": []
+              }
+            ],
+            "qualitative_observations": [
+              {
+                "observation_type": null,
+                "text": null,
+                "basis_type": null,
+                "evidence_refs": []
+              }
+            ],
+            "evidence_refs": [],
+            "extended_data": {}
+          }
+        ],
+        "series_summary": {
+          "trend_summary": null,
+          "has_incomplete_data": null,
+          "note": null
+        }
+      }
+    ],
+    "evidence_objects": [
+      {
+        "evidence_object_id": null,
+        "figure_id": null,
+        "figure_type": null,
+        "page": null,
+        "caption": null,
+        "panel_id": null,
+        "panel_label": null,
+        "curve_id": null,
+        "object_id": null,
+        "object_type": null,
+        "object_label": null,
+        "bbox": null,
+        "linked_sample_ids": [],
+        "linked_canonical_keys": []
+      }
+    ],
+    "multimodal_extractions": [
+      {
+        "extraction_id": null,
+        "source_figure_id": null,
+        "source_panel_id": null,
+        "source_curve_id": null,
+        "source_object_id": null,
+        "model_name": null,
+        "task_type": null,
+        "raw_output": null,
+        "structured_output": null,
+        "confidence": null,
+        "needs_manual_review": null,
+        "created_at": null
+      }
+    ],
+    "cross_modal_links": [
+      {
+        "link_id": null,
+        "sample_id": null,
+        "linked_figure_id": null,
+        "linked_panel_id": null,
+        "linked_curve_id": null,
+        "linked_object_id": null,
+        "linked_extraction_id": null,
+        "linked_canonical_key": null,
+        "link_basis": null,
+        "confidence": null,
+        "status": null
+      }
+    ],
+    "data_provenance": {
+      "primary_sources_summary": null,
+      "source_details": [
+        {
+          "source_id": null,
+          "item": null,
+          "section": null,
+          "page": null,
+          "figure_id": null,
+          "table_id": null,
+          "caption_or_context": null,
+          "extraction_method": null,
+          "confidence": null
+        }
+      ],
+      "normalization_log": [
+        {
+          "canonical_key": null,
+          "original_value": null,
+          "original_unit": null,
+          "normalized_value": null,
+          "normalized_unit": null,
+          "rule": null
+        }
+      ],
+      "quality_flags": []
+    }
+  }
+]
