@@ -1,22 +1,22 @@
-"""Save figure metadata."""
+"""Compatibility storage helpers for figure metadata.
+
+New code should prefer ``alumina_sol_extractor.figures.figure_writer`` and
+``alumina_sol_extractor.utils.jsonl``. This module stays as a stable import
+surface for existing scripts.
+"""
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 
 from alumina_sol_extractor.models.figure import FigureInfo
+from alumina_sol_extractor.utils.jsonl import write_jsonl
 
 
 def save_figures_jsonl(figures: list[FigureInfo], output_path: Path) -> Path:
     """Save one FigureInfo object per JSONL line."""
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as file_obj:
-        for figure in figures:
-            file_obj.write(json.dumps(figure.model_dump(), ensure_ascii=False) + "\n")
-    return output_path
+    return write_jsonl((figure.model_dump() for figure in figures), output_path)
 
 
 def copy_figures_for_vision(figures: list[FigureInfo], output_dir: Path) -> Path:
