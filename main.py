@@ -15,6 +15,7 @@ from alumina_sol_extractor.pdf.mineru_pdf_to_markdown import MinerUAPIError  # n
 from alumina_sol_extractor.pipeline import (  # noqa: E402
     run_stage1_pdf_to_markdown,
     run_stage2_figure_pipeline,
+    run_stage3_dspy_pipeline,
 )
 
 
@@ -51,6 +52,16 @@ def main() -> None:
     print(f"tables_count: {stage2.tables_count}")
     for key, value in stage2.summary.items():
         print(f"{key}: {value}")
+    if settings.get("dspy", {}).get("enabled", False):
+        stage3 = run_stage3_dspy_pipeline(
+            project_root=PROJECT_ROOT,
+            settings=settings,
+            paper_id=stage1.paper_id,
+            cleaned_markdown_path=stage1.cleaned_markdown_path,
+            output_dir=stage1.output_dir,
+        )
+        for key, value in stage3.summary.items():
+            print(f"{key}: {value}")
     for key, value in stage1.converter_outputs.items():
         print(f"{key}: {value}")
 
