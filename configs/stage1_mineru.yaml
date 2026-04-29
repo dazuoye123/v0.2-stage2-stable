@@ -1,0 +1,18 @@
+paths:
+  input_pdf: "data/pdfs/example.pdf"
+  markdown_output_dir: "data/markdown"
+  mineru_raw_dir: "data/mineru_raw"
+  output_dir: "data/outputs"
+
+mineru:
+  mode: "api"
+  api_key_env: "MINERU_API_KEY"
+  base_url_env: "MINERU_BASE_URL"
+  poll_interval_seconds: 3
+  max_wait_seconds: 600
+  save_raw: true
+  save_cleaned: true
+
+chemistry_normalization:
+  enabled: true
+  unicode_subscript: false

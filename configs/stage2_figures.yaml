@@ -1,0 +1,7 @@
+figures:
+  run_clip: true
+  run_resnet: true
+  enable_bbox_fragment_stitch: true
+  include_material_state_photos: true
+  include_schematics_for_vision: false
+  include_spinnability_photos_for_vision: true

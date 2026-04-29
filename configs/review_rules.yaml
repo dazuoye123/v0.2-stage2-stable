@@ -1,0 +1,9 @@
+review_rules:
+  skip_review_for_replaced_fragments: true
+  skip_false_candidate_for_replaced_fragments: true
+  review_reasons:
+    - "figure_class_other"
+    - "multiple_figure_ids_in_caption"
+    - "caption_truncated"
+    - "taxonomy_conflict"
+    - "scientific_figure_not_sent_to_vision"
