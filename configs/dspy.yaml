@@ -15,3 +15,8 @@ dspy:
     paper_extraction: "paper_extraction.schema_v2.json"
     judge: "dspy_judge.json"
     summary: "stage3_summary.json"
+
+stage3:
+  dry_run_validator: true
+  fixture_path: "resources/stage3_seed/extraction_lijianjun_full.schema_v2.json"
+  validation_report: "stage3_validation_report.md"

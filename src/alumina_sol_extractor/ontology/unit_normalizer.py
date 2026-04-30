@@ -50,7 +50,7 @@ def _convert_numeric_value(value: float, source: str, target: str) -> float | No
         return value * 1000
     if source == "kPa" and target == "MPa":
         return value / 1000
-    if source in {"℃/h", "C/h"} and target in {"℃/min", "C/min"}:
+    if source in {"℃/h", "°C/h", "C/h"} and target in {"℃/min", "°C/min", "C/min"}:
         return value / 60
     if source == "min" and target == "h":
         return value / 60
@@ -58,9 +58,7 @@ def _convert_numeric_value(value: float, source: str, target: str) -> float | No
         return value / 3600
     if source == "cm" and target == "m":
         return value / 100
-    if source == "μm" and target == "nm":
-        return value * 1000
-    if source == "um" and target == "nm":
+    if source in {"μm", "um"} and target == "nm":
         return value * 1000
     if source == "nm" and target in {"μm", "um"}:
         return value / 1000
