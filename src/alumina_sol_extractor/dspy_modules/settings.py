@@ -56,14 +56,30 @@ def resolve_dspy_runtime_config(dspy_settings: dict[str, Any]) -> dict[str, Any]
     if not base_url and api_key_source == "DASHSCOPE_API_KEY":
         base_url = DASHSCOPE_COMPATIBLE_BASE_URL
 
+    raw_model_name = os.getenv(model_name_env, "qwen3.6-max-preview")
+    model_name = normalize_openai_compatible_model_name(raw_model_name, base_url=base_url)
+
     return {
         "api_key": api_key,
         "base_url": base_url,
-        "model_name": os.getenv(model_name_env, "qwen3.6-max-preview"),
+        "model_name": model_name,
+        "raw_model_name": raw_model_name,
         "api_key_env": api_key_source or api_key_env,
         "base_url_env": base_url_env,
         "model_name_env": model_name_env,
     }
+
+
+def normalize_openai_compatible_model_name(model_name: str, *, base_url: str | None = None) -> str:
+    """Normalize model names for LiteLLM when using OpenAI-compatible APIs."""
+    model_name = (model_name or "").strip()
+    if not model_name:
+        return "openai/qwen3.6-max-preview"
+    if "/" in model_name:
+        return model_name
+    if base_url:
+        return f"openai/{model_name}"
+    return model_name
 
 
 def configure_dspy_lm(dspy_settings: dict[str, Any]):

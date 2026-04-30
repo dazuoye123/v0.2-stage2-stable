@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -9,6 +10,7 @@ from alumina_sol_extractor.dspy_modules.runner import run_stage3_dspy_smoke_test
 from alumina_sol_extractor.dspy_modules.settings import (
     DASHSCOPE_COMPATIBLE_BASE_URL,
     load_project_dotenv,
+    normalize_openai_compatible_model_name,
     resolve_dspy_runtime_config,
 )
 
@@ -40,6 +42,8 @@ def test_smoke_test_requires_api_key(tmp_path: Path, monkeypatch) -> None:
             paper_id="smoke-paper",
             cleaned_markdown_path=markdown_path,
             output_dir=output_dir,
+            paper_text_limit_chars=1000,
+            max_experiment_series=1,
         )
 
 
@@ -59,14 +63,24 @@ def test_smoke_test_reports_missing_dspy_package(tmp_path: Path, monkeypatch) ->
     output_dir = tmp_path / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    with pytest.raises(RuntimeError, match="dspy-ai is not installed"):
-        run_stage3_dspy_smoke_test(
-            project_root=PROJECT_ROOT,
-            settings=settings,
-            paper_id="smoke-paper",
-            cleaned_markdown_path=markdown_path,
-            output_dir=output_dir,
-        )
+    real_import = __import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "dspy":
+            raise ImportError("mock missing dspy")
+        return real_import(name, globals, locals, fromlist, level)
+
+    with patch("builtins.__import__", side_effect=fake_import):
+        with pytest.raises(RuntimeError, match="dspy-ai is not installed"):
+            run_stage3_dspy_smoke_test(
+                project_root=PROJECT_ROOT,
+                settings=settings,
+                paper_id="smoke-paper",
+                cleaned_markdown_path=markdown_path,
+                output_dir=output_dir,
+                paper_text_limit_chars=1000,
+                max_experiment_series=1,
+            )
 
 
 def test_resolve_runtime_config_prefers_openai_api_key(monkeypatch) -> None:
@@ -79,7 +93,7 @@ def test_resolve_runtime_config_prefers_openai_api_key(monkeypatch) -> None:
     assert config["api_key"] == "openai-key"
     assert config["api_key_env"] == "OPENAI_API_KEY"
     assert config["base_url"] == "https://example.com/v1"
-    assert config["model_name"] == "custom-model"
+    assert config["model_name"] == "openai/custom-model"
 
 
 def test_resolve_runtime_config_falls_back_to_dashscope(monkeypatch) -> None:
@@ -92,7 +106,7 @@ def test_resolve_runtime_config_falls_back_to_dashscope(monkeypatch) -> None:
     assert config["api_key"] == "dashscope-key"
     assert config["api_key_env"] == "DASHSCOPE_API_KEY"
     assert config["base_url"] == DASHSCOPE_COMPATIBLE_BASE_URL
-    assert config["model_name"] == "qwen3.6-max-preview"
+    assert config["model_name"] == "openai/qwen3.6-max-preview"
 
 
 def test_load_project_dotenv_uses_project_root(tmp_path: Path, monkeypatch) -> None:
@@ -120,3 +134,9 @@ def test_missing_key_error_does_not_echo_secret(monkeypatch) -> None:
         resolve_dspy_runtime_config({})
     assert "OPENAI_API_KEY or DASHSCOPE_API_KEY" in str(exc_info.value)
     assert "dashscope.aliyuncs.com" not in str(exc_info.value)
+
+
+def test_normalize_openai_compatible_model_name() -> None:
+    assert normalize_openai_compatible_model_name("qwen3.6-max-preview", base_url="https://example.com/v1") == "openai/qwen3.6-max-preview"
+    assert normalize_openai_compatible_model_name("openai/qwen3.6-max-preview", base_url="https://example.com/v1") == "openai/qwen3.6-max-preview"
+    assert normalize_openai_compatible_model_name("qwen3.6-max-preview", base_url=None) == "qwen3.6-max-preview"

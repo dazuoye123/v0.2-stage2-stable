@@ -27,3 +27,17 @@ def test_ensure_required_sections_fills_defaults() -> None:
     assert payload["schema_version"] == "2.0"
     assert payload["experiment_series"] == []
     assert payload["evidence_objects"] == []
+
+
+def test_merge_sanitizes_null_list_fields_from_model_output() -> None:
+    record = merge_stage_outputs_to_paper_record(
+        paper_basic_info={
+            "paper_id": "paper-2",
+            "title": "demo",
+            "authors": None,
+            "keywords": None,
+        },
+    )
+    assert record.paper_basic_info is not None
+    assert record.paper_basic_info.authors == []
+    assert record.paper_basic_info.keywords == []

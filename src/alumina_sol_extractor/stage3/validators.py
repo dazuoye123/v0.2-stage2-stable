@@ -99,6 +99,44 @@ def validate_units_against_ontology(
     return issues
 
 
+def validate_no_top_level_core_keys_in_global_constants(
+    record: PaperExtractionRecord,
+    ontology: OntologyMap,
+) -> list[dict[str, Any]]:
+    """Warn when core canonical keys remain at global_constants top level."""
+
+    if not record.global_constants:
+        return []
+
+    known_nested_keys = {
+        "scope_note",
+        "raw_materials",
+        "nominal_composition",
+        "shared_process_summary",
+        "shared_parameters",
+        "heat_treatment_programs",
+        "characterization_methods",
+        "global_observations",
+        "additional_parameter_records",
+        "extended_data",
+    }
+    payload = record.global_constants.model_dump()
+    issues: list[dict[str, Any]] = []
+    for key in payload.keys():
+        if key in known_nested_keys:
+            continue
+        entry = ontology.get(key)
+        if entry and entry.get("is_core_statistical_field"):
+            issues.append(
+                {
+                    "type": "top_level_core_key_warning",
+                    "scope": "global_constants",
+                    "canonical_key": key,
+                }
+            )
+    return issues
+
+
 def build_quality_flags(record: PaperExtractionRecord, validation_errors: Iterable[dict[str, Any]]) -> list[str]:
     """Build a concise list of quality flags from validation output."""
 
@@ -107,6 +145,7 @@ def build_quality_flags(record: PaperExtractionRecord, validation_errors: Iterab
         "duplicate_id": "duplicate_ids_detected",
         "evidence_ref_warning": "evidence_reference_warnings",
         "extended_data_core_key": "core_keys_in_extended_data",
+        "top_level_core_key_warning": "top_level_core_keys_review_needed",
         "unit_warning": "unit_normalization_review_needed",
         "canonical_key_error": "canonical_key_review_needed",
         "rejected_parameter_record": "rejected_parameter_records_present",

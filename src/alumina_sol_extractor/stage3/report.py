@@ -15,6 +15,7 @@ def build_stage3_validation_report(
     duplicate_ids: list[dict[str, Any]],
     evidence_ref_warnings: list[dict[str, Any]],
     extended_data_core_keys: list[dict[str, Any]],
+    top_level_core_keys: list[dict[str, Any]],
     rejected_parameter_records: list[dict[str, Any]],
     quality_flags: list[str],
 ) -> dict[str, Any]:
@@ -27,6 +28,7 @@ def build_stage3_validation_report(
         "duplicate_id_count": len(duplicate_ids),
         "evidence_ref_warning_count": len(evidence_ref_warnings),
         "extended_data_core_key_count": len(extended_data_core_keys),
+        "top_level_core_key_count": len(top_level_core_keys),
         "rejected_parameter_records_count": len(rejected_parameter_records),
         "quality_flags": quality_flags,
         "report_path": str(output_path),
@@ -41,6 +43,7 @@ def build_stage3_validation_report(
         f"- duplicate_id_count: `{len(duplicate_ids)}`",
         f"- evidence_ref_warning_count: `{len(evidence_ref_warnings)}`",
         f"- extended_data_core_key_count: `{len(extended_data_core_keys)}`",
+        f"- top_level_core_key_count: `{len(top_level_core_keys)}`",
         f"- rejected_parameter_records_count: `{len(rejected_parameter_records)}`",
         f"- quality_flags: `{quality_flags}`",
         "",
@@ -49,6 +52,7 @@ def build_stage3_validation_report(
         _format_issue_section("Duplicate IDs", duplicate_ids),
         _format_issue_section("Evidence Ref Warnings", evidence_ref_warnings),
         _format_issue_section("Core Keys Hidden in extended_data", extended_data_core_keys),
+        _format_issue_section("Top-level Core Keys in global_constants", top_level_core_keys),
         _format_issue_section("Rejected Parameter Records", rejected_parameter_records),
     ]
     output_path.parent.mkdir(parents=True, exist_ok=True)

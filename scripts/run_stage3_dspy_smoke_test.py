@@ -29,6 +29,18 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Paper output directory containing Stage 2 files such as figures.jsonl and tables/.",
     )
+    parser.add_argument(
+        "--paper-text-limit-chars",
+        type=int,
+        default=4000,
+        help="Truncate cleaned markdown to this many characters for a fast smoke test.",
+    )
+    parser.add_argument(
+        "--max-experiment-series",
+        type=int,
+        default=1,
+        help="Only keep the first N experiment series during smoke testing.",
+    )
     return parser.parse_args()
 
 
@@ -58,6 +70,8 @@ def main() -> None:
             paper_id=args.paper_id,
             cleaned_markdown_path=cleaned_markdown_path,
             output_dir=output_dir,
+            paper_text_limit_chars=args.paper_text_limit_chars,
+            max_experiment_series=args.max_experiment_series,
         )
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc

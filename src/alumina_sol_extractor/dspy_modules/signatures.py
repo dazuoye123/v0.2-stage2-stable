@@ -53,7 +53,16 @@ def get_signatures():
         figure_summaries = dspy.InputField()
         ontology_keys = dspy.InputField()
         data_points_json = dspy.OutputField(
-            desc="Return JSON only. Use null for missing values and avoid invention."
+            desc=(
+                "Return JSON only as a JSON list. Each item must be an object with keys: "
+                "sample_id, sample_label, independent_variable_values, process_parameters, "
+                "results, evidence_refs, additional_parameter_records, extended_data. "
+                "If there is only one datapoint, still return a one-item JSON list. "
+                "If the paper gives multiple values for viscosity, sintering_temperature, "
+                "heating_rate, feed_pressure, humidity, channel temperature, batch number, "
+                "or other independent variables, split them into multiple datapoint objects. "
+                "Use null for missing values and do not invent facts."
+            )
         )
 
     class ExtractEvidenceObjectsSignature(dspy.Signature):
