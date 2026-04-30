@@ -60,15 +60,61 @@ def run_stage3_dspy_schema_extraction(
             return _run_dry_run_validator(project_root, settings, paper_id, output_dir)
         return {"stage3_dspy": "disabled"}
 
+    return _run_live_stage3_extraction(
+        project_root=Path(project_root),
+        dspy_settings=dspy_settings,
+        paper_id=paper_id,
+        cleaned_markdown_path=Path(cleaned_markdown_path),
+        output_dir=Path(output_dir),
+        stage3_dir_name="stage3",
+        summary_filename=dspy_settings.get("outputs", {}).get("summary", "stage3_summary.json"),
+        raw_outputs_filename=None,
+    )
+
+
+def run_stage3_dspy_smoke_test(
+    project_root: Path,
+    settings: dict[str, Any],
+    paper_id: str,
+    cleaned_markdown_path: Path,
+    output_dir: Path,
+) -> dict[str, Any]:
+    """Run a single-paper Stage 3 DSPy smoke test with raw output capture."""
+    dspy_settings = load_dspy_settings(Path(project_root), settings)
+    dspy_settings["enabled"] = True
+    return _run_live_stage3_extraction(
+        project_root=Path(project_root),
+        dspy_settings=dspy_settings,
+        paper_id=paper_id,
+        cleaned_markdown_path=Path(cleaned_markdown_path),
+        output_dir=Path(output_dir),
+        stage3_dir_name="stage3_dspy_smoke",
+        summary_filename="stage3_smoke_summary.json",
+        raw_outputs_filename="raw_dspy_outputs.jsonl",
+    )
+
+
+def _run_live_stage3_extraction(
+    *,
+    project_root: Path,
+    dspy_settings: dict[str, Any],
+    paper_id: str,
+    cleaned_markdown_path: Path,
+    output_dir: Path,
+    stage3_dir_name: str,
+    summary_filename: str,
+    raw_outputs_filename: str | None,
+) -> dict[str, Any]:
     configure_dspy_lm(dspy_settings)
 
-    paper_text = Path(cleaned_markdown_path).read_text(encoding="utf-8")
-    stage2_output_dir = Path(output_dir)
+    paper_text = cleaned_markdown_path.read_text(encoding="utf-8")
+    stage2_output_dir = output_dir
     figures_jsonl_path = stage2_output_dir / "figures.jsonl"
     vision_inputs_path = stage2_output_dir / "vision_inputs.jsonl"
     tables_dir = stage2_output_dir / "tables"
-    stage3_dir = stage2_output_dir / "stage3"
+    stage3_dir = stage2_output_dir / stage3_dir_name
     stage3_dir.mkdir(parents=True, exist_ok=True)
+    raw_outputs: list[dict[str, Any]] = []
 
     figures = _read_jsonl(figures_jsonl_path)
     vision_inputs = _read_jsonl(vision_inputs_path)
@@ -88,10 +134,22 @@ def run_stage3_dspy_schema_extraction(
         paper_text_head=paper_text[: max(2000, int(dspy_settings.get("chunk_size", 4000)))],
         source_file=str(cleaned_markdown_path),
     )
+    _append_raw_output(
+        raw_outputs,
+        step_name="paper_basic_info",
+        module_name="ExtractPaperBasicInfoModule",
+        result=paper_basic_info_result,
+    )
     global_constants_result = ExtractGlobalConstantsModule().run(
         paper_text=paper_text,
         ontology_keys=to_json_text(ontology_keys),
         paper_basic_info_json=to_json_text(paper_basic_info_result.payload or {}),
+    )
+    _append_raw_output(
+        raw_outputs,
+        step_name="global_constants",
+        module_name="ExtractGlobalConstantsModule",
+        result=global_constants_result,
     )
     experiment_series_result = ExtractExperimentSeriesModule().run(
         paper_text=paper_text,
@@ -101,19 +159,32 @@ def run_stage3_dspy_schema_extraction(
         paper_basic_info_json=to_json_text(paper_basic_info_result.payload or {}),
         global_constants_json=to_json_text(global_constants_result.payload or {}),
     )
+    _append_raw_output(
+        raw_outputs,
+        step_name="experiment_series",
+        module_name="ExtractExperimentSeriesModule",
+        result=experiment_series_result,
+    )
 
     experiment_series_payload = experiment_series_result.payload or []
     if isinstance(experiment_series_payload, dict):
         experiment_series_payload = experiment_series_payload.get("experiment_series", [])
 
     data_point_records: list[dict[str, Any]] = []
-    for series in experiment_series_payload if isinstance(experiment_series_payload, list) else []:
+    for index, series in enumerate(experiment_series_payload if isinstance(experiment_series_payload, list) else []):
         data_points_result = ExtractDataPointsModule().run(
             one_series_json=to_json_text(series),
             relevant_text=paper_text,
             table_summaries=to_json_text(tables_summary),
             figure_summaries=to_json_text(figure_summaries),
             ontology_keys=to_json_text(ontology_keys),
+        )
+        _append_raw_output(
+            raw_outputs,
+            step_name=f"data_points:{index}",
+            module_name="ExtractDataPointsModule",
+            result=data_points_result,
+            extra={"series_id": series.get("series_id") if isinstance(series, dict) else None},
         )
         payload = data_points_result.payload or []
         if isinstance(payload, dict):
@@ -125,6 +196,12 @@ def run_stage3_dspy_schema_extraction(
         figures_jsonl_summary=to_json_text(vision_inputs or figure_summaries),
         tables_summary=to_json_text(tables_summary),
         captions_and_references=to_json_text(captions_and_references),
+    )
+    _append_raw_output(
+        raw_outputs,
+        step_name="evidence_objects",
+        module_name="ExtractEvidenceObjectsModule",
+        result=evidence_objects_result,
     )
 
     paper_record = merge_stage_outputs_to_paper_record(
@@ -169,6 +246,8 @@ def run_stage3_dspy_schema_extraction(
         stage3_dir / outputs.get("paper_extraction", "paper_extraction.schema_v2.json"),
         validated.model_dump(),
     )
+    if raw_outputs_filename:
+        write_jsonl(raw_outputs, stage3_dir / raw_outputs_filename)
 
     judge_payload: dict[str, Any] = {"stage3_judge": "disabled"}
     if dspy_settings.get("run_judge", False):
@@ -183,8 +262,15 @@ def run_stage3_dspy_schema_extraction(
         judge_payload = judge_result.payload if isinstance(judge_result.payload, dict) else {"raw_output": judge_result.raw_output}
     _write_json(stage3_dir / outputs.get("judge", "dspy_judge.json"), judge_payload)
 
+    validation_summary = _build_validation_summary(
+        validated,
+        project_root,
+        stage3_dir / "stage3_validation_report.md",
+        schema_valid=True,
+    )
     summary = {
         "stage3_dspy": "enabled",
+        "stage3_mode": "live_smoke_test" if raw_outputs_filename else "live_pipeline",
         "paper_id": paper_id,
         "paper_basic_info_ok": validated.paper_basic_info is not None,
         "experiment_series_count": len(validated.experiment_series),
@@ -192,8 +278,10 @@ def run_stage3_dspy_schema_extraction(
         "evidence_object_count": len(validated.evidence_objects),
         "run_judge": bool(dspy_settings.get("run_judge", False)),
         "stage3_dir": str(stage3_dir),
+        "raw_dspy_outputs_path": str(stage3_dir / raw_outputs_filename) if raw_outputs_filename else None,
     }
-    _write_json(stage3_dir / outputs.get("summary", "stage3_summary.json"), summary)
+    summary.update(validation_summary)
+    _write_json(stage3_dir / summary_filename, summary)
     return summary
 
 
@@ -311,6 +399,26 @@ def _coerce_list_payload(payload: object | None, key: str) -> list[Any]:
         if isinstance(value, list):
             return value
     return []
+
+
+def _append_raw_output(
+    target: list[dict[str, Any]],
+    *,
+    step_name: str,
+    module_name: str,
+    result: Any,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    payload = {
+        "step_name": step_name,
+        "module_name": module_name,
+        "json_parse_ok": result.error is None,
+        "json_parse_error": result.error,
+        "raw_output": result.raw_output,
+    }
+    if extra:
+        payload.update(extra)
+    target.append(payload)
 
 
 def _error_flag(flag_name: str, error: str | None) -> str | None:
