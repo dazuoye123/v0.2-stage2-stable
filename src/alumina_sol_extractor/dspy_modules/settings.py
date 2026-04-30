@@ -8,6 +8,8 @@ from typing import Any
 
 from alumina_sol_extractor.config import build_runtime_settings
 
+DASHSCOPE_COMPATIBLE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
 
 def load_dspy_settings(project_root: Path, settings: dict[str, Any]) -> dict[str, Any]:
     """Load merged DSPy settings from configs and runtime settings."""
@@ -17,6 +19,22 @@ def load_dspy_settings(project_root: Path, settings: dict[str, Any]) -> dict[str
     return merged
 
 
+def load_project_dotenv(project_root: Path) -> Path | None:
+    """Load a project-local ``.env`` file without overriding system env vars."""
+    env_path = Path(project_root) / ".env"
+    if not env_path.exists():
+        return None
+    try:
+        from dotenv import load_dotenv
+    except ImportError as exc:  # pragma: no cover - dependency issue is rare and explicit
+        raise RuntimeError(
+            "Smoke test .env support requires python-dotenv. "
+            "Install it with `pip install python-dotenv>=1.0.1`."
+        ) from exc
+    load_dotenv(env_path, override=False)
+    return env_path
+
+
 def resolve_dspy_runtime_config(dspy_settings: dict[str, Any]) -> dict[str, Any]:
     """Resolve DSPy runtime configuration from environment variables."""
     api_key_env = dspy_settings.get("api_key_env", "OPENAI_API_KEY")
@@ -24,17 +42,25 @@ def resolve_dspy_runtime_config(dspy_settings: dict[str, Any]) -> dict[str, Any]
     model_name_env = dspy_settings.get("model_name_env", "MODEL_NAME")
 
     api_key = os.getenv(api_key_env)
+    api_key_source = api_key_env if api_key else None
+    if not api_key:
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        api_key_source = "DASHSCOPE_API_KEY" if api_key else None
     if not api_key:
         raise RuntimeError(
-            f"Stage 3 DSPy smoke test requires environment variable {api_key_env}. "
-            "Export your OpenAI-compatible API key before running the smoke test script."
+            "Stage 3 DSPy smoke test requires OPENAI_API_KEY or DASHSCOPE_API_KEY. "
+            "Set one of them in your system environment or project .env before running the smoke test script."
         )
+
+    base_url = os.getenv(base_url_env)
+    if not base_url and api_key_source == "DASHSCOPE_API_KEY":
+        base_url = DASHSCOPE_COMPATIBLE_BASE_URL
 
     return {
         "api_key": api_key,
-        "base_url": os.getenv(base_url_env),
-        "model_name": os.getenv(model_name_env, "gpt-4o-mini"),
-        "api_key_env": api_key_env,
+        "base_url": base_url,
+        "model_name": os.getenv(model_name_env, "qwen3.6-max-preview"),
+        "api_key_env": api_key_source or api_key_env,
         "base_url_env": base_url_env,
         "model_name_env": model_name_env,
     }

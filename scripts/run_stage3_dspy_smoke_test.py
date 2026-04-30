@@ -13,6 +13,7 @@ if str(SRC_DIR) not in sys.path:
 
 from alumina_sol_extractor.config import build_runtime_settings  # noqa: E402
 from alumina_sol_extractor.dspy_modules import run_stage3_dspy_smoke_test  # noqa: E402
+from alumina_sol_extractor.dspy_modules.settings import load_project_dotenv  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,6 +44,7 @@ def main() -> None:
     if not cleaned_markdown_path.exists():
         raise SystemExit(f"Cleaned markdown not found: {cleaned_markdown_path}")
 
+    load_project_dotenv(PROJECT_ROOT)
     settings = build_runtime_settings(PROJECT_ROOT, PROJECT_ROOT / "settings.yaml")
     settings.setdefault("dspy", {})
     settings["dspy"]["enabled"] = True
