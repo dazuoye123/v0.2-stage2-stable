@@ -32,14 +32,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--paper-text-limit-chars",
         type=int,
-        default=4000,
-        help="Truncate cleaned markdown to this many characters for a fast smoke test.",
+        default=None,
+        help="Truncate cleaned markdown to this many characters for a fast smoke test. Defaults to 4000 in full-text mode and unlimited in section-aware mode.",
     )
     parser.add_argument(
         "--max-experiment-series",
         type=int,
         default=1,
         help="Only keep the first N experiment series during smoke testing.",
+    )
+    parser.add_argument(
+        "--section-aware",
+        action="store_true",
+        help="Select relevant sections with deterministic Python rules before calling DSPy extractors.",
+    )
+    parser.add_argument(
+        "--section-method",
+        default="rule",
+        help="Section selection method. Only 'rule' is supported.",
+    )
+    parser.add_argument(
+        "--max-sections",
+        type=int,
+        default=6,
+        help="Maximum number of scored sections to include in section-aware mode.",
+    )
+    parser.add_argument(
+        "--section-keywords",
+        default="",
+        help="Comma-separated keywords that boost section scoring in section-aware mode.",
     )
     return parser.parse_args()
 
@@ -62,6 +83,10 @@ def main() -> None:
     settings["dspy"]["enabled"] = True
     settings.setdefault("stage3", {})
     settings["stage3"]["dry_run_validator"] = False
+    section_keywords = [item.strip() for item in str(args.section_keywords or "").split(",") if item.strip()]
+    paper_text_limit_chars = args.paper_text_limit_chars
+    if paper_text_limit_chars is None and not args.section_aware:
+        paper_text_limit_chars = 4000
 
     try:
         summary = run_stage3_dspy_smoke_test(
@@ -70,8 +95,12 @@ def main() -> None:
             paper_id=args.paper_id,
             cleaned_markdown_path=cleaned_markdown_path,
             output_dir=output_dir,
-            paper_text_limit_chars=args.paper_text_limit_chars,
+            paper_text_limit_chars=paper_text_limit_chars,
             max_experiment_series=args.max_experiment_series,
+            section_aware=args.section_aware,
+            section_method=args.section_method,
+            max_sections=args.max_sections,
+            section_keywords=section_keywords,
         )
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc

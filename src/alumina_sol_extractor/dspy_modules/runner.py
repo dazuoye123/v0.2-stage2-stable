@@ -31,6 +31,13 @@ from alumina_sol_extractor.stage3.normalization import (
     validate_canonical_keys,
 )
 from alumina_sol_extractor.stage3.report import build_stage3_validation_report
+from alumina_sol_extractor.stage3.sections import (
+    build_selected_sections_markdown,
+    infer_selected_chapter_numbers,
+    parse_markdown_sections,
+    score_sections,
+    select_sections,
+)
 from alumina_sol_extractor.stage3.validators import (
     build_quality_flags,
     validate_core_parameter_without_evidence,
@@ -54,6 +61,17 @@ from .modules import (
     to_json_text,
 )
 from .settings import configure_dspy_lm, load_dspy_settings
+
+
+SPECTRAL_LIST_CANONICAL_KEYS = {
+    "nmr_27Al_peak_position_ppm",
+    "raman_peak_position_cm_1",
+    "ftir_peak_position_cm_1",
+    "xrd_peak_position_2theta_deg",
+    "peak_positions",
+    "peak_position",
+    "spectral_peak_positions",
+}
 
 
 def run_stage3_dspy_schema_extraction(
@@ -90,8 +108,12 @@ def run_stage3_dspy_smoke_test(
     cleaned_markdown_path: Path,
     output_dir: Path,
     *,
-    paper_text_limit_chars: int = 4000,
+    paper_text_limit_chars: int | None = 4000,
     max_experiment_series: int = 1,
+    section_aware: bool = False,
+    section_method: str = "rule",
+    max_sections: int = 6,
+    section_keywords: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run a single-paper Stage 3 DSPy smoke test with raw output capture."""
     dspy_settings = load_dspy_settings(Path(project_root), settings)
@@ -107,6 +129,10 @@ def run_stage3_dspy_smoke_test(
         raw_outputs_filename="raw_dspy_outputs.jsonl",
         paper_text_limit_chars=paper_text_limit_chars,
         max_experiment_series=max_experiment_series,
+        section_aware=section_aware,
+        section_method=section_method,
+        max_sections=max_sections,
+        section_keywords=section_keywords or [],
     )
 
 
@@ -122,13 +148,14 @@ def _run_live_stage3_extraction(
     raw_outputs_filename: str | None,
     paper_text_limit_chars: int | None = None,
     max_experiment_series: int | None = None,
+    section_aware: bool = False,
+    section_method: str = "rule",
+    max_sections: int = 6,
+    section_keywords: list[str] | None = None,
 ) -> dict[str, Any]:
     configure_dspy_lm(dspy_settings)
 
     full_paper_text = _read_text_best_effort(cleaned_markdown_path)
-    paper_text = full_paper_text
-    if paper_text_limit_chars and paper_text_limit_chars > 0:
-        paper_text = paper_text[:paper_text_limit_chars]
     stage2_output_dir = output_dir
     figures_jsonl_path = stage2_output_dir / "figures.jsonl"
     vision_inputs_path = stage2_output_dir / "vision_inputs.jsonl"
@@ -140,17 +167,67 @@ def _run_live_stage3_extraction(
     figures = _read_jsonl(figures_jsonl_path)
     vision_inputs = _read_jsonl(vision_inputs_path)
     tables_summary = _summarize_tables(tables_dir)
-    figure_summaries = _summarize_figures(figures)
     figure_metadata_map = _build_figure_metadata_map(figures, vision_inputs)
-    captions_and_references = [
-        {
-            "figure_id": item.get("figure_id"),
-            "caption": item.get("caption"),
-            "reference_sentences": item.get("reference_sentences"),
-        }
-        for item in figures
-    ]
+    captions_and_references = _build_captions_and_references(figures)
     ontology_keys = get_canonical_keys(project_root)
+
+    section_keywords = list(section_keywords or [])
+    paper_text = full_paper_text
+    selected_sections_text: str | None = None
+    selected_section_titles: list[str] = []
+    selected_chapter_numbers: set[str] = set()
+    selected_section_map: list[dict[str, Any]] = []
+    if section_aware:
+        if section_method != "rule":
+            raise RuntimeError(f"Unsupported section-aware method: {section_method}")
+        parsed_sections = parse_markdown_sections(full_paper_text)
+        scored_sections = score_sections(parsed_sections, custom_keywords=section_keywords)
+        selected_section_map = select_sections(scored_sections, max_sections=max_sections)
+        selected_sections_text = build_selected_sections_markdown(selected_section_map)
+        if selected_sections_text.strip():
+            paper_text = selected_sections_text
+        selected_section_titles = [str(item.get("title") or "") for item in selected_section_map if item.get("title")]
+        selected_chapter_numbers = infer_selected_chapter_numbers(selected_section_map)
+        (stage3_dir / "stage3_sections.json").write_text(
+            json.dumps(parsed_sections, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (stage3_dir / "stage3_section_scores.json").write_text(
+            json.dumps(scored_sections, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (stage3_dir / "stage3_selected_sections.md").write_text(
+            selected_sections_text,
+            encoding="utf-8",
+        )
+
+    if paper_text_limit_chars and paper_text_limit_chars > 0:
+        paper_text = paper_text[:paper_text_limit_chars]
+
+    scoped_inputs = _scope_stage2_evidence_inputs(
+        figures=figures,
+        vision_inputs=vision_inputs,
+        tables_summary=tables_summary,
+        selected_sections_text=selected_sections_text if section_aware else None,
+        selected_section_titles=selected_section_titles,
+        selected_chapter_numbers=selected_chapter_numbers,
+        section_keywords=section_keywords,
+    )
+    figures = scoped_inputs["figures"]
+    vision_inputs = scoped_inputs["vision_inputs"]
+    tables_summary = scoped_inputs["tables_summary"]
+    figure_metadata_map = _build_figure_metadata_map(figures, vision_inputs)
+    figure_summaries = _summarize_figures(figures)
+    captions_and_references = _build_captions_and_references(figures)
+    if section_aware:
+        (stage3_dir / "stage3_evidence_scope.json").write_text(
+            json.dumps(scoped_inputs["scope"], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (stage3_dir / "stage3_evidence_scope_review.json").write_text(
+            json.dumps(scoped_inputs["review"], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     paper_basic_info_result = ExtractPaperBasicInfoModule().run(
         paper_text_head=paper_text[: max(2000, int(dspy_settings.get("chunk_size", 4000)))],
@@ -243,7 +320,7 @@ def _run_live_stage3_extraction(
         ontology_map,
     )
     evidence_payload = _split_evidence_objects_payload(
-        payload=_coerce_list_payload(evidence_objects_result.payload, "evidence_objects"),
+        payload=evidence_objects_result.payload,
         figure_metadata_map=figure_metadata_map,
         tables_summary=tables_summary,
     )
@@ -580,6 +657,190 @@ def _summarize_figures(figures: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _build_captions_and_references(figures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "figure_id": item.get("figure_id"),
+            "caption": item.get("caption"),
+            "reference_sentences": item.get("reference_sentences"),
+        }
+        for item in figures
+    ]
+
+
+def _scope_stage2_evidence_inputs(
+    *,
+    figures: list[dict[str, Any]],
+    vision_inputs: list[dict[str, Any]],
+    tables_summary: list[dict[str, Any]],
+    selected_sections_text: str | None,
+    selected_section_titles: list[str],
+    selected_chapter_numbers: set[str],
+    section_keywords: list[str],
+) -> dict[str, Any]:
+    if not selected_sections_text:
+        return {
+            "figures": figures,
+            "vision_inputs": vision_inputs,
+            "tables_summary": tables_summary,
+            "scope": {
+                "mode": "full_text",
+                "included_figure_ids": [item.get("figure_id") for item in figures if item.get("figure_id")],
+                "included_table_ids": [item.get("table_id") for item in tables_summary if item.get("table_id")],
+            },
+            "review": [],
+        }
+
+    normalized_selected_text = _normalize_evidence_text(selected_sections_text)
+    normalized_titles = [_normalize_evidence_text(title) for title in selected_section_titles if title]
+    normalized_keywords = [_normalize_evidence_text(keyword) for keyword in section_keywords if keyword]
+
+    scoped_figures: list[dict[str, Any]] = []
+    included_figure_ids: list[str] = []
+    review_entries: list[dict[str, Any]] = []
+    reviewed_figure_ids: list[str] = []
+    figure_ids_in_scope = set()
+    scoped_figure_ids = set()
+
+    for figure in figures:
+        figure_id = str(figure.get("figure_id") or "").strip()
+        if not figure_id:
+            continue
+        scoped_figure_ids.add(figure_id)
+        if _figure_is_in_selected_scope(
+            figure,
+            normalized_selected_text=normalized_selected_text,
+            normalized_titles=normalized_titles,
+            normalized_keywords=normalized_keywords,
+            selected_chapter_numbers=selected_chapter_numbers,
+        ):
+            scoped_figures.append(figure)
+            included_figure_ids.append(figure_id)
+            figure_ids_in_scope.add(figure_id)
+            continue
+        review_entries.append(
+            {
+                "source_type": "figure",
+                "source_id": figure_id,
+                "reason": "outside_selected_section_scope",
+                "caption": figure.get("caption"),
+            }
+        )
+        reviewed_figure_ids.append(figure_id)
+
+    scoped_vision_inputs = []
+    for item in vision_inputs:
+        figure_id = str(item.get("figure_id") or "").strip()
+        if not figure_id or figure_id in figure_ids_in_scope:
+            scoped_vision_inputs.append(item)
+        elif figure_id:
+            review_entries.append(
+                {
+                    "source_type": "vision_input",
+                    "source_id": figure_id,
+                    "reason": "vision_input_not_in_selected_scope",
+                }
+            )
+
+    scoped_tables: list[dict[str, Any]] = []
+    included_table_ids: list[str] = []
+    reviewed_table_ids: list[str] = []
+    for table in tables_summary:
+        table_id = str(table.get("table_id") or "").strip()
+        if not table_id:
+            continue
+        decision = _table_is_in_selected_scope(
+            table,
+            normalized_selected_text=normalized_selected_text,
+            normalized_titles=normalized_titles,
+            normalized_keywords=normalized_keywords,
+        )
+        if decision == "include":
+            scoped_tables.append(table)
+            included_table_ids.append(table_id)
+        else:
+            review_entries.append(
+                {
+                    "source_type": "table",
+                    "source_id": table_id,
+                    "reason": "table_scope_uncertain" if decision == "review" else "outside_selected_section_scope",
+                }
+            )
+            reviewed_table_ids.append(table_id)
+
+    return {
+        "figures": scoped_figures,
+        "vision_inputs": scoped_vision_inputs,
+        "tables_summary": scoped_tables,
+        "scope": {
+            "mode": "section_aware",
+            "selected_chapter_numbers": sorted(selected_chapter_numbers),
+            "selected_section_titles": selected_section_titles,
+            "included_figure_ids": included_figure_ids,
+            "included_table_ids": included_table_ids,
+            "reviewed_figure_ids": reviewed_figure_ids,
+            "reviewed_table_ids": reviewed_table_ids,
+        },
+        "review": review_entries,
+    }
+
+
+def _figure_is_in_selected_scope(
+    figure: dict[str, Any],
+    *,
+    normalized_selected_text: str,
+    normalized_titles: list[str],
+    normalized_keywords: list[str],
+    selected_chapter_numbers: set[str],
+) -> bool:
+    figure_id = str(figure.get("figure_id") or "").strip()
+    caption = str(figure.get("caption") or "")
+    description = str(figure.get("description_text") or "")
+    reference_sentences = " ".join(str(text) for text in (figure.get("reference_sentences") or []) if text)
+    combined = _normalize_evidence_text(" ".join([figure_id, caption, description, reference_sentences]))
+    if figure_id and _contains_explicit_reference(normalized_selected_text, _normalize_evidence_text(figure_id)):
+        return True
+    chapter_number = _extract_source_chapter_number(figure_id)
+    if selected_chapter_numbers and chapter_number and chapter_number not in selected_chapter_numbers:
+        return False
+    if any(title and title in combined for title in normalized_titles):
+        return True
+    keyword_hits = sum(1 for keyword in normalized_keywords if keyword and keyword in combined)
+    if keyword_hits >= 1:
+        return True
+    return not selected_chapter_numbers and bool(combined)
+
+
+def _table_is_in_selected_scope(
+    table: dict[str, Any],
+    *,
+    normalized_selected_text: str,
+    normalized_titles: list[str],
+    normalized_keywords: list[str],
+) -> str:
+    table_id = str(table.get("table_id") or "").strip()
+    if table_id and _contains_explicit_reference(normalized_selected_text, _normalize_evidence_text(table_id)):
+        return "include"
+    row_preview = " ".join(_table_row_to_text(row) for row in (table.get("rows") or [])[:3])
+    combined = _normalize_evidence_text(f"{table_id} {row_preview}")
+    if any(title and title in combined for title in normalized_titles):
+        return "include"
+    keyword_hits = sum(1 for keyword in normalized_keywords if keyword and keyword in combined)
+    if keyword_hits >= 2:
+        return "include"
+    return "review"
+
+
+def _extract_source_chapter_number(source_id: str) -> str | None:
+    text = str(source_id or "").strip()
+    if not text:
+        return None
+    match = re.search(r"(?:图|鍥?|fig(?:ure)?\.?)\s*([1-9]\d*)", text, flags=re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
 def _postprocess_paper_basic_info(
     *,
     payload: object | None,
@@ -607,7 +868,15 @@ def _postprocess_paper_basic_info(
         result["authors"] = []
     elif not isinstance(authors, list):
         result["authors"] = [str(authors)]
+    if not result.get("authors") and result.get("author"):
+        result["authors"] = [str(result.get("author")).strip()]
 
+    year = result.get("year")
+    if year is None:
+        date_text = str(result.get("date") or "").strip()
+        date_match = re.match(r"((?:19|20)\d{2})", date_text)
+        if date_match:
+            result["year"] = int(date_match.group(1))
     year = result.get("year")
     if year is None:
         year_match = re.search(r"(19|20)\d{2}", source_file.stem)
@@ -627,13 +896,15 @@ def _postprocess_paper_basic_info(
         inferred_authors = _infer_authors_from_head_lines(head_lines)
         if inferred_authors:
             result["authors"] = inferred_authors
-    if not result.get("material_system"):
+    material_system = str(result.get("material_system") or "").strip()
+    if not material_system or material_system == "alumina-based ceramic fiber":
         material_system = _infer_material_system(combined)
         if material_system:
             result["material_system"] = material_system
             inferred["material_system_evidence"] = "inferred_from_abstract_or_keywords"
             inferred["material_system_confidence"] = 0.45
-    if not result.get("process_route"):
+    process_route = str(result.get("process_route") or "").strip()
+    if not process_route or process_route == "sol-gel dry spinning":
         process_route = _infer_process_route(combined)
         if process_route:
             result["process_route"] = process_route
@@ -645,6 +916,10 @@ def _postprocess_paper_basic_info(
 
 def _infer_material_system(text: str) -> str | None:
     lowered = text.lower()
+    if any(token in lowered for token in ["fiber precursor", "fibre precursor"]) or "前驱体" in text:
+        return "alumina_fiber_precursor"
+    if "alumina sol" in lowered or "铝溶胶" in text or "al13" in lowered or "高 al13" in lowered:
+        return "alumina_sol"
     if (
         'alumina' in lowered
         or '\u6c27\u5316\u94dd' in text
@@ -657,6 +932,18 @@ def _infer_material_system(text: str) -> str | None:
 
 def _infer_process_route(text: str) -> str | None:
     lowered = text.lower()
+    if (
+        "alumina sol" in lowered
+        or "铝溶胶" in text
+        or "al13" in lowered
+        or "ferron" in lowered
+        or "27al nmr" in lowered
+    ) and not (
+        "dry spinning" in lowered
+        or "干法纺丝" in text
+        or "纺丝" in text
+    ):
+        return "alumina sol synthesis and characterization"
     if (
         'sol-gel' in lowered
         or 'sol gel' in lowered
@@ -994,44 +1281,205 @@ def _coerce_parameter_record_list(
     if value is None:
         return []
     if isinstance(value, list):
-        return [item for item in value if isinstance(item, dict)]
+        records: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            records.extend(_split_parameter_record_dict(item, ontology))
+        return records
     if isinstance(value, dict):
         if {"canonical_key", "raw_name", "value"} & set(value.keys()):
-            return [value]
+            return _split_parameter_record_dict(value, ontology)
         coerced: list[dict[str, Any]] = []
         for key, item_value in value.items():
-            entry = ontology.get(key)
-            coerced.append(
-                {
-                    "canonical_key": key if entry else None,
-                    "raw_name": key,
-                    "value": item_value,
-                    "unit": entry.get("standard_unit") if entry else None,
-                    "raw_text": str(item_value) if item_value is not None else None,
-                }
+            coerced.extend(
+                _split_parameter_record_dict(
+                    {
+                        "canonical_key": key if ontology.get(key) else None,
+                        "raw_name": key,
+                        "value": item_value,
+                        "unit": (ontology.get(key) or {}).get("standard_unit"),
+                        "raw_text": str(item_value) if item_value is not None else None,
+                    },
+                    ontology,
+                )
             )
         return coerced
     return []
 
 
+def _split_parameter_record_dict(
+    item: dict[str, Any],
+    ontology: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    record = dict(item)
+    canonical_key = str(record.get("canonical_key") or record.get("raw_name") or "").strip()
+    value = record.get("value")
+    if isinstance(value, list) and _is_list_valued_spectral_key(canonical_key):
+        total = len(value)
+        split_records: list[dict[str, Any]] = []
+        for index, scalar_value in enumerate(value):
+            if isinstance(scalar_value, (list, dict)):
+                continue
+            split_record = dict(record)
+            split_record["value"] = scalar_value
+            split_record["raw_text"] = json.dumps(value, ensure_ascii=False)
+            split_record["normalization_note"] = _append_normalization_note(
+                split_record.get("normalization_note"),
+                f"split_list_valued_parameter:index={index};original_length={total}",
+            )
+            split_records.append(split_record)
+        return split_records
+    if isinstance(value, list):
+        fallback = dict(record)
+        fallback["value"] = None
+        fallback["raw_text"] = json.dumps(value, ensure_ascii=False)
+        fallback["normalization_note"] = _append_normalization_note(
+            fallback.get("normalization_note"),
+            "raw_list_value_preserved_unmaterialized",
+        )
+        return [fallback]
+    if canonical_key == "peptization_time_h" and _looks_like_reaction_time_context(record):
+        record["normalization_note"] = _append_normalization_note(
+            record.get("normalization_note"),
+            "possible_misclassified_reaction_time_from_peptization_time",
+        )
+    return [record]
+
+
+def _is_list_valued_spectral_key(canonical_key: str) -> bool:
+    normalized = str(canonical_key or "").strip()
+    if normalized in SPECTRAL_LIST_CANONICAL_KEYS:
+        return True
+    lowered = normalized.lower()
+    return "peak_position" in lowered or lowered.endswith("peak_positions")
+
+
 def _split_evidence_objects_payload(
     *,
-    payload: list[Any],
+    payload: object | None,
     figure_metadata_map: dict[str, dict[str, Any]],
     tables_summary: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    raw_items = _flatten_raw_evidence_payload(payload)
     table_ids = {item.get("table_id") for item in tables_summary if item.get("table_id")}
     split_payload: list[dict[str, Any]] = []
-    for item in payload:
-        if not isinstance(item, dict):
-            continue
+    for raw_item in raw_items:
+        item = _materialize_evidence_leaf(raw_item)
         ids = _extract_evidence_targets(item, figure_metadata_map, table_ids)
         if not ids:
-            split_payload.append(item)
+            split_payload.append(_finalize_evidence_item(item, None, figure_metadata_map))
             continue
         for target in ids:
-            split_payload.append(_apply_single_evidence_target(item, target, figure_metadata_map))
+            split_payload.append(_finalize_evidence_item(item, target, figure_metadata_map))
     return _ensure_unique_evidence_ids(split_payload)
+
+
+def _flatten_raw_evidence_payload(
+    payload: object | None,
+    *,
+    source_path: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    path = list(source_path or [])
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        flattened: list[dict[str, Any]] = []
+        for index, item in enumerate(payload):
+            flattened.extend(_flatten_raw_evidence_payload(item, source_path=[*path, str(index)]))
+        return flattened
+    if not isinstance(payload, dict):
+        return []
+    if _looks_like_evidence_leaf(payload):
+        item = dict(payload)
+        item.setdefault("_source_path", path)
+        return [item]
+
+    flattened: list[dict[str, Any]] = []
+    for key, value in payload.items():
+        if isinstance(value, dict):
+            child = dict(value)
+            if _looks_like_evidence_leaf(child):
+                child.setdefault("_source_path", [*path, str(key)])
+                child.setdefault("_source_group", key)
+                flattened.append(child)
+                continue
+            flattened.extend(_flatten_raw_evidence_payload(child, source_path=[*path, str(key)]))
+            continue
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                if isinstance(item, dict):
+                    child = dict(item)
+                    child.setdefault("_source_path", [*path, str(key), str(index)])
+                    child.setdefault("_source_group", key)
+                    flattened.extend(_flatten_raw_evidence_payload(child, source_path=child["_source_path"]))
+    return flattened
+
+
+def _looks_like_evidence_leaf(payload: dict[str, Any]) -> bool:
+    leaf_keys = {
+        "fact",
+        "fact_summary",
+        "evidence_source",
+        "reference_text",
+        "reference_sentences",
+        "caption",
+        "figure_id",
+        "table_id",
+        "evidence_id",
+        "linked_facts",
+        "detailed_observation",
+    }
+    return bool(leaf_keys.intersection(payload.keys()))
+
+
+def _materialize_evidence_leaf(payload: dict[str, Any]) -> dict[str, Any]:
+    item = dict(payload)
+    reference_sentences = item.get("reference_sentences")
+    if isinstance(reference_sentences, str):
+        reference_sentences = [reference_sentences]
+    elif not isinstance(reference_sentences, list):
+        reference_text = str(item.get("reference_text") or "").strip()
+        reference_sentences = [reference_text] if reference_text else []
+    item["reference_sentences"] = [str(text).strip() for text in reference_sentences if str(text).strip()]
+    fact_summary = str(item.get("fact_summary") or item.get("fact") or "").strip()
+    if fact_summary:
+        item["fact_summary"] = fact_summary
+    detailed_observation = str(item.get("detailed_observation") or item.get("fact") or "").strip()
+    if detailed_observation:
+        item["detailed_observation"] = detailed_observation
+    linked_facts = item.get("linked_facts")
+    if isinstance(linked_facts, str):
+        linked_facts = [linked_facts]
+    elif not isinstance(linked_facts, list):
+        linked_facts = []
+    if fact_summary and fact_summary not in linked_facts:
+        linked_facts.append(fact_summary)
+    item["linked_facts"] = [str(text).strip() for text in linked_facts if str(text).strip()]
+    source_path = item.get("_source_path") or []
+    if source_path:
+        item.setdefault("normalization_note", f"flattened_evidence_path:{'/'.join(source_path)}")
+    return item
+
+
+def _finalize_evidence_item(
+    item: dict[str, Any],
+    target: dict[str, str] | None,
+    figure_metadata_map: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    result = dict(item)
+    metadata: dict[str, Any] = {}
+    if target:
+        result = _apply_single_evidence_target(result, target, figure_metadata_map)
+        if target["kind"] == "figure":
+            metadata = figure_metadata_map.get(target["id"], {})
+    result.setdefault("evidence_type", result.get("object_type"))
+    result["figure_type"] = result.get("figure_type") or _map_figure_type({**metadata, **result})
+    if not result.get("evidence_id"):
+        base_id = str(result.get("figure_id") or result.get("table_id") or result.get("object_id") or "").strip()
+        if base_id:
+            result["evidence_id"] = base_id
+    return result
 
 
 def _extract_evidence_targets(
@@ -1040,19 +1488,30 @@ def _extract_evidence_targets(
     table_ids: set[str],
 ) -> list[dict[str, str]]:
     evidence_id_text = str(item.get("evidence_id") or "")
+    evidence_source_text = str(item.get("evidence_source") or "")
     caption_text = str(item.get("caption") or "")
+    fact_summary_text = str(item.get("fact_summary") or "")
+    detailed_observation_text = str(item.get("detailed_observation") or "")
     reference_sentences = [
         str(text)
         for text in item.get("reference_sentences", [])
         if text
     ]
-    allowed_sources = [evidence_id_text, caption_text, *reference_sentences]
+    allowed_sources = [
+        evidence_id_text,
+        evidence_source_text,
+        caption_text,
+        fact_summary_text,
+        detailed_observation_text,
+        *reference_sentences,
+    ]
     targets: list[dict[str, str]] = []
     for figure_id in sorted(figure_metadata_map.keys(), key=len, reverse=True):
         if any(_contains_explicit_reference(text, figure_id) for text in allowed_sources):
             targets.append({"kind": "figure", "id": figure_id})
     for table_id in sorted(table_ids):
-        if any(_contains_explicit_reference(text, table_id) for text in allowed_sources):
+        aliases = _table_aliases(table_id)
+        if any(_contains_explicit_reference(text, alias) for text in allowed_sources for alias in aliases):
             targets.append({"kind": "table", "id": table_id})
     deduped: list[dict[str, str]] = []
     seen = set()
@@ -1085,6 +1544,7 @@ def _apply_single_evidence_target(
         result["figure_type"] = "table"
         result["table_id"] = target["id"]
         result["object_type"] = "table"
+    result.setdefault("note", result.get("fact_summary") or result.get("detailed_observation"))
     return result
 
 
@@ -1128,11 +1588,23 @@ def _map_figure_type(metadata: dict[str, Any]) -> str | None:
     figure_class = str(metadata.get("figure_class") or "").lower()
     caption = str(metadata.get("caption") or "")
     description = str(metadata.get("description_text") or "")
-    text = f"{caption} {description}"
-    if "tem" in text.lower():
-        return "TEM"
-    if "sem" in text.lower():
-        return "SEM"
+    fact_summary = str(metadata.get("fact_summary") or metadata.get("fact") or "")
+    text = f"{caption} {description} {fact_summary}"
+    lowered = text.lower()
+    if "27al" in lowered or " nmr" in lowered or "nmr" in lowered:
+        return "nmr_spectrum"
+    if "ferron" in lowered or "al-ferron" in lowered:
+        return "ferron_curve"
+    if "ftir" in lowered or "infrared" in lowered:
+        return "ftir_spectrum"
+    if "xrd" in lowered or "diffraction" in lowered:
+        return "xrd_pattern"
+    if "tem" in lowered:
+        return "microscopy"
+    if "sem" in lowered:
+        return "microscopy"
+    if "spinnability" in lowered or "可纺" in text:
+        return "photo_image"
     mapping = {
         "xrd_pattern": "XRD",
         "ftir_spectrum": "FTIR",
@@ -1409,6 +1881,15 @@ def _backfill_parameter_record_from_refs(
                 "normalization_note": note,
             }
         )
+    if source_note and source_note.startswith("possible_misclassified_"):
+        return parameter_record.model_copy(
+            update={
+                "normalization_note": _append_normalization_note(
+                    parameter_record.normalization_note,
+                    source_note,
+                )
+            }
+        )
     if missing_reason:
         return parameter_record.model_copy(
             update={
@@ -1577,6 +2058,8 @@ def _match_parameter_record_from_full_text(
             best_candidate = candidate
     threshold = _full_text_match_threshold(parameter_record)
     if best_score is None or best_candidate is None or best_score < threshold:
+        if _looks_like_reaction_time_misclassification(parameter_record, cleaned_markdown_text):
+            return [], "possible_misclassified_reaction_time_from_peptization_time"
         return [], None
     source_id = str(best_candidate.get("source_id") or "").strip() or None
     section = str(best_candidate.get("section") or "").strip() or None
@@ -1658,6 +2141,11 @@ def _score_full_text_evidence_candidate(candidate: dict[str, Any], parameter_rec
     normalized_text = _normalize_evidence_text(text)
     if not normalized_text:
         return None
+    if (
+        str(parameter_record.canonical_key or "") == "peptization_time_h"
+        and _candidate_looks_like_reaction_time_without_peptization(normalized_text)
+    ):
+        return None
     value_score = _parameter_value_match_score(normalized_text, parameter_record)
     keyword_score = _parameter_keyword_match_score(normalized_text, parameter_record)
     unit_score = _parameter_unit_match_score(normalized_text, parameter_record)
@@ -1723,6 +2211,39 @@ def _parameter_keywords(canonical_key: str) -> list[str]:
         "target_temperature_C": ["heat to", "heated to", "升温至", "保温", "低温煅烧"],
     }
     return mapping.get(canonical_key, [canonical_key])
+
+
+def _candidate_looks_like_reaction_time_without_peptization(normalized_text: str) -> bool:
+    reaction_markers = ["reaction time", "reaction duration", "反应时间"]
+    peptization_markers = ["peptization", "peptizing", "胶溶", "peptizing agent"]
+    return any(marker in normalized_text for marker in reaction_markers) and not any(
+        marker in normalized_text for marker in peptization_markers
+    )
+
+
+def _looks_like_reaction_time_context(record: dict[str, Any]) -> bool:
+    context_blob = " ".join(
+        str(record.get(key) or "")
+        for key in ("raw_name", "raw_text", "source_section", "section_id", "normalization_note")
+    )
+    normalized_text = _normalize_evidence_text(context_blob)
+    return _candidate_looks_like_reaction_time_without_peptization(normalized_text)
+
+
+def _looks_like_reaction_time_misclassification(
+    parameter_record: ParameterRecord,
+    cleaned_markdown_text: str,
+) -> bool:
+    if str(parameter_record.canonical_key or "") != "peptization_time_h":
+        return False
+    if parameter_record.evidence_refs:
+        return False
+    context_blob = f"{parameter_record.raw_name or ''} {parameter_record.raw_text or ''} {parameter_record.normalization_note or ''}"
+    if _looks_like_reaction_time_context({"raw_name": context_blob}):
+        return True
+    normalized_text = _normalize_evidence_text(cleaned_markdown_text)
+    value_tokens = _parameter_value_tokens("peptization_time_h", parameter_record.value)
+    return any(token in normalized_text for token in value_tokens) and "reaction time" in normalized_text and "peptization" not in normalized_text
 
 
 def _parameter_value_tokens(canonical_key: str, value: Any) -> list[str]:

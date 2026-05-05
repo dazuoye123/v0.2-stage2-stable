@@ -22,7 +22,10 @@ def test_multi_figure_evidence_is_split_into_one_row_per_figure() -> None:
     )
     assert len(split_rows) == 2
     assert {row["figure_id"] for row in split_rows} == {"图2-9", "图2-10"}
-    assert {row["figure_type"] for row in split_rows} == {"XRD", "FTIR"}
+    assert {row["figure_type"] for row in split_rows} == {
+        "xrd_pattern",
+        "ftir_spectrum",
+    }
 
 
 def test_mixed_figure_and_table_evidence_is_split() -> None:

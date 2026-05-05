@@ -20,6 +20,17 @@ from alumina_sol_extractor.models.schema_v2 import (
 )
 
 
+SPECTRAL_LIST_CANONICAL_KEYS = {
+    "nmr_27Al_peak_position_ppm",
+    "raman_peak_position_cm_1",
+    "ftir_peak_position_cm_1",
+    "xrd_peak_position_2theta_deg",
+    "peak_positions",
+    "peak_position",
+    "spectral_peak_positions",
+}
+
+
 def fill_missing_with_none(payload: dict[str, Any], keys: list[str]) -> dict[str, Any]:
     """Return a copy of ``payload`` with missing scalar keys set to ``None``."""
 
@@ -125,15 +136,13 @@ def move_top_level_core_keys_from_global_constants(
         if not entry or not entry.get("is_core_statistical_field"):
             continue
         value = result.pop(key)
-        additional_records.append(
-            ParameterRecord(
+        additional_records.extend(
+            _build_parameter_records_for_global_constant(
                 canonical_key=key,
-                raw_name=entry.get("zh_name") or entry.get("en_name") or key,
                 value=value,
                 unit=entry.get("standard_unit"),
-                raw_text=str(value) if value is not None else None,
-                normalization_note="moved_from_global_constants_top_level",
-            ).model_dump()
+                raw_name=entry.get("zh_name") or entry.get("en_name") or key,
+            )
         )
         moved_logs.append(
             {
@@ -143,6 +152,61 @@ def move_top_level_core_keys_from_global_constants(
             }
         )
     return result, moved_logs
+
+
+def _build_parameter_records_for_global_constant(
+    *,
+    canonical_key: str,
+    value: Any,
+    unit: str | None,
+    raw_name: str,
+) -> list[dict[str, Any]]:
+    base_note = "moved_from_global_constants_top_level"
+    if isinstance(value, list) and _is_list_valued_spectral_key(canonical_key):
+        records: list[dict[str, Any]] = []
+        for index, scalar_value in enumerate(value):
+            if isinstance(scalar_value, (dict, list)):
+                continue
+            records.append(
+                ParameterRecord(
+                    canonical_key=canonical_key,
+                    raw_name=raw_name,
+                    value=scalar_value,
+                    unit=unit,
+                    raw_text=str(value),
+                    normalization_note=f"{base_note}; split_list_valued_parameter:index={index};original_length={len(value)}",
+                ).model_dump()
+            )
+        return records
+    if isinstance(value, list):
+        return [
+            ParameterRecord(
+                canonical_key=canonical_key,
+                raw_name=raw_name,
+                value=None,
+                unit=unit,
+                raw_text=str(value),
+                normalization_note=f"{base_note}; raw_list_value_preserved_unmaterialized",
+            ).model_dump()
+        ]
+    return [
+        ParameterRecord(
+            canonical_key=canonical_key,
+            raw_name=raw_name,
+            value=value,
+            unit=unit,
+            raw_text=str(value) if value is not None else None,
+            normalization_note=base_note,
+        ).model_dump()
+    ]
+
+
+def _is_list_valued_spectral_key(canonical_key: str) -> bool:
+    normalized = str(canonical_key or "").strip()
+    if normalized in SPECTRAL_LIST_CANONICAL_KEYS:
+        return True
+    lowered = normalized.lower()
+    return "peak_position" in lowered or lowered.endswith("peak_positions")
 
 
 def _fill_nested_defaults(payload: dict[str, Any]) -> dict[str, Any]:
