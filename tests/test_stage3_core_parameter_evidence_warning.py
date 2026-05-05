@@ -19,6 +19,7 @@ def test_core_parameter_without_evidence_emits_warning() -> None:
                                     "raw_name": "viscosity",
                                     "value": 400,
                                     "unit": "Pa*s",
+                                    "normalization_note": "missing_evidence_reason:no_explicit_evidence_inherited_or_matched",
                                     "evidence_refs": [],
                                 },
                                 {
@@ -43,3 +44,4 @@ def test_core_parameter_without_evidence_emits_warning() -> None:
     assert len(issues) == 1
     assert issues[0]["canonical_key"] == "viscosity_Pa_s"
     assert issues[0]["scope"] == "data_point:dp-1"
+    assert issues[0]["reason"] == "no_explicit_evidence_inherited_or_matched"

@@ -9,9 +9,12 @@ from typing import Any
 
 from alumina_sol_extractor.models.schema_v2 import (
     DataProvenance,
+    DataPoint,
     EvidenceObject,
     ExperimentSeries,
     GlobalConstants,
+    EvidenceRef,
+    ParameterRecord,
     PaperBasicInfo,
     PaperExtractionRecord,
     PaperExtractionRecordList,
@@ -272,6 +275,11 @@ def _run_live_stage3_extraction(
             notes=[],
             normalization_log=moved_top_level_logs,
         ),
+    )
+    paper_record = _backfill_core_parameter_evidence(
+        record=paper_record,
+        ontology=ontology_map,
+        tables_summary=tables_summary,
     )
     validated = _validate_stage3_record(paper_record, project_root, stage3_dir)
 
@@ -1129,6 +1137,569 @@ def _map_figure_type(metadata: dict[str, Any]) -> str | None:
         "thermal_analysis_plot": "TG_DSC",
     }
     return mapping.get(figure_class, metadata.get("figure_class"))
+
+
+def _backfill_core_parameter_evidence(
+    *,
+    record: PaperExtractionRecord,
+    ontology: dict[str, dict[str, Any]],
+    tables_summary: list[dict[str, Any]] | None = None,
+) -> PaperExtractionRecord:
+    evidence_index = _build_evidence_ref_index(record)
+    updated_series: list[ExperimentSeries] = []
+    data_point_candidates: list[tuple[str, Any, list[EvidenceRef], str]] = []
+
+    for series in record.experiment_series:
+        updated_points: list[DataPoint] = []
+        for data_point in series.data_points:
+            resolved_refs = _resolve_explicit_evidence_refs(data_point.evidence_refs, evidence_index)
+            updated_independent_variables = [
+                _backfill_parameter_record_from_refs(
+                    parameter_record,
+                    resolved_refs,
+                    source_note=f"inherited_from_data_point:{data_point.sample_id or 'unknown'}",
+                )
+                for parameter_record in data_point.independent_variable_values
+            ]
+            updated_additional_records = [
+                _backfill_parameter_record_from_refs(
+                    parameter_record,
+                    resolved_refs,
+                    source_note=f"inherited_from_data_point:{data_point.sample_id or 'unknown'}",
+                )
+                for parameter_record in data_point.additional_parameter_records
+            ]
+            updated_point = data_point.model_copy(
+                update={
+                    "independent_variable_values": updated_independent_variables,
+                    "additional_parameter_records": updated_additional_records,
+                }
+            )
+            updated_points.append(updated_point)
+            data_point_candidates.extend(
+                _collect_data_point_evidence_candidates(
+                    updated_point,
+                    resolved_refs,
+                )
+            )
+        updated_series.append(series.model_copy(update={"data_points": updated_points}))
+
+    updated_global_constants = record.global_constants
+    if updated_global_constants:
+        updated_global_records: list[ParameterRecord] = []
+        for parameter_record in updated_global_constants.additional_parameter_records:
+            candidate_refs, source_note = _match_parameter_record_from_candidates(
+                parameter_record,
+                data_point_candidates,
+            )
+            if not candidate_refs:
+                candidate_refs, source_note = _match_parameter_record_from_evidence_objects(
+                    parameter_record,
+                    record.evidence_objects,
+                )
+            if not candidate_refs:
+                candidate_refs, source_note = _match_parameter_record_from_tables(
+                    parameter_record,
+                    tables_summary or [],
+                    record.evidence_objects,
+                )
+            updated_global_records.append(
+                _backfill_parameter_record_from_refs(
+                    parameter_record,
+                    candidate_refs,
+                    source_note=source_note,
+                    missing_reason=_missing_evidence_reason(parameter_record, ontology),
+                )
+            )
+        updated_global_constants = updated_global_constants.model_copy(
+            update={"additional_parameter_records": updated_global_records}
+        )
+
+    updated_record = record.model_copy(
+        update={
+            "global_constants": updated_global_constants,
+            "experiment_series": updated_series,
+        }
+    )
+    return _annotate_missing_core_parameter_evidence_reasons(updated_record, ontology)
+
+
+def _annotate_missing_core_parameter_evidence_reasons(
+    record: PaperExtractionRecord,
+    ontology: dict[str, dict[str, Any]],
+) -> PaperExtractionRecord:
+    updated_series: list[ExperimentSeries] = []
+    for series in record.experiment_series:
+        updated_points = [
+            data_point.model_copy(
+                update={
+                    "independent_variable_values": [
+                        _ensure_missing_evidence_reason(parameter_record, ontology)
+                        for parameter_record in data_point.independent_variable_values
+                    ],
+                    "additional_parameter_records": [
+                        _ensure_missing_evidence_reason(parameter_record, ontology)
+                        for parameter_record in data_point.additional_parameter_records
+                    ],
+                }
+            )
+            for data_point in series.data_points
+        ]
+        updated_series.append(series.model_copy(update={"data_points": updated_points}))
+
+    updated_global_constants = record.global_constants
+    if updated_global_constants:
+        updated_global_constants = updated_global_constants.model_copy(
+            update={
+                "additional_parameter_records": [
+                    _ensure_missing_evidence_reason(parameter_record, ontology)
+                    for parameter_record in updated_global_constants.additional_parameter_records
+                ]
+            }
+        )
+
+    return record.model_copy(
+        update={
+            "global_constants": updated_global_constants,
+            "experiment_series": updated_series,
+        }
+    )
+
+
+def _build_evidence_ref_index(record: PaperExtractionRecord) -> dict[str, EvidenceRef]:
+    index: dict[str, EvidenceRef] = {}
+    for obj in record.evidence_objects:
+        payload = obj.model_dump()
+        evidence_id = str(obj.evidence_id or "").strip()
+        figure_id = str(obj.figure_id or "").strip()
+        table_id = str(payload.get("table_id") or "").strip()
+        if evidence_id and figure_id:
+            ref = EvidenceRef(source_id=evidence_id, figure_id=figure_id)
+            for alias in {evidence_id, figure_id}:
+                index.setdefault(alias, ref)
+        elif evidence_id and table_id:
+            ref = EvidenceRef(source_id=evidence_id, table_id=table_id)
+            for alias in _table_aliases(table_id):
+                index.setdefault(alias, ref)
+        elif evidence_id:
+            ref = EvidenceRef(source_id=evidence_id)
+            index.setdefault(evidence_id, ref)
+    return index
+
+
+def _resolve_explicit_evidence_refs(
+    evidence_refs: list[EvidenceRef | str],
+    evidence_index: dict[str, EvidenceRef],
+) -> list[EvidenceRef]:
+    resolved: list[EvidenceRef] = []
+    seen: set[tuple[str | None, str | None, str | None]] = set()
+    for item in evidence_refs:
+        if isinstance(item, EvidenceRef):
+            marker = (item.source_id, item.figure_id, item.table_id)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            resolved.append(item)
+            continue
+        if not isinstance(item, str):
+            continue
+        for alias, ref in evidence_index.items():
+            if _contains_explicit_reference(item, alias):
+                marker = (ref.source_id, ref.figure_id, ref.table_id)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                resolved.append(ref)
+    figure_refs = [ref for ref in resolved if ref.figure_id]
+    if figure_refs:
+        return figure_refs
+    return resolved
+
+
+def _collect_data_point_evidence_candidates(
+    data_point: DataPoint,
+    resolved_refs: list[EvidenceRef],
+) -> list[tuple[str, Any, list[EvidenceRef], str]]:
+    candidates: list[tuple[str, Any, list[EvidenceRef], str]] = []
+    source_note = f"matched_data_point_parameter:{data_point.sample_id or 'unknown'}"
+    for parameter_record in [*data_point.independent_variable_values, *data_point.additional_parameter_records]:
+        refs = _coerce_evidence_ref_models(parameter_record.evidence_refs) or resolved_refs
+        if not refs:
+            continue
+        candidates.append(
+            (
+                str(parameter_record.canonical_key or ""),
+                parameter_record.value,
+                refs,
+                source_note,
+            )
+        )
+    if not resolved_refs:
+        return candidates
+    for candidate_key, candidate_value in _iter_data_point_scalar_values(data_point):
+        candidates.append((candidate_key, candidate_value, resolved_refs, source_note))
+    return candidates
+
+
+def _iter_data_point_scalar_values(data_point: DataPoint) -> list[tuple[str, Any]]:
+    values: list[tuple[str, Any]] = []
+    for container in (data_point.process_parameters, data_point.results):
+        values.extend(_flatten_nested_scalar_items(container))
+    return values
+
+
+def _flatten_nested_scalar_items(payload: dict[str, Any] | Any) -> list[tuple[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    values: list[tuple[str, Any]] = []
+    for key, value in payload.items():
+        if isinstance(value, dict):
+            values.extend(_flatten_nested_scalar_items(value))
+            continue
+        if isinstance(value, list):
+            continue
+        values.append((str(key), value))
+    return values
+
+
+def _table_aliases(table_id: str) -> set[str]:
+    aliases = {table_id}
+    match = re.match(r"table_(\d+)$", table_id)
+    if not match:
+        return aliases
+    digits = match.group(1)
+    aliases.add(f"table_{digits}")
+    aliases.add(f"table{digits}")
+    aliases.add(f"表{digits}")
+    aliases.add(f"表{int(digits)}")
+    return aliases
+
+
+def _backfill_parameter_record_from_refs(
+    parameter_record: ParameterRecord,
+    refs: list[EvidenceRef],
+    *,
+    source_note: str | None = None,
+    missing_reason: str | None = None,
+) -> ParameterRecord:
+    if parameter_record.evidence_refs:
+        return _strip_missing_evidence_reason(parameter_record)
+    if refs:
+        note = parameter_record.normalization_note
+        if source_note:
+            note = _append_normalization_note(note, source_note)
+        note = _remove_normalization_note_prefix(note, "missing_evidence_reason:")
+        return parameter_record.model_copy(
+            update={
+                "evidence_refs": refs,
+                "normalization_note": note,
+            }
+        )
+    if missing_reason:
+        return parameter_record.model_copy(
+            update={
+                "normalization_note": _append_normalization_note(
+                    parameter_record.normalization_note,
+                    f"missing_evidence_reason:{missing_reason}",
+                )
+            }
+        )
+    return parameter_record
+
+
+def _ensure_missing_evidence_reason(
+    parameter_record: ParameterRecord,
+    ontology: dict[str, dict[str, Any]],
+) -> ParameterRecord:
+    if parameter_record.evidence_refs:
+        return _strip_missing_evidence_reason(parameter_record)
+    reason = _missing_evidence_reason(parameter_record, ontology)
+    if not reason:
+        return parameter_record
+    if "missing_evidence_reason:" in str(parameter_record.normalization_note or ""):
+        return parameter_record
+    return parameter_record.model_copy(
+        update={
+            "normalization_note": _append_normalization_note(
+                parameter_record.normalization_note,
+                f"missing_evidence_reason:{reason}",
+            )
+        }
+    )
+
+
+def _strip_missing_evidence_reason(parameter_record: ParameterRecord) -> ParameterRecord:
+    note = _remove_normalization_note_prefix(parameter_record.normalization_note, "missing_evidence_reason:")
+    if note == parameter_record.normalization_note:
+        return parameter_record
+    return parameter_record.model_copy(update={"normalization_note": note})
+
+
+def _append_normalization_note(note: str | None, addition: str) -> str:
+    existing = [part.strip() for part in str(note or "").split("; ") if part.strip()]
+    if addition not in existing:
+        existing.append(addition)
+    return "; ".join(existing)
+
+
+def _remove_normalization_note_prefix(note: str | None, prefix: str) -> str | None:
+    parts = [part.strip() for part in str(note or "").split("; ") if part.strip()]
+    filtered = [part for part in parts if not part.startswith(prefix)]
+    if not filtered:
+        return None
+    return "; ".join(filtered)
+
+
+def _match_parameter_record_from_candidates(
+    parameter_record: ParameterRecord,
+    candidates: list[tuple[str, Any, list[EvidenceRef], str]],
+) -> tuple[list[EvidenceRef], str | None]:
+    canonical_key = str(parameter_record.canonical_key or "")
+    for candidate_key, candidate_value, candidate_refs, source_note in candidates:
+        normalized_value = _normalize_candidate_value_for_target(
+            target_key=canonical_key,
+            candidate_key=candidate_key,
+            candidate_value=candidate_value,
+        )
+        if normalized_value is None:
+            continue
+        if _parameter_values_match(parameter_record.value, normalized_value):
+            return candidate_refs, source_note
+    return [], None
+
+
+def _match_parameter_record_from_evidence_objects(
+    parameter_record: ParameterRecord,
+    evidence_objects: list[EvidenceObject],
+) -> tuple[list[EvidenceRef], str | None]:
+    for item in evidence_objects:
+        payload = item.model_dump()
+        source_id = str(payload.get("evidence_id") or "").strip()
+        figure_id = str(payload.get("figure_id") or "").strip() or None
+        caption = str(payload.get("caption") or "").strip()
+        texts = [caption]
+        texts.extend(str(text).strip() for text in (payload.get("linked_facts") or []) if text)
+        for text in texts:
+            if not text:
+                continue
+            if _text_matches_parameter_record(text, parameter_record):
+                return (
+                    [
+                        EvidenceRef(
+                            source_id=source_id or None,
+                            figure_id=figure_id,
+                            quote_or_context=text,
+                        )
+                    ],
+                    f"matched_evidence_object:{source_id or figure_id or 'unknown'}",
+                )
+    return [], None
+
+
+def _match_parameter_record_from_tables(
+    parameter_record: ParameterRecord,
+    tables_summary: list[dict[str, Any]],
+    evidence_objects: list[EvidenceObject],
+) -> tuple[list[EvidenceRef], str | None]:
+    captions_by_table_id = _build_table_caption_map(evidence_objects)
+    for table in tables_summary:
+        table_id = str(table.get("table_id") or "").strip()
+        if not table_id:
+            continue
+        rows = table.get("rows")
+        if not isinstance(rows, list) or not rows:
+            continue
+        caption = captions_by_table_id.get(table_id, "")
+        header_text = _table_row_to_text(rows[0]) if rows else ""
+        for row in rows[1:]:
+            row_text = _table_row_to_text(row)
+            combined_text = " ".join(part for part in [caption, header_text, row_text] if part)
+            if _text_matches_parameter_record(combined_text, parameter_record):
+                return (
+                    [
+                        EvidenceRef(
+                            source_id=table_id,
+                            quote_or_context=row_text,
+                        )
+                    ],
+                    f"matched_table_output:{table_id}",
+                )
+    return [], None
+
+
+def _build_table_caption_map(evidence_objects: list[EvidenceObject]) -> dict[str, str]:
+    captions: dict[str, str] = {}
+    for item in evidence_objects:
+        payload = item.model_dump()
+        table_id = str(payload.get("table_id") or "").strip()
+        if table_id:
+            captions[table_id] = str(payload.get("caption") or "")
+    return captions
+
+
+def _table_row_to_text(row: Any) -> str:
+    if isinstance(row, dict):
+        ordered_values = [str(value).strip() for _, value in sorted(row.items(), key=lambda item: item[0]) if value is not None]
+        return " ".join(value for value in ordered_values if value)
+    if isinstance(row, list):
+        return " ".join(str(value).strip() for value in row if value is not None)
+    return str(row or "").strip()
+
+
+def _text_matches_parameter_record(text: str, parameter_record: ParameterRecord) -> bool:
+    canonical_key = str(parameter_record.canonical_key or "")
+    if not canonical_key or not text:
+        return False
+    if not any(_contains_exact_value_token(text, token) for token in _parameter_value_tokens(canonical_key, parameter_record.value)):
+        return False
+    keywords = _parameter_keywords(canonical_key)
+    if not keywords:
+        return False
+    lowered = text.lower()
+    return any(keyword.lower() in lowered for keyword in keywords)
+
+
+def _contains_exact_value_token(text: str, token: str) -> bool:
+    if not token:
+        return False
+    escaped = re.escape(token)
+    pattern = rf"(?<![\dA-Za-z]){escaped}(?![\dA-Za-z])"
+    return re.search(pattern, text) is not None
+
+
+def _parameter_keywords(canonical_key: str) -> list[str]:
+    mapping = {
+        "viscosity_Pa_s": ["viscosity", "spinning viscosity"],
+        "spinning_channel_temperature_C": ["spinning channel temperature", "channel temperature", "甬道温度", "辊道温度"],
+        "feed_pressure_MPa": ["feed pressure", "进料压力"],
+        "relative_humidity_percent": ["relative humidity", "环境湿度", "湿度"],
+        "average_fiber_diameter_um": ["average fiber diameter", "fiber diameter", "纤维直径", "直径"],
+        "tensile_strength_MPa": ["tensile strength", "拉伸强度", "单丝拉伸强度", "强度"],
+        "service_temperature_C": ["service temperature", "使用温度", "耐温"],
+        "holding_time_h": ["holding time", "holding", "保温", "恒温"],
+        "strength_retention_percent": ["strength retention", "强度保留率", "保留率"],
+    }
+    return mapping.get(canonical_key, [canonical_key])
+
+
+def _parameter_value_tokens(canonical_key: str, value: Any) -> list[str]:
+    number = _coerce_float(value)
+    if number is None:
+        text_value = str(value).strip()
+        return [text_value] if text_value else []
+    tokens = {_format_number_token(number)}
+    if canonical_key == "tensile_strength_MPa":
+        gpa_value = number / 1000.0
+        tokens.update(
+            {
+                _format_number_token(gpa_value),
+                f"{_format_number_token(gpa_value)}GPa",
+                f"{_format_number_token(gpa_value)} GPa",
+            }
+        )
+    elif canonical_key in {"spinning_channel_temperature_C", "service_temperature_C"}:
+        tokens.update({f"{_format_number_token(number)}°C", f"{_format_number_token(number)}℃"})
+    elif canonical_key == "feed_pressure_MPa":
+        tokens.update({f"{_format_number_token(number)}MPa", f"{_format_number_token(number)} MPa"})
+    elif canonical_key in {"relative_humidity_percent", "strength_retention_percent"}:
+        tokens.update({f"{_format_number_token(number)}%", f"{_format_number_token(number)} %"})
+    elif canonical_key == "holding_time_h":
+        tokens.update({f"{_format_number_token(number)}h", f"{_format_number_token(number)} h"})
+    elif canonical_key == "average_fiber_diameter_um":
+        tokens.update(
+            {
+                f"{_format_number_token(number)}μm",
+                f"{_format_number_token(number)} μm",
+                f"{_format_number_token(number)}um",
+                f"{_format_number_token(number)} um",
+            }
+        )
+    return [token for token in tokens if token]
+
+
+def _format_number_token(number: float) -> str:
+    if abs(number - round(number)) < 1e-9:
+        return str(int(round(number)))
+    return f"{number:.6f}".rstrip("0").rstrip(".")
+
+
+def _normalize_candidate_value_for_target(
+    *,
+    target_key: str,
+    candidate_key: str,
+    candidate_value: Any,
+) -> Any | None:
+    aliases = {
+        "viscosity_Pa_s": {"viscosity_Pa_s": 1.0},
+        "spinning_channel_temperature_C": {"spinning_channel_temperature_C": 1.0},
+        "feed_pressure_MPa": {"feed_pressure_MPa": 1.0},
+        "relative_humidity_percent": {"relative_humidity_percent": 1.0},
+        "average_fiber_diameter_um": {
+            "average_fiber_diameter_um": 1.0,
+            "gel_fiber_diameter_um": 1.0,
+            "ceramic_fiber_diameter_um": 1.0,
+        },
+        "tensile_strength_MPa": {
+            "tensile_strength_MPa": 1.0,
+            "ceramic_fiber_tensile_strength_GPa": 1000.0,
+            "tensile_strength_GPa": 1000.0,
+        },
+        "service_temperature_C": {"service_temperature_C": 1.0},
+        "holding_time_h": {"holding_time_h": 1.0},
+        "strength_retention_percent": {"strength_retention_percent": 1.0},
+    }
+    scale = (aliases.get(target_key) or {}).get(candidate_key)
+    if scale is None:
+        return None
+    number = _coerce_float(candidate_value)
+    if number is None:
+        return candidate_value if scale == 1.0 else None
+    return number * scale
+
+
+def _parameter_values_match(left: Any, right: Any) -> bool:
+    if left == right:
+        return True
+    left_number = _coerce_float(left)
+    right_number = _coerce_float(right)
+    if left_number is not None and right_number is not None:
+        return abs(left_number - right_number) < 1e-9
+    return str(left).strip() == str(right).strip()
+
+
+def _coerce_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_evidence_ref_models(evidence_refs: list[EvidenceRef | str]) -> list[EvidenceRef]:
+    models: list[EvidenceRef] = []
+    seen: set[tuple[str | None, str | None, str | None]] = set()
+    for ref in evidence_refs:
+        if isinstance(ref, EvidenceRef):
+            marker = (ref.source_id, ref.figure_id, ref.table_id)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            models.append(ref)
+    return models
+
+
+def _missing_evidence_reason(
+    parameter_record: ParameterRecord,
+    ontology: dict[str, dict[str, Any]],
+) -> str | None:
+    canonical_key = str(parameter_record.canonical_key or "")
+    ontology_entry = ontology.get(canonical_key) or {}
+    if not ontology_entry.get("is_core_statistical_field"):
+        return None
+    return "no_explicit_evidence_inherited_or_matched"
 
 
 def _detect_mojibake(text: str | None) -> bool:

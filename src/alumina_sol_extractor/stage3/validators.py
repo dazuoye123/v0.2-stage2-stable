@@ -158,6 +158,7 @@ def validate_core_parameter_without_evidence(
                 "type": "core_parameter_without_evidence_warning",
                 "scope": scope,
                 "canonical_key": canonical_key,
+                "reason": _extract_missing_evidence_reason(parameter_record.normalization_note),
             }
         )
     return issues
@@ -245,3 +246,11 @@ def _iter_additional_parameter_records(record: PaperExtractionRecord):
             scope = f"data_point:{data_point.sample_id}"
             for parameter_record in data_point.additional_parameter_records:
                 yield scope, parameter_record
+
+
+def _extract_missing_evidence_reason(note: str | None) -> str | None:
+    for part in str(note or "").split("; "):
+        token = part.strip()
+        if token.startswith("missing_evidence_reason:"):
+            return token.split(":", 1)[1].strip() or None
+    return None
