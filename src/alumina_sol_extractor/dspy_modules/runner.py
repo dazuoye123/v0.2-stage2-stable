@@ -30,6 +30,9 @@ from alumina_sol_extractor.stage3.normalization import (
 from alumina_sol_extractor.stage3.report import build_stage3_validation_report
 from alumina_sol_extractor.stage3.validators import (
     build_quality_flags,
+    validate_core_parameter_without_evidence,
+    validate_duplicate_evidence_ids,
+    validate_evidence_figure_id_alignment,
     validate_evidence_refs,
     validate_id_uniqueness,
     validate_no_core_keys_in_extended_data,
@@ -377,14 +380,20 @@ def _validate_stage3_record(record: PaperExtractionRecord, project_root: Path, s
         for issue in validate_canonical_keys(parameter_records, ontology)
     ]
     duplicate_ids = validate_id_uniqueness(record)
+    duplicate_evidence_ids = validate_duplicate_evidence_ids(record)
     evidence_ref_warnings = validate_evidence_refs(record)
+    evidence_figure_id_mismatches = validate_evidence_figure_id_alignment(record)
+    core_parameter_without_evidence = validate_core_parameter_without_evidence(record, ontology)
     extended_data_core_keys = validate_no_core_keys_in_extended_data(record, ontology)
     top_level_core_keys = validate_no_top_level_core_keys_in_global_constants(record, ontology)
     unit_warnings = validate_units_against_ontology(record, ontology)
     combined_issues = (
         canonical_key_errors
         + duplicate_ids
+        + duplicate_evidence_ids
         + evidence_ref_warnings
+        + evidence_figure_id_mismatches
+        + core_parameter_without_evidence
         + extended_data_core_keys
         + top_level_core_keys
         + unit_warnings
@@ -410,7 +419,10 @@ def _validate_stage3_record(record: PaperExtractionRecord, project_root: Path, s
         canonical_key_errors=canonical_key_errors,
         unit_warnings=unit_warnings,
         duplicate_ids=duplicate_ids,
+        duplicate_evidence_ids=duplicate_evidence_ids,
         evidence_ref_warnings=evidence_ref_warnings,
+        evidence_figure_id_mismatches=evidence_figure_id_mismatches,
+        core_parameter_without_evidence=core_parameter_without_evidence,
         extended_data_core_keys=extended_data_core_keys,
         top_level_core_keys=top_level_core_keys,
         rejected_parameter_records=rejected_records,
@@ -431,7 +443,10 @@ def _build_validation_summary(
     _, rejected_records = reject_noncanonical_records(parameter_records, ontology)
     canonical_key_errors = validate_canonical_keys(parameter_records, ontology)
     duplicate_ids = validate_id_uniqueness(record)
+    duplicate_evidence_ids = validate_duplicate_evidence_ids(record)
     evidence_ref_warnings = validate_evidence_refs(record)
+    evidence_figure_id_mismatches = validate_evidence_figure_id_alignment(record)
+    core_parameter_without_evidence = validate_core_parameter_without_evidence(record, ontology)
     extended_data_core_keys = validate_no_core_keys_in_extended_data(record, ontology)
     top_level_core_keys = validate_no_top_level_core_keys_in_global_constants(record, ontology)
     unit_warnings = validate_units_against_ontology(record, ontology)
@@ -440,7 +455,10 @@ def _build_validation_summary(
         "canonical_key_errors_count": len(canonical_key_errors),
         "unit_warning_count": len(unit_warnings),
         "duplicate_id_count": len(duplicate_ids),
+        "duplicate_evidence_id_count": len(duplicate_evidence_ids),
         "evidence_ref_warning_count": len(evidence_ref_warnings),
+        "evidence_figure_id_mismatch_count": len(evidence_figure_id_mismatches),
+        "core_parameter_without_evidence_count": len(core_parameter_without_evidence),
         "extended_data_core_key_count": len(extended_data_core_keys),
         "top_level_core_key_count": len(top_level_core_keys),
         "top_level_core_key_warnings": top_level_core_keys,
@@ -781,7 +799,7 @@ def _normalize_datapoint_item(
         normalized.setdefault("extended_data", {})
         normalized["extended_data"] = dict(normalized.get("extended_data") or {})
         normalized["extended_data"].setdefault("parent_series_id", series.get("series_id"))
-        return normalized
+        return _structure_data_point_sections(normalized, ontology)
 
     sample_id = item.get("sample_id") or f"{series.get('series_id') or 'series'}-dp-{item_index + 1}"
     process_parameters: dict[str, Any] = {}
@@ -801,13 +819,24 @@ def _normalize_datapoint_item(
             "raw_text": str(value) if value is not None else None,
         }
         category = str(entry.get("category", "")).lower() if entry else ""
-        if category in {"processing", "composition", "solution", "sol_process", "sol_property"}:
+        if key in _formability_keys():
+            results[key] = value
+        elif category in {
+            "processing",
+            "composition",
+            "solution",
+            "sol_process",
+            "sol_property",
+            "precursor_solution",
+            "forming",
+            "heat_treatment",
+        }:
             process_parameters[key] = value
         else:
             results[key] = value
         additional_parameter_records.append(parameter_record)
 
-    return {
+    normalized = {
         "sample_id": sample_id,
         "sample_label": item.get("sample_label") or sample_id,
         "independent_variable_values": independent_variable_values,
@@ -819,6 +848,126 @@ def _normalize_datapoint_item(
             **dict(item.get("extended_data") or {}),
             "parent_series_id": series.get("series_id"),
         },
+    }
+    return _structure_data_point_sections(normalized, ontology)
+
+
+def _structure_data_point_sections(
+    item: dict[str, Any],
+    ontology: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    normalized = dict(item)
+    extended_data = dict(normalized.get("extended_data") or {})
+    normalized["process_parameters"] = _structure_process_parameters(
+        dict(normalized.get("process_parameters") or {}),
+        ontology,
+        extended_data,
+    )
+    normalized["results"] = _structure_result_sections(
+        dict(normalized.get("results") or {}),
+        ontology,
+        extended_data,
+    )
+    normalized["extended_data"] = extended_data
+    return normalized
+
+
+def _structure_process_parameters(
+    process_parameters: dict[str, Any],
+    ontology: dict[str, dict[str, Any]],
+    extended_data: dict[str, Any],
+) -> dict[str, Any]:
+    sections = {
+        "precursor_solution": dict(process_parameters.get("precursor_solution") or {}),
+        "forming": dict(process_parameters.get("forming") or {}),
+        "heat_treatment": dict(process_parameters.get("heat_treatment") or {}),
+    }
+    section_names = set(sections)
+    leftovers: dict[str, Any] = {}
+    for key, value in process_parameters.items():
+        if key in section_names:
+            continue
+        section_name = _map_process_parameter_section(key, ontology)
+        if section_name:
+            sections[section_name][key] = value
+        else:
+            leftovers[key] = value
+    if leftovers:
+        existing = dict(extended_data.get("unclassified_process_parameters") or {})
+        existing.update(leftovers)
+        extended_data["unclassified_process_parameters"] = existing
+    return sections
+
+
+def _map_process_parameter_section(
+    canonical_key: str,
+    ontology: dict[str, dict[str, Any]],
+) -> str | None:
+    category = str((ontology.get(canonical_key) or {}).get("category") or "").lower()
+    if category in {"precursor_solution", "composition", "solution", "sol_process", "sol_property"}:
+        return "precursor_solution"
+    if category in {"forming", "processing"}:
+        return "forming"
+    if category == "heat_treatment":
+        return "heat_treatment"
+    return None
+
+
+def _structure_result_sections(
+    results: dict[str, Any],
+    ontology: dict[str, dict[str, Any]],
+    extended_data: dict[str, Any],
+) -> dict[str, Any]:
+    sections = {
+        "formability": dict(results.get("formability") or {}),
+        "phase_and_chemistry": dict(results.get("phase_and_chemistry") or {}),
+        "microstructure_and_pores": dict(results.get("microstructure_and_pores") or {}),
+        "mechanical_properties": dict(results.get("mechanical_properties") or {}),
+        "thermal_properties": dict(results.get("thermal_properties") or {}),
+        "mechanism_and_evidence": dict(results.get("mechanism_and_evidence") or {}),
+    }
+    section_names = set(sections)
+    leftovers: dict[str, Any] = {}
+    for key, value in results.items():
+        if key in section_names:
+            continue
+        section_name = _map_result_section(key, ontology)
+        if section_name:
+            sections[section_name][key] = value
+        else:
+            leftovers[key] = value
+    if leftovers:
+        existing = dict(extended_data.get("unclassified_results") or {})
+        existing.update(leftovers)
+        extended_data["unclassified_results"] = existing
+    return sections
+
+
+def _map_result_section(
+    canonical_key: str,
+    ontology: dict[str, dict[str, Any]],
+) -> str | None:
+    category = str((ontology.get(canonical_key) or {}).get("category") or "").lower()
+    if category == "structure":
+        return "microstructure_and_pores"
+    if category == "mechanical":
+        return "mechanical_properties"
+    if category in {"production", "forming"}:
+        return "formability"
+    formability_keys = _formability_keys()
+    if canonical_key in formability_keys:
+        return "formability"
+    return None
+
+
+def _formability_keys() -> set[str]:
+    return {
+        "spinnability",
+        "fiber_forming_ability",
+        "continuous_length_m",
+        "spinnability_description",
+        "continuous_spinning",
+        "surface_quality_description",
     }
 
 
@@ -864,16 +1013,9 @@ def _split_evidence_objects_payload(
         if not ids:
             split_payload.append(item)
             continue
-        if len(ids) == 1:
-            split_payload.append(_apply_single_evidence_target(item, ids[0], figure_metadata_map))
-            continue
-        for idx, target in enumerate(ids, start=1):
-            split_item = _apply_single_evidence_target(item, target, figure_metadata_map)
-            split_item["evidence_id"] = split_item.get("evidence_id") or f"evidence_{idx}"
-            if len(ids) > 1:
-                split_item["evidence_id"] = f"{split_item['evidence_id']}"
-            split_payload.append(split_item)
-    return split_payload
+        for target in ids:
+            split_payload.append(_apply_single_evidence_target(item, target, figure_metadata_map))
+    return _ensure_unique_evidence_ids(split_payload)
 
 
 def _extract_evidence_targets(
@@ -881,18 +1023,20 @@ def _extract_evidence_targets(
     figure_metadata_map: dict[str, dict[str, Any]],
     table_ids: set[str],
 ) -> list[dict[str, str]]:
-    haystacks = [
-        str(item.get("evidence_id") or ""),
-        str(item.get("caption") or ""),
-        " ".join(str(text) for text in item.get("reference_sentences", []) if text),
-        str(item.get("fact") or ""),
+    evidence_id_text = str(item.get("evidence_id") or "")
+    caption_text = str(item.get("caption") or "")
+    reference_sentences = [
+        str(text)
+        for text in item.get("reference_sentences", [])
+        if text
     ]
+    allowed_sources = [evidence_id_text, caption_text, *reference_sentences]
     targets: list[dict[str, str]] = []
-    for figure_id in figure_metadata_map.keys():
-        if any(figure_id and figure_id in haystack for haystack in haystacks):
+    for figure_id in sorted(figure_metadata_map.keys(), key=len, reverse=True):
+        if any(_contains_explicit_reference(text, figure_id) for text in allowed_sources):
             targets.append({"kind": "figure", "id": figure_id})
     for table_id in sorted(table_ids):
-        if any(table_id and table_id in haystack for haystack in haystacks):
+        if any(_contains_explicit_reference(text, table_id) for text in allowed_sources):
             targets.append({"kind": "table", "id": table_id})
     deduped: list[dict[str, str]] = []
     seen = set()
@@ -926,6 +1070,42 @@ def _apply_single_evidence_target(
         result["table_id"] = target["id"]
         result["object_type"] = "table"
     return result
+
+
+def _contains_explicit_reference(text: str, target_id: str) -> bool:
+    if not text or not target_id:
+        return False
+    start = text.find(target_id)
+    while start != -1:
+        end = start + len(target_id)
+        before = text[start - 1] if start > 0 else ""
+        after = text[end] if end < len(text) else ""
+        if not before.isdigit() and not after.isdigit():
+            return True
+        start = text.find(target_id, start + 1)
+    return False
+
+
+def _ensure_unique_evidence_ids(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    grouped: dict[str, list[int]] = {}
+    for index, item in enumerate(payload):
+        base_id = str(item.get("evidence_id") or "").strip() or f"evidence_{index + 1}"
+        item["evidence_id"] = base_id
+        grouped.setdefault(base_id, []).append(index)
+
+    for base_id, indices in grouped.items():
+        if len(indices) == 1:
+            continue
+        for offset, item_index in enumerate(indices, start=1):
+            payload[item_index]["evidence_id"] = f"{base_id}__ev{offset:02d}"
+
+    for item in payload:
+        evidence_id = str(item.get("evidence_id") or "").strip()
+        if not evidence_id:
+            counts["anonymous"] = counts.get("anonymous", 0) + 1
+            item["evidence_id"] = f"evidence__ev{counts['anonymous']:02d}"
+    return payload
 
 
 def _map_figure_type(metadata: dict[str, Any]) -> str | None:

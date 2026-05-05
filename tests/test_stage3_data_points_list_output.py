@@ -22,8 +22,8 @@ def test_dict_data_points_payload_is_wrapped_into_list() -> None:
     assert parse_issue is None
     assert len(records) == 1
     assert records[0]["sample_id"] == "ES-01-dp-1"
-    assert records[0]["process_parameters"]["viscosity_Pa_s"] == 400
-    assert records[0]["process_parameters"]["feed_pressure_MPa"] == 8.8
+    assert records[0]["process_parameters"]["precursor_solution"]["viscosity_Pa_s"] == 400
+    assert records[0]["process_parameters"]["forming"]["feed_pressure_MPa"] == 8.8
     assert len(records[0]["additional_parameter_records"]) == 2
 
 
