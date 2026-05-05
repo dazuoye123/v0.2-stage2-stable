@@ -21,7 +21,6 @@ def validate_id_uniqueness(record: PaperExtractionRecord) -> list[dict[str, Any]
         "series_id": [series.series_id for series in record.experiment_series if series.series_id],
         "sample_id": [dp.sample_id for series in record.experiment_series for dp in series.data_points if dp.sample_id],
         "evidence_id": [obj.evidence_id for obj in record.evidence_objects if obj.evidence_id],
-        "table_id": [ref.table_id for ref in _iter_evidence_refs(record) if getattr(ref, "table_id", None)],
         "link_id": [link.link_id for link in record.cross_modal_links if link.link_id],
     }
     issues: list[dict[str, Any]] = []
@@ -42,7 +41,12 @@ def validate_evidence_refs(record: PaperExtractionRecord) -> list[dict[str, Any]
         source_id = getattr(ref, "source_id", None)
         figure_id = getattr(ref, "figure_id", None)
         table_id = getattr(ref, "table_id", None)
-        if source_id and source_id not in evidence_ids and source_id not in figure_ids:
+        if (
+            source_id
+            and not str(source_id).startswith("text:")
+            and source_id not in evidence_ids
+            and source_id not in figure_ids
+        ):
             issues.append({"type": "evidence_ref_warning", "reason": "unknown_source_id", "source_id": source_id})
         if figure_id and figure_id not in figure_ids:
             issues.append({"type": "evidence_ref_warning", "reason": "unknown_figure_id", "figure_id": figure_id})

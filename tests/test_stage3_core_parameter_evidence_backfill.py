@@ -255,3 +255,69 @@ def test_backfill_uses_table_output_when_value_and_field_match_exactly() -> None
     assert parameter_record.evidence_refs[0].source_id == "table_001"
     assert parameter_record.evidence_refs[0].table_id is None
     assert "matched_table_output:table_001" in str(parameter_record.normalization_note)
+
+
+def test_backfill_uses_full_text_with_unit_conversion_and_context_scoring() -> None:
+    record = PaperExtractionRecord(
+        global_constants=GlobalConstants(
+            additional_parameter_records=[
+                ParameterRecord(canonical_key="tensile_strength_MPa", raw_name="strength", value=1370, unit="MPa"),
+                ParameterRecord(canonical_key="average_fiber_diameter_um", raw_name="diameter", value=10, unit="um"),
+                ParameterRecord(canonical_key="sintering_temperature_C", raw_name="sintering temperature", value=1300, unit="C"),
+            ]
+        )
+    )
+    ontology = {
+        "tensile_strength_MPa": {"is_core_statistical_field": True},
+        "average_fiber_diameter_um": {"is_core_statistical_field": True},
+        "sintering_temperature_C": {"is_core_statistical_field": True},
+    }
+    cleaned_markdown_text = """
+# 2 Results
+结果见表 1, 可以看出最佳条件为升温至 650°C 后在 1300°C 下烧结 10 min, 断裂强度为 1.37 GPa, 平均直径约 10 μm。
+"""
+
+    updated = _backfill_core_parameter_evidence(
+        record=record,
+        ontology=ontology,
+        cleaned_markdown_text=cleaned_markdown_text,
+    )
+
+    strength_record, diameter_record, sintering_record = updated.global_constants.additional_parameter_records
+    assert strength_record.evidence_refs
+    assert strength_record.evidence_refs[0].source_id.startswith("text:")
+    assert "1.37 GPa" in str(strength_record.evidence_refs[0].quote_or_context)
+    assert strength_record.evidence_refs[0].confidence is not None
+
+    assert diameter_record.evidence_refs
+    assert "10 μm" in str(diameter_record.evidence_refs[0].quote_or_context)
+
+    assert sintering_record.evidence_refs
+    assert "1300°C 下烧结 10 min" in str(sintering_record.evidence_refs[0].quote_or_context)
+
+
+def test_backfill_full_text_requires_semantic_match_and_ignores_references() -> None:
+    record = PaperExtractionRecord(
+        global_constants=GlobalConstants(
+            additional_parameter_records=[
+                ParameterRecord(canonical_key="sintering_temperature_C", raw_name="sintering temperature", value=1300, unit="C")
+            ]
+        )
+    )
+    ontology = {"sintering_temperature_C": {"is_core_statistical_field": True}}
+    cleaned_markdown_text = """
+# 2 Results
+1300°C 下观察到纤维颜色变化，但这里没有热处理工艺描述。
+# References
+[1] Example Author. Sample measured at 1300°C for calibration.
+"""
+
+    updated = _backfill_core_parameter_evidence(
+        record=record,
+        ontology=ontology,
+        cleaned_markdown_text=cleaned_markdown_text,
+    )
+
+    parameter_record = updated.global_constants.additional_parameter_records[0]
+    assert parameter_record.evidence_refs == []
+    assert "missing_evidence_reason:no_explicit_evidence_inherited_or_matched" in str(parameter_record.normalization_note)

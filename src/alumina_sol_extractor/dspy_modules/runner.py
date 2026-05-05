@@ -125,7 +125,8 @@ def _run_live_stage3_extraction(
 ) -> dict[str, Any]:
     configure_dspy_lm(dspy_settings)
 
-    paper_text = _read_text_best_effort(cleaned_markdown_path)
+    full_paper_text = _read_text_best_effort(cleaned_markdown_path)
+    paper_text = full_paper_text
     if paper_text_limit_chars and paper_text_limit_chars > 0:
         paper_text = paper_text[:paper_text_limit_chars]
     stage2_output_dir = output_dir
@@ -280,6 +281,7 @@ def _run_live_stage3_extraction(
         record=paper_record,
         ontology=ontology_map,
         tables_summary=tables_summary,
+        cleaned_markdown_text=full_paper_text,
     )
     validated = _validate_stage3_record(paper_record, project_root, stage3_dir)
 
@@ -589,8 +591,14 @@ def _postprocess_paper_basic_info(
 
     head_lines = [line.strip().lstrip("#").strip() for line in paper_text[:5000].splitlines() if line.strip()]
     title_candidate = next((line for line in head_lines if _looks_like_title_line(line)), None)
-    if not result.get("title"):
-        result["title"] = title_candidate or source_file.stem
+    if not result.get("title") and title_candidate:
+        result["title"] = title_candidate
+    result["title"] = (
+        result.get("title_zh")
+        or result.get("title_en")
+        or result.get("title")
+        or source_file.stem
+    )
     if not result.get("source_file"):
         result["source_file"] = str(source_file)
 
@@ -1144,6 +1152,7 @@ def _backfill_core_parameter_evidence(
     record: PaperExtractionRecord,
     ontology: dict[str, dict[str, Any]],
     tables_summary: list[dict[str, Any]] | None = None,
+    cleaned_markdown_text: str | None = None,
 ) -> PaperExtractionRecord:
     evidence_index = _build_evidence_ref_index(record)
     updated_series: list[ExperimentSeries] = []
@@ -1202,6 +1211,11 @@ def _backfill_core_parameter_evidence(
                     parameter_record,
                     tables_summary or [],
                     record.evidence_objects,
+                )
+            if not candidate_refs:
+                candidate_refs, source_note = _match_parameter_record_from_full_text(
+                    parameter_record,
+                    cleaned_markdown_text or "",
                 )
             updated_global_records.append(
                 _backfill_parameter_record_from_refs(
@@ -1546,17 +1560,135 @@ def _table_row_to_text(row: Any) -> str:
     return str(row or "").strip()
 
 
+def _match_parameter_record_from_full_text(
+    parameter_record: ParameterRecord,
+    cleaned_markdown_text: str,
+) -> tuple[list[EvidenceRef], str | None]:
+    if not cleaned_markdown_text.strip():
+        return [], None
+    best_score: int | None = None
+    best_candidate: dict[str, Any] | None = None
+    for candidate in _iter_full_text_evidence_candidates(cleaned_markdown_text):
+        score = _score_full_text_evidence_candidate(candidate, parameter_record)
+        if score is None:
+            continue
+        if best_score is None or score > best_score:
+            best_score = score
+            best_candidate = candidate
+    threshold = _full_text_match_threshold(parameter_record)
+    if best_score is None or best_candidate is None or best_score < threshold:
+        return [], None
+    source_id = str(best_candidate.get("source_id") or "").strip() or None
+    section = str(best_candidate.get("section") or "").strip() or None
+    table_id = str(best_candidate.get("table_id") or "").strip() or None
+    return (
+        [
+            EvidenceRef(
+                source_id=source_id,
+                section=section,
+                table_id=table_id,
+                quote_or_context=str(best_candidate.get("text") or "").strip() or None,
+                confidence=round(min(0.99, best_score / 10.0), 2),
+            )
+        ],
+        f"matched_full_text:{source_id or section or 'text'}",
+    )
+
+
+def _iter_full_text_evidence_candidates(cleaned_markdown_text: str) -> list[dict[str, Any]]:
+    base_candidates: list[dict[str, Any]] = []
+    current_section = ""
+    in_reference_section = False
+    active_table_id: str | None = None
+    for line_index, raw_line in enumerate(cleaned_markdown_text.splitlines(), start=1):
+        stripped = str(raw_line or "").strip()
+        if not stripped:
+            active_table_id = None
+            continue
+        if stripped.startswith("#"):
+            current_section = stripped.lstrip("#").strip()
+            in_reference_section = _looks_like_reference_section(current_section)
+            active_table_id = None
+            continue
+        table_match = re.search(r"\[TableID:\s*([^\]]+)\]", stripped, flags=re.IGNORECASE)
+        if table_match:
+            active_table_id = table_match.group(1).strip()
+            continue
+        if _is_non_evidence_markdown_line(stripped):
+            continue
+        source_id = active_table_id or f"text:{_slugify_section(current_section)}:{line_index}"
+        base_candidates.append(
+            {
+                "text": stripped,
+                "section": current_section or "full_text",
+                "source_id": source_id,
+                "table_id": active_table_id,
+                "line_index": line_index,
+                "is_reference": in_reference_section or _looks_like_reference_entry(stripped),
+                "anchor_score": 1 if active_table_id or _contains_figure_or_table_mention(stripped) else 0,
+                "location_score": 1 if _is_preferred_evidence_context(current_section, stripped, active_table_id) else 0,
+                "mojibake_penalty": 2 if _detect_mojibake(stripped) else 0,
+            }
+        )
+    candidates = list(base_candidates)
+    for index, candidate in enumerate(base_candidates[:-1]):
+        nxt = base_candidates[index + 1]
+        if nxt["line_index"] != candidate["line_index"] + 1 or nxt["section"] != candidate["section"]:
+            continue
+        candidates.append(
+            {
+                "text": f"{candidate['text']} {nxt['text']}".strip(),
+                "section": candidate["section"],
+                "source_id": candidate["source_id"],
+                "table_id": candidate["table_id"] or nxt["table_id"],
+                "line_index": candidate["line_index"],
+                "is_reference": bool(candidate["is_reference"] or nxt["is_reference"]),
+                "anchor_score": max(int(candidate["anchor_score"]), int(nxt["anchor_score"])),
+                "location_score": max(int(candidate["location_score"]), int(nxt["location_score"])),
+                "mojibake_penalty": max(int(candidate["mojibake_penalty"]), int(nxt["mojibake_penalty"])),
+            }
+        )
+    return candidates
+
+
+def _score_full_text_evidence_candidate(candidate: dict[str, Any], parameter_record: ParameterRecord) -> int | None:
+    text = str(candidate.get("text") or "").strip()
+    if not text:
+        return None
+    normalized_text = _normalize_evidence_text(text)
+    if not normalized_text:
+        return None
+    value_score = _parameter_value_match_score(normalized_text, parameter_record)
+    keyword_score = _parameter_keyword_match_score(normalized_text, parameter_record)
+    unit_score = _parameter_unit_match_score(normalized_text, parameter_record)
+    if value_score <= 0 or keyword_score <= 0:
+        return None
+    if _parameter_requires_unit(parameter_record) and unit_score <= 0:
+        return None
+    return (
+        value_score
+        + keyword_score
+        + unit_score
+        + int(candidate.get("anchor_score") or 0)
+        + int(candidate.get("location_score") or 0)
+        - (5 if candidate.get("is_reference") else 0)
+        - int(candidate.get("mojibake_penalty") or 0)
+    )
+
+
 def _text_matches_parameter_record(text: str, parameter_record: ParameterRecord) -> bool:
-    canonical_key = str(parameter_record.canonical_key or "")
-    if not canonical_key or not text:
-        return False
-    if not any(_contains_exact_value_token(text, token) for token in _parameter_value_tokens(canonical_key, parameter_record.value)):
-        return False
-    keywords = _parameter_keywords(canonical_key)
-    if not keywords:
-        return False
-    lowered = text.lower()
-    return any(keyword.lower() in lowered for keyword in keywords)
+    score = _score_full_text_evidence_candidate(
+        {
+            "text": text,
+            "section": "structured_source",
+            "is_reference": False,
+            "anchor_score": 0,
+            "location_score": 1,
+            "mojibake_penalty": 0,
+        },
+        parameter_record,
+    )
+    return score is not None and score >= _full_text_match_threshold(parameter_record)
 
 
 def _contains_exact_value_token(text: str, token: str) -> bool:
@@ -1570,51 +1702,226 @@ def _contains_exact_value_token(text: str, token: str) -> bool:
 def _parameter_keywords(canonical_key: str) -> list[str]:
     mapping = {
         "viscosity_Pa_s": ["viscosity", "spinning viscosity"],
-        "spinning_channel_temperature_C": ["spinning channel temperature", "channel temperature", "甬道温度", "辊道温度"],
-        "feed_pressure_MPa": ["feed pressure", "进料压力"],
-        "relative_humidity_percent": ["relative humidity", "环境湿度", "湿度"],
-        "average_fiber_diameter_um": ["average fiber diameter", "fiber diameter", "纤维直径", "直径"],
-        "tensile_strength_MPa": ["tensile strength", "拉伸强度", "单丝拉伸强度", "强度"],
+        "aluminum_source": ["aluminum source", "aluminium isopropanol", "aluminum isopropanol", "异丙醇铝"],
+        "peptizing_agent": ["peptizing agent", "peptization", "nitric acid", "concentrated nitric acid", "硝酸", "浓硝酸"],
+        "hydrolysis_temperature_C": ["hydrothermal", "hydrolysis", "reaction", "reacted", "加热反应", "反应釜", "水热"],
+        "hydrolysis_time_h": ["hydrothermal", "hydrolysis", "reaction", "reacted", "加热反应", "反应釜", "水热"],
+        "peptization_time_h": ["peptization", "peptizing", "alumina sol", "继续搅拌", "铝溶胶", "ph"],
+        "concentration_temperature_C": ["concentration", "concentrated", "water bath", "减压浓缩", "浓缩", "水浴"],
+        "concentration_time_h": ["concentration", "concentrated", "减压浓缩", "浓缩"],
+        "spinning_channel_temperature_C": ["spinning channel temperature", "channel temperature", "甬道空气温度", "纺丝甬道", "channel air temperature"],
+        "feed_pressure_MPa": ["feed pressure", "进料压力", "pressure", "一定压力"],
+        "relative_humidity_percent": ["relative humidity", "环境湿度", "humidity"],
+        "average_fiber_diameter_um": ["average fiber diameter", "fiber diameter", "diameter", "平均直径", "纤维直径", "直径"],
+        "tensile_strength_MPa": ["tensile strength", "breaking strength", "fracture strength", "断裂强度", "拉伸强度", "强度"],
         "service_temperature_C": ["service temperature", "使用温度", "耐温"],
-        "holding_time_h": ["holding time", "holding", "保温", "恒温"],
-        "strength_retention_percent": ["strength retention", "强度保留率", "保留率"],
+        "holding_time_h": ["holding time", "holding", "保温", "保温时间"],
+        "strength_retention_percent": ["strength retention", "retained strength", "强度保留率", "保留率"],
+        "sintering_temperature_C": ["sinter", "sintered", "烧结", "快速烧结", "高温烧结"],
+        "take_up_speed_m_min": ["take-up speed", "line speed", "收丝辊线速度", "线速度"],
+        "heating_rate_C_min": ["heating rate", "升温速度", "升温"],
+        "target_temperature_C": ["heat to", "heated to", "升温至", "保温", "低温煅烧"],
     }
     return mapping.get(canonical_key, [canonical_key])
 
 
 def _parameter_value_tokens(canonical_key: str, value: Any) -> list[str]:
+    range_tokens = _coerce_range_tokens(value)
+    if range_tokens:
+        tokens = set(range_tokens)
+        if canonical_key == "heating_rate_C_min":
+            tokens.update(_attach_unit_tokens(tokens, ["degc/min"]))
+        return sorted(token for token in tokens if token)
     number = _coerce_float(value)
     if number is None:
-        text_value = str(value).strip()
-        return [text_value] if text_value else []
+        tokens = set(_parameter_text_value_tokens(canonical_key, value))
+        normalized_value = _normalize_evidence_text(str(value).strip())
+        if normalized_value:
+            tokens.add(normalized_value)
+        return sorted(token for token in tokens if token)
     tokens = {_format_number_token(number)}
+    unit_tokens: list[str] = []
+    time_keys = {"holding_time_h", "hydrolysis_time_h", "peptization_time_h", "concentration_time_h"}
     if canonical_key == "tensile_strength_MPa":
-        gpa_value = number / 1000.0
-        tokens.update(
-            {
-                _format_number_token(gpa_value),
-                f"{_format_number_token(gpa_value)}GPa",
-                f"{_format_number_token(gpa_value)} GPa",
-            }
-        )
-    elif canonical_key in {"spinning_channel_temperature_C", "service_temperature_C"}:
-        tokens.update({f"{_format_number_token(number)}°C", f"{_format_number_token(number)}℃"})
+        tokens.add(_format_number_token(number / 1000.0))
+        unit_tokens = ["mpa", "gpa"]
+    elif canonical_key in {
+        "hydrolysis_temperature_C",
+        "concentration_temperature_C",
+        "drying_temperature_C",
+        "spinning_channel_temperature_C",
+        "service_temperature_C",
+        "sintering_temperature_C",
+        "target_temperature_C",
+    }:
+        unit_tokens = ["degc"]
     elif canonical_key == "feed_pressure_MPa":
-        tokens.update({f"{_format_number_token(number)}MPa", f"{_format_number_token(number)} MPa"})
+        unit_tokens = ["mpa"]
     elif canonical_key in {"relative_humidity_percent", "strength_retention_percent"}:
-        tokens.update({f"{_format_number_token(number)}%", f"{_format_number_token(number)} %"})
-    elif canonical_key == "holding_time_h":
-        tokens.update({f"{_format_number_token(number)}h", f"{_format_number_token(number)} h"})
+        unit_tokens = ["%"]
+    elif canonical_key in time_keys:
+        unit_tokens = ["h", "min"]
+        minutes_value = number * 60.0
+        if abs(minutes_value - round(minutes_value)) < 1e-9:
+            tokens.add(_format_number_token(minutes_value))
     elif canonical_key == "average_fiber_diameter_um":
-        tokens.update(
-            {
-                f"{_format_number_token(number)}μm",
-                f"{_format_number_token(number)} μm",
-                f"{_format_number_token(number)}um",
-                f"{_format_number_token(number)} um",
-            }
-        )
+        unit_tokens = ["um"]
+    elif canonical_key == "take_up_speed_m_min":
+        unit_tokens = ["m/min"]
+    elif canonical_key == "heating_rate_C_min":
+        unit_tokens = ["degc/min"]
+    if unit_tokens:
+        tokens.update(_attach_unit_tokens(tokens, unit_tokens))
+    return sorted(token for token in tokens if token)
+
+
+def _parameter_text_value_tokens(canonical_key: str, value: Any) -> list[str]:
+    mapping = {
+        "aluminum_source": ["aluminium isopropanol", "aluminum isopropanol", "异丙醇铝"],
+        "peptizing_agent": ["nitric acid", "concentrated nitric acid", "硝酸", "浓硝酸"],
+    }
+    tokens = [_normalize_evidence_text(token) for token in mapping.get(canonical_key, [])]
+    raw_value = _normalize_evidence_text(str(value).strip())
+    if raw_value:
+        tokens.append(raw_value)
     return [token for token in tokens if token]
+
+
+def _attach_unit_tokens(value_tokens: set[str], unit_tokens: list[str]) -> set[str]:
+    combined: set[str] = set()
+    for value_token in value_tokens:
+        if not value_token:
+            continue
+        for unit_token in unit_tokens:
+            combined.add(f"{value_token}{unit_token}")
+            combined.add(f"{value_token} {unit_token}")
+    return combined
+
+
+def _coerce_range_tokens(value: Any) -> list[str]:
+    if not isinstance(value, str):
+        return []
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*[-–~]\s*(\d+(?:\.\d+)?)\s*", value)
+    if not match:
+        return []
+    start = _format_number_token(float(match.group(1)))
+    end = _format_number_token(float(match.group(2)))
+    return [f"{start}-{end}", f"{start} - {end}", f"{start}~{end}", f"{start} ~ {end}"]
+
+
+def _parameter_value_match_score(normalized_text: str, parameter_record: ParameterRecord) -> int:
+    tokens = _parameter_value_tokens(str(parameter_record.canonical_key or ""), parameter_record.value)
+    return 3 if any(_contains_exact_value_token(normalized_text, token) for token in tokens) else 0
+
+
+def _parameter_keyword_match_score(normalized_text: str, parameter_record: ParameterRecord) -> int:
+    keywords = [_normalize_evidence_text(keyword) for keyword in _parameter_keywords(str(parameter_record.canonical_key or ""))]
+    return 3 if any(keyword and keyword in normalized_text for keyword in keywords) else 0
+
+
+def _parameter_unit_match_score(normalized_text: str, parameter_record: ParameterRecord) -> int:
+    if not _parameter_requires_unit(parameter_record):
+        return 0
+    unit_tokens = [_normalize_evidence_text(token) for token in _parameter_unit_tokens(str(parameter_record.canonical_key or ""))]
+    return 2 if any(token and token in normalized_text for token in unit_tokens) else 0
+
+
+def _parameter_unit_tokens(canonical_key: str) -> list[str]:
+    mapping = {
+        "hydrolysis_temperature_C": ["degc"],
+        "concentration_temperature_C": ["degc"],
+        "drying_temperature_C": ["degc"],
+        "spinning_channel_temperature_C": ["degc"],
+        "service_temperature_C": ["degc"],
+        "sintering_temperature_C": ["degc"],
+        "target_temperature_C": ["degc"],
+        "feed_pressure_MPa": ["mpa"],
+        "relative_humidity_percent": ["%"],
+        "average_fiber_diameter_um": ["um"],
+        "tensile_strength_MPa": ["gpa", "mpa"],
+        "holding_time_h": ["h", "min"],
+        "hydrolysis_time_h": ["h", "min"],
+        "peptization_time_h": ["h", "min"],
+        "concentration_time_h": ["h", "min"],
+        "strength_retention_percent": ["%"],
+        "take_up_speed_m_min": ["m/min"],
+        "heating_rate_C_min": ["degc/min"],
+    }
+    return mapping.get(canonical_key, [])
+
+
+def _parameter_requires_unit(parameter_record: ParameterRecord) -> bool:
+    return str(parameter_record.canonical_key or "") not in {"aluminum_source", "peptizing_agent"}
+
+
+def _full_text_match_threshold(parameter_record: ParameterRecord) -> int:
+    return 6 if str(parameter_record.canonical_key or "") in {"aluminum_source", "peptizing_agent"} else 8
+
+
+def _normalize_evidence_text(text: str) -> str:
+    normalized = str(text or "").lower()
+    for source, target in {
+        "μm": "um",
+        "µm": "um",
+        "µ": "u",
+        "℃": "degc",
+        "°c": "degc",
+        "掳c": "degc",
+        "鈩?": "degc",
+    }.items():
+        normalized = normalized.replace(source, target)
+    normalized = re.sub(r"degc\s*(?:[·•\.]|\s*×\s*)\s*min\^-?1", "degc/min", normalized)
+    normalized = re.sub(r"degc\s*/\s*min", "degc/min", normalized)
+    normalized = re.sub(r"m\s*(?:[·•\.]|\s*×\s*)\s*min\^-?1", "m/min", normalized)
+    normalized = re.sub(r"m\s*/\s*min", "m/min", normalized)
+    normalized = re.sub(r"\s*[-–—~]\s*", "-", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+def _is_non_evidence_markdown_line(text: str) -> bool:
+    return text.startswith("![](") or text.startswith("CSV:") or text.startswith("JSON:")
+
+
+def _looks_like_reference_section(section: str) -> bool:
+    normalized = _normalize_evidence_text(section)
+    return "参考文献" in normalized or "references" in normalized
+
+
+def _looks_like_reference_entry(text: str) -> bool:
+    return bool(re.match(r"^\[\d+\]", text) or re.match(r"^\d+\.\s+[A-Z][A-Za-z]+", text))
+
+
+def _contains_figure_or_table_mention(text: str) -> bool:
+    return bool(re.search(r"(?:图|fig\.?|table|tab\.?)\s*\d+", text, flags=re.IGNORECASE))
+
+
+def _is_preferred_evidence_context(section: str, text: str, table_id: str | None) -> bool:
+    if table_id:
+        return True
+    normalized_section = _normalize_evidence_text(section)
+    if any(
+        token in normalized_section
+        for token in [
+            "实验",
+            "结果",
+            "讨论",
+            "结论",
+            "method",
+            "experiment",
+            "result",
+            "discussion",
+            "conclusion",
+        ]
+    ):
+        return True
+    return _contains_figure_or_table_mention(text)
+
+
+def _slugify_section(section: str) -> str:
+    cleaned = re.sub(r"[^\w一-鿿-]+", "_", str(section or "").strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned or "full_text"
 
 
 def _format_number_token(number: float) -> str:
