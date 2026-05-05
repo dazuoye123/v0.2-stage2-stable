@@ -45,6 +45,25 @@ def test_paper_basic_info_falls_back_to_filename_when_markdown_starts_with_abstr
     assert payload["authors"] == []
 
 
+def test_paper_basic_info_prefers_title_fields_over_journal_title(tmp_path: Path) -> None:
+    markdown_text = """# 鍏堣繘闄剁摲
+# 骞叉硶绾轰笣鍒跺 伪-Al2O3 闄剁摲绾ょ淮鍙婂叾鍔涘鎬ц兘鐮旂┒
+"""
+    source_file = tmp_path / "li_jianjun_2021.md"
+    payload = _postprocess_paper_basic_info(
+        payload={
+            "title": "鍏堣繘闄剁摲",
+            "title_zh": "骞叉硶绾轰笣鍒跺 伪-Al2O3 闄剁摲绾ょ淮鍙婂叾鍔涘鎬ц兘鐮旂┒",
+            "title_en": "Study on Preparation and Mechanical Properties of 伪-Al2O3 Ceramic Fiber by Dry Spinning",
+            "journal": "鍏堣繘闄剁摲",
+        },
+        paper_text=markdown_text,
+        source_file=source_file,
+    )
+    assert payload["title"] == "骞叉硶绾轰笣鍒跺 伪-Al2O3 闄剁摲绾ょ淮鍙婂叾鍔涘鎬ц兘鐮旂┒"
+    assert payload["journal"] == "鍏堣繘闄剁摲"
+
+
 def test_detect_mojibake_flags_garbled_text() -> None:
     assert _detect_mojibake("\ufffd\ufffd\ufffd")
     assert not _detect_mojibake("图2-17 氧化铝连续纤维的TEM图")

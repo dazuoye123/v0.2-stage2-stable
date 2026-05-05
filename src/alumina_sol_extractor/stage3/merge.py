@@ -159,7 +159,20 @@ def _fill_nested_defaults(payload: dict[str, Any]) -> dict[str, Any]:
 def _coerce_model(item: dict[str, Any] | SchemaBaseModel, model_cls: type[SchemaBaseModel]):
     if isinstance(item, model_cls):
         return item
-    return model_cls.model_validate(item or {})
+    payload = _normalize_identifier_fields(item or {}, model_cls)
+    return model_cls.model_validate(payload)
+
+
+def _normalize_identifier_fields(
+    payload: dict[str, Any],
+    model_cls: type[SchemaBaseModel],
+) -> dict[str, Any]:
+    result = deepcopy(payload)
+    if model_cls is ExperimentSeries and result.get("series_id") is not None:
+        result["series_id"] = str(result["series_id"])
+    if model_cls is DataPoint and result.get("sample_id") is not None:
+        result["sample_id"] = str(result["sample_id"])
+    return result
 
 
 def _dump_or_none(item: Any) -> Any:

@@ -41,3 +41,12 @@ def test_merge_sanitizes_null_list_fields_from_model_output() -> None:
     assert record.paper_basic_info is not None
     assert record.paper_basic_info.authors == []
     assert record.paper_basic_info.keywords == []
+
+
+def test_merge_coerces_numeric_identifier_fields_to_strings() -> None:
+    record = merge_stage_outputs_to_paper_record(
+        experiment_series=[{"series_id": 1, "series_name": "A"}],
+        data_points=[{"sample_id": 7, "extended_data": {"series_id": "1"}}],
+    )
+    assert record.experiment_series[0].series_id == "1"
+    assert record.experiment_series[0].data_points[0].sample_id == "7"
