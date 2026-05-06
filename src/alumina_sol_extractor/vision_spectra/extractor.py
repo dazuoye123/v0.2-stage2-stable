@@ -375,6 +375,15 @@ class Stage4VisionSpectraExtractor:
         if "relative_intensity" not in peak and "intensity" in peak:
             peak["relative_intensity"] = peak.get("intensity")
             warnings.append("peak_relative_intensity_mapped_from_intensity")
+        relative_intensity = peak.get("relative_intensity")
+        if isinstance(relative_intensity, str):
+            coerced_relative_intensity = Stage4VisionSpectraExtractor._coerce_relative_intensity_value(relative_intensity)
+            if coerced_relative_intensity is None:
+                peak["relative_intensity"] = None
+                warnings.append("peak_relative_intensity_cleared_from_invalid_string")
+            else:
+                peak["relative_intensity"] = coerced_relative_intensity
+                warnings.append("peak_relative_intensity_coerced_from_label")
         if "unit" not in peak or not peak.get("unit"):
             default_unit = {
                 "ftir_spectrum": "cm-1",
@@ -418,6 +427,29 @@ class Stage4VisionSpectraExtractor:
         except ValueError:
             return None
         return numeric if 0.0 <= numeric <= 1.0 else None
+
+    @staticmethod
+    def _coerce_relative_intensity_value(value: Any) -> float | None:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if not isinstance(value, str):
+            return None
+        stripped = value.strip().lower()
+        label_map = {
+            "very weak": 0.15,
+            "weak": 0.3,
+            "medium": 0.6,
+            "moderate": 0.6,
+            "strong": 0.85,
+            "stronger": 0.9,
+            "very strong": 0.95,
+        }
+        if stripped in label_map:
+            return label_map[stripped]
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
 
     def _build_prompt_record(self, candidate: dict[str, Any]) -> dict[str, Any]:
         template = get_prompt_for_figure_type(candidate.get("figure_type"))

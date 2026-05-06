@@ -50,3 +50,20 @@ def test_live_payload_normalization_maps_peak_alias_fields_and_labels() -> None:
     assert normalized["peaks"][0]["confidence"] == 0.6
     assert "peak_position_mapped_from_wavenumber" in warnings
     assert "peak_confidence_coerced_from_label" in warnings
+
+
+def test_live_payload_normalization_coerces_relative_intensity_labels() -> None:
+    normalized, warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
+        {
+            "figure_id": "图2.2",
+            "figure_type": "nmr_spectrum",
+            "peaks": [
+                {"position_ppm": 62.5, "relative_intensity": "stronger"},
+                {"position_ppm": 10.0, "relative_intensity": "medium"},
+                {"position_ppm": 0.0, "relative_intensity": "weak"},
+            ],
+        },
+        figure_type="nmr_spectrum",
+    )
+    assert [peak["relative_intensity"] for peak in normalized["peaks"]] == [0.9, 0.6, 0.3]
+    assert "peak_relative_intensity_coerced_from_label" in warnings
