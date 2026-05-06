@@ -41,6 +41,7 @@ class Stage4VisionSpectraExtractor:
     output_dir: Path
     max_figures: int = 10
     allowed_figure_types: set[str] | None = None
+    figure_ids: list[str] | None = None
     dry_run: bool = True
     client: VisionLanguageModelClient | None = None
 
@@ -71,6 +72,7 @@ class Stage4VisionSpectraExtractor:
         write_jsonl(prompts, stage4_dir / "stage4_prompts.jsonl")
         write_jsonl(extractions, stage4_dir / "spectra_extractions.jsonl")
         write_jsonl(raw_outputs, stage4_dir / "raw_vlm_outputs.jsonl")
+        write_jsonl(failed_records, stage4_dir / "failed_records.jsonl")
         write_json(stage4_dir / "stage4_summary.json", summary)
         return summary
 
@@ -152,6 +154,15 @@ class Stage4VisionSpectraExtractor:
                 "technique": vision_meta.get("technique") or figure_meta.get("technique"),
             }
             candidates.append(candidate)
+
+        requested_ids = [item for item in (self.figure_ids or []) if item]
+        if requested_ids:
+            requested_set = set(requested_ids)
+            present_ids = {item.get("figure_id") for item in candidates}
+            missing_ids = [item for item in requested_ids if item not in present_ids]
+            if missing_ids:
+                raise ValueError(f"Requested figure_id(s) not found: {', '.join(missing_ids)}")
+            candidates = [item for item in candidates if item.get("figure_id") in requested_set]
 
         if self.max_figures > 0:
             sendable = [item for item in candidates if item.get("send_to_vlm")]
@@ -276,6 +287,7 @@ class Stage4VisionSpectraExtractor:
                         "figure_id": candidate["figure_id"],
                         "figure_type": candidate["figure_type"],
                         "raw_response": response.get("response_text"),
+                        "response_payload": response.get("response_payload"),
                         "dry_run": False,
                     }
                 )
@@ -289,12 +301,24 @@ class Stage4VisionSpectraExtractor:
                 parsed.setdefault("extraction_model", response.get("model"))
                 parsed.setdefault("input_context_summary", self._build_input_context_summary(candidate))
                 parsed.setdefault("used_context_sources", list(candidate.get("context_source", {}).values()))
+                parsed, normalization_warnings = self._normalize_live_payload(parsed, figure_type=str(candidate.get("figure_type") or ""))
                 schema_cls = get_schema_for_figure_type(candidate.get("figure_type"))
                 validated = schema_cls(**parsed).model_dump()
                 validated["schema_name"] = schema_cls.__name__
+                if normalization_warnings:
+                    validated["warnings"] = [*validated.get("warnings", []), *normalization_warnings]
                 validated["validation_errors"] = validate_stage4_extraction(validated)
                 extractions.append(validated)
             except Exception as exc:  # noqa: BLE001
+                raw_outputs.append(
+                    {
+                        "figure_id": candidate.get("figure_id"),
+                        "figure_type": candidate.get("figure_type"),
+                        "raw_response": None,
+                        "dry_run": False,
+                        "error": str(exc),
+                    }
+                )
                 failed_records.append(
                     {
                         "figure_id": candidate.get("figure_id"),
@@ -303,6 +327,97 @@ class Stage4VisionSpectraExtractor:
                     }
                 )
         return extractions, raw_outputs, failed_records
+
+    @staticmethod
+    def _normalize_live_payload(parsed: dict[str, Any], *, figure_type: str = "") -> tuple[dict[str, Any], list[str]]:
+        normalized = dict(parsed)
+        warnings: list[str] = []
+        list_fields = ("peaks", "endothermic_peaks", "exothermic_peaks")
+        for field_name in list_fields:
+            value = normalized.get(field_name)
+            if value is None:
+                continue
+            if not isinstance(value, list):
+                normalized[field_name] = []
+                warnings.append(f"{field_name}_coerced_to_empty_list")
+                continue
+            if field_name == "peaks":
+                normalized[field_name] = [
+                    Stage4VisionSpectraExtractor._normalize_peak_record(item, figure_type=figure_type, warnings=warnings)
+                    for item in value
+                    if isinstance(item, dict)
+                ]
+        confidence = normalized.get("confidence")
+        if isinstance(confidence, str):
+            coerced_confidence = Stage4VisionSpectraExtractor._coerce_confidence_value(confidence)
+            if coerced_confidence is None:
+                normalized["confidence"] = None
+                warnings.append("confidence_cleared_from_invalid_string")
+            else:
+                normalized["confidence"] = coerced_confidence
+        return normalized, warnings
+
+    @staticmethod
+    def _normalize_peak_record(item: dict[str, Any], *, figure_type: str, warnings: list[str]) -> dict[str, Any]:
+        peak = dict(item)
+        if "position" not in peak:
+            for source_key in ("wavenumber", "position_ppm", "two_theta", "2theta"):
+                if source_key in peak:
+                    peak["position"] = peak.get(source_key)
+                    warnings.append(f"peak_position_mapped_from_{source_key}")
+                    break
+        if "assignment" not in peak:
+            for source_key in ("phase_assignment", "species_assignment"):
+                if source_key in peak:
+                    peak["assignment"] = peak.get(source_key)
+                    warnings.append(f"peak_assignment_mapped_from_{source_key}")
+                    break
+        if "relative_intensity" not in peak and "intensity" in peak:
+            peak["relative_intensity"] = peak.get("intensity")
+            warnings.append("peak_relative_intensity_mapped_from_intensity")
+        if "unit" not in peak or not peak.get("unit"):
+            default_unit = {
+                "ftir_spectrum": "cm-1",
+                "ir_spectrum": "cm-1",
+                "raman_spectrum": "cm-1",
+                "nmr_spectrum": "ppm",
+                "xrd_pattern": "2theta_deg",
+            }.get(figure_type)
+            if default_unit:
+                peak["unit"] = default_unit
+        confidence = peak.get("confidence")
+        if isinstance(confidence, str):
+            coerced_confidence = Stage4VisionSpectraExtractor._coerce_confidence_value(confidence)
+            if coerced_confidence is None:
+                peak["confidence"] = None
+                warnings.append("peak_confidence_cleared_from_invalid_string")
+            else:
+                peak["confidence"] = coerced_confidence
+                warnings.append("peak_confidence_coerced_from_label")
+        return peak
+
+    @staticmethod
+    def _coerce_confidence_value(value: Any) -> float | None:
+        if isinstance(value, (int, float)):
+            numeric = float(value)
+            return numeric if 0.0 <= numeric <= 1.0 else None
+        if not isinstance(value, str):
+            return None
+        stripped = value.strip().lower()
+        label_map = {
+            "high": 0.9,
+            "medium": 0.6,
+            "low": 0.3,
+            "very high": 0.95,
+            "very low": 0.15,
+        }
+        if stripped in label_map:
+            return label_map[stripped]
+        try:
+            numeric = float(stripped)
+        except ValueError:
+            return None
+        return numeric if 0.0 <= numeric <= 1.0 else None
 
     def _build_prompt_record(self, candidate: dict[str, Any]) -> dict[str, Any]:
         template = get_prompt_for_figure_type(candidate.get("figure_type"))

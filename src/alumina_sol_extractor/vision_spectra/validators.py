@@ -64,5 +64,6 @@ def build_stage4_summary(
         "by_figure_type": dict(by_type),
         "validation_error_count": validation_error_count,
         "failed_record_count": len(failed_records),
+        "live_figure_ids": [str(item.get("figure_id")) for item in extractions if item.get("extraction_mode") == "live" and item.get("figure_id")],
+        "failed_figure_ids": [str(item.get("figure_id")) for item in failed_records if item.get("figure_id")],
     }
-

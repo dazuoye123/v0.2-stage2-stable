@@ -53,7 +53,42 @@ def parse_json_payload(raw_text: str) -> dict[str, Any]:
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
         text = "\n".join(lines).strip()
-    return json.loads(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = json.loads(_extract_first_json_object(text))
+    if not isinstance(payload, dict):
+        raise ValueError("VLM output did not contain a top-level JSON object.")
+    return payload
+
+
+def _extract_first_json_object(text: str) -> str:
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("No JSON object found in VLM output.")
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    raise ValueError("Unterminated JSON object in VLM output.")
 
 
 __all__ = ["parse_json_payload", "read_json", "read_jsonl", "write_json", "write_jsonl"]

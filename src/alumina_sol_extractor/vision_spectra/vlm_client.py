@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import mimetypes
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +53,8 @@ class VisionLanguageModelClient:
             raise RuntimeError("Live VLM mode requires OPENAI_BASE_URL or a DashScope-compatible default.")
         if not Path(request.image_path).exists():
             raise RuntimeError(f"Image not found for VLM request: {request.image_path}")
+        image_path = Path(request.image_path).resolve()
+        image_url = self._image_path_to_data_url(image_path)
 
         payload = {
             "model": request.model or self.model_name,
@@ -59,7 +63,7 @@ class VisionLanguageModelClient:
                     "role": "user",
                     "content": [
                         {"type": "text", "text": request.prompt},
-                        {"type": "image_url", "image_url": {"url": Path(request.image_path).resolve().as_uri()}},
+                        {"type": "image_url", "image_url": {"url": image_url}},
                     ],
                 }
             ],
@@ -70,9 +74,13 @@ class VisionLanguageModelClient:
             json=payload,
             timeout=self.timeout_s,
         )
-        response.raise_for_status()
+        if response.status_code >= 400:
+            message = response.text.strip()
+            raise RuntimeError(
+                f"VLM request failed with status {response.status_code}: {message[:1000]}"
+            )
         response_payload = response.json()
-        response_text = (
+        response_text = self._coerce_response_text(
             response_payload.get("choices", [{}])[0]
             .get("message", {})
             .get("content")
@@ -85,3 +93,29 @@ class VisionLanguageModelClient:
             "response_text": response_text,
             "response_payload": response_payload,
         }
+
+    @staticmethod
+    def _image_path_to_data_url(image_path: Path) -> str:
+        mime_type, _ = mimetypes.guess_type(str(image_path))
+        if not mime_type:
+            mime_type = "image/jpeg"
+        encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+        return f"data:{mime_type};base64,{encoded}"
+
+    @staticmethod
+    def _coerce_response_text(content: Any) -> str | None:
+        if content is None:
+            return None
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str):
+                        text_parts.append(text)
+                elif isinstance(item, str):
+                    text_parts.append(item)
+            return "\n".join(part for part in text_parts if part) or None
+        return str(content)
