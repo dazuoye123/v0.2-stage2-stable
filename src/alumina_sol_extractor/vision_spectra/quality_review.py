@@ -98,6 +98,7 @@ def write_stage4_quality_review(
 
 
 def _review_single_figure(record: dict[str, Any], *, expected_config: dict[str, Any] | None) -> dict[str, Any]:
+    figure_type = str(record.get("figure_type") or "unknown")
     peaks = [item for item in (record.get("peaks") or []) if isinstance(item, dict)]
     warnings = list(record.get("warnings") or [])
     conflict_warnings = list(record.get("conflict_warnings") or [])
@@ -131,8 +132,8 @@ def _review_single_figure(record: dict[str, Any], *, expected_config: dict[str, 
             peak_warning_codes.append("invalid_peak_confidence")
             warning_codes.append("invalid_peak_confidence")
         elif confidence < 0.5:
-            peak_warning_codes.append("low_confidence_warning")
-            warning_codes.append("low_confidence_warning")
+            peak_warning_codes.append("low_confidence_peak")
+            warning_codes.append("low_confidence_peak")
         elif confidence >= 0.8 and source in {"inferred", "unknown"}:
             peak_warning_codes.append("high_confidence_unknown_source")
             warning_codes.append("high_confidence_unknown_source")
@@ -166,9 +167,21 @@ def _review_single_figure(record: dict[str, Any], *, expected_config: dict[str, 
         if expected_review["extra_peaks"]:
             warning_codes.append("extra_peaks_detected")
 
+    ferron_summary = _review_ferron_content(record) if figure_type == "ferron_curve" else None
+    if ferron_summary:
+        warning_codes.extend(ferron_summary["warning_codes"])
+
+    assessment = _determine_figure_assessment(
+        figure_type=figure_type,
+        peaks=peaks,
+        peak_reviews=peak_reviews,
+        warning_codes=warning_codes,
+        ferron_summary=ferron_summary,
+    )
+
     return {
         "figure_id": record.get("figure_id"),
-        "figure_type": record.get("figure_type"),
+        "figure_type": figure_type,
         "schema_name": record.get("schema_name"),
         "extraction_mode": record.get("extraction_mode"),
         "technique": record.get("technique"),
@@ -181,6 +194,11 @@ def _review_single_figure(record: dict[str, Any], *, expected_config: dict[str, 
         "warning_codes": list(dict.fromkeys(warning_codes)),
         "peak_reviews": peak_reviews,
         "expected_peak_review": expected_review,
+        "assessment": assessment,
+        "curve_type": ferron_summary["curve_type"] if ferron_summary else record.get("curve_type"),
+        "fitted_parameters_summary": ferron_summary["fitted_parameters_summary"] if ferron_summary else None,
+        "species_quantification_summary": ferron_summary["species_quantification_summary"] if ferron_summary else None,
+        "method_summary": ferron_summary["method_summary"] if ferron_summary else None,
     }
 
 
@@ -272,6 +290,102 @@ def _determine_overall_status(
     return "pass"
 
 
+def _review_ferron_content(record: dict[str, Any]) -> dict[str, Any]:
+    warning_codes: list[str] = []
+    curve_type = record.get("curve_type")
+    fitted_parameters = record.get("fitted_parameters") or {}
+    equation = record.get("equation")
+    quantification_method = record.get("quantification_method")
+    species_quantification = record.get("species_quantification") or {}
+    ferron_fraction_keys = (
+        "Ala_fraction_percent",
+        "Alb_fraction_percent",
+        "Alc_fraction_percent",
+        "Al13_fraction_percent",
+    )
+    scalar_quantification = {key: record.get(key) for key in ferron_fraction_keys if record.get(key) is not None}
+    dict_quantification = {key: value for key, value in species_quantification.items() if value is not None}
+    has_curve_signal = bool(curve_type or fitted_parameters or equation or quantification_method)
+    has_species_quantification = bool(scalar_quantification or dict_quantification)
+
+    if not has_curve_signal and not has_species_quantification:
+        warning_codes.append("ferron_insufficient_structured_content")
+    elif has_curve_signal and not has_species_quantification:
+        if equation or fitted_parameters:
+            warning_codes.append("ferron_standard_curve_only")
+        else:
+            warning_codes.append("ferron_no_species_quantification")
+
+    fitted_summary = {
+        key: value
+        for key, value in {
+            "equation": equation,
+            "r_squared": record.get("r_squared"),
+            "wavelength_nm": record.get("wavelength_nm"),
+            **(fitted_parameters if isinstance(fitted_parameters, dict) else {}),
+        }.items()
+        if value is not None and value != {}
+    }
+    species_summary = {
+        "scalar_quantification": scalar_quantification,
+        "species_quantification": dict_quantification,
+    }
+    method_parts = [
+        value
+        for value in (
+            record.get("technique"),
+            quantification_method,
+            record.get("sample_name"),
+        )
+        if value
+    ]
+    return {
+        "warning_codes": warning_codes,
+        "curve_type": curve_type,
+        "fitted_parameters_summary": fitted_summary or None,
+        "species_quantification_summary": species_summary if (scalar_quantification or dict_quantification) else None,
+        "method_summary": "; ".join(str(item) for item in method_parts) if method_parts else None,
+    }
+
+
+def _determine_figure_assessment(
+    *,
+    figure_type: str,
+    peaks: list[dict[str, Any]],
+    peak_reviews: list[dict[str, Any]],
+    warning_codes: list[str],
+    ferron_summary: dict[str, Any] | None,
+) -> str:
+    unique_warnings = set(warning_codes)
+    if figure_type == "ferron_curve":
+        if "ferron_insufficient_structured_content" in unique_warnings:
+            return "insufficient_structured_content"
+        if ferron_summary and (
+            ferron_summary.get("fitted_parameters_summary")
+            or ferron_summary.get("species_quantification_summary")
+            or ferron_summary.get("method_summary")
+        ):
+            return "usable_with_warning" if unique_warnings else "usable"
+        return "warning"
+
+    if figure_type == "nmr_spectrum":
+        supported_primary_peak = any(
+            review.get("source") == "image_and_text"
+            and isinstance(review.get("confidence"), (int, float))
+            and float(review["confidence"]) >= 0.8
+            for review in peak_reviews
+        )
+        if supported_primary_peak:
+            return "usable_with_warning" if unique_warnings else "usable"
+        if peaks:
+            return "warning" if unique_warnings else "usable"
+        return "insufficient_structured_content"
+
+    if peaks:
+        return "warning" if unique_warnings else "usable"
+    return "warning" if unique_warnings else "insufficient_structured_content"
+
+
 def _render_markdown_review(review_payload: dict[str, Any]) -> str:
     summary = review_payload["summary"]
     figures = review_payload["figures"]
@@ -302,8 +416,14 @@ def _render_markdown_review(review_payload: dict[str, Any]) -> str:
                 f"- confidence: {figure['confidence']}",
                 f"- peak_count: {figure['peak_count']}",
                 f"- source_distribution: {json.dumps(figure['source_distribution'], ensure_ascii=False)}",
+                f"- assessment: {figure['assessment']}",
             ]
         )
+        if figure.get("figure_type") == "ferron_curve":
+            lines.append(f"- curve_type: {json.dumps(figure.get('curve_type'), ensure_ascii=False)}")
+            lines.append(f"- fitted_parameters_summary: {json.dumps(figure.get('fitted_parameters_summary'), ensure_ascii=False)}")
+            lines.append(f"- species_quantification_summary: {json.dumps(figure.get('species_quantification_summary'), ensure_ascii=False)}")
+            lines.append(f"- method_summary: {json.dumps(figure.get('method_summary'), ensure_ascii=False)}")
         expected_review = figure.get("expected_peak_review")
         if expected_review:
             lines.append(f"- matched_expected_peaks: {json.dumps(expected_review['matched_peaks'], ensure_ascii=False)}")

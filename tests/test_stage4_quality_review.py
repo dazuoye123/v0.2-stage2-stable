@@ -140,3 +140,91 @@ def test_stage4_quality_review_without_expected_peaks_still_generates_review(tmp
     review_payload = review_stage4_extractions(outputs)
     assert review_payload["summary"]["overall_status"] in {"pass", "warning"}
     assert review_payload["figures"][0]["expected_peak_review"] is None
+
+
+def test_ferron_with_standard_curve_only_is_warning_not_fail(tmp_path: Path) -> None:
+    stage4_dir = tmp_path / "stage4_vision_spectra"
+    _write_jsonl(
+        stage4_dir / "spectra_extractions.jsonl",
+        [
+            {
+                "figure_id": "图2.12",
+                "figure_type": "ferron_curve",
+                "schema_name": "FerronCurveExtraction",
+                "extraction_mode": "live",
+                "technique": "Al-Ferron比色法",
+                "confidence": 0.9,
+                "warnings": [],
+                "conflict_warnings": [],
+                "peaks": [],
+                "equation": "y = 200.38571x + 0.28589",
+                "fitted_parameters": {"slope": 200.38571, "intercept": 0.28589},
+                "species_quantification": {"Ala": None, "Alb": None, "Alc": None, "Al13": None},
+            }
+        ],
+    )
+    (stage4_dir / "stage4_summary.json").write_text(json.dumps({"validation_error_count": 0}, ensure_ascii=False), encoding="utf-8")
+
+    review_payload = review_stage4_extractions(load_stage4_outputs(stage4_dir))
+    figure = review_payload["figures"][0]
+    assert "ferron_standard_curve_only" in figure["warning_codes"]
+    assert "ferron_insufficient_structured_content" not in figure["warning_codes"]
+    assert figure["assessment"] == "usable_with_warning"
+    assert review_payload["summary"]["overall_status"] == "warning"
+
+
+def test_ferron_without_curve_or_quantification_is_insufficient(tmp_path: Path) -> None:
+    stage4_dir = tmp_path / "stage4_vision_spectra"
+    _write_jsonl(
+        stage4_dir / "spectra_extractions.jsonl",
+        [
+            {
+                "figure_id": "图2.13",
+                "figure_type": "ferron_curve",
+                "schema_name": "FerronCurveExtraction",
+                "extraction_mode": "live",
+                "technique": "Al-Ferron比色法",
+                "confidence": 0.9,
+                "warnings": [],
+                "conflict_warnings": [],
+                "peaks": [],
+            }
+        ],
+    )
+    (stage4_dir / "stage4_summary.json").write_text(json.dumps({"validation_error_count": 0}, ensure_ascii=False), encoding="utf-8")
+
+    review_payload = review_stage4_extractions(load_stage4_outputs(stage4_dir))
+    figure = review_payload["figures"][0]
+    assert "ferron_insufficient_structured_content" in figure["warning_codes"]
+    assert figure["assessment"] == "insufficient_structured_content"
+
+
+def test_nmr_low_confidence_peak_is_kept_as_warning_but_supported_main_peak_is_usable(tmp_path: Path) -> None:
+    stage4_dir = tmp_path / "stage4_vision_spectra"
+    _write_jsonl(
+        stage4_dir / "spectra_extractions.jsonl",
+        [
+            {
+                "figure_id": "图2.2",
+                "figure_type": "nmr_spectrum",
+                "schema_name": "NMRExtraction",
+                "extraction_mode": "live",
+                "technique": "27Al NMR",
+                "confidence": 0.9,
+                "warnings": [],
+                "conflict_warnings": [],
+                "peaks": [
+                    {"position": 62.5, "unit": "ppm", "source": "image_and_text", "source_text": "62.5 ppm 主峰", "confidence": 0.9},
+                    {"position": -10.0, "unit": "ppm", "source": "image", "source_text": "微小峰", "confidence": 0.3},
+                ],
+            }
+        ],
+    )
+    (stage4_dir / "stage4_summary.json").write_text(json.dumps({"validation_error_count": 0}, ensure_ascii=False), encoding="utf-8")
+
+    review_payload = review_stage4_extractions(load_stage4_outputs(stage4_dir))
+    figure = review_payload["figures"][0]
+    assert figure["assessment"] == "usable_with_warning"
+    assert "low_confidence_peak" in figure["warning_codes"]
+    low_conf_peak = next(item for item in figure["peak_reviews"] if item["position"] == -10.0)
+    assert "low_confidence_peak" in low_conf_peak["warnings"]
