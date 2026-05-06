@@ -100,3 +100,62 @@ def test_nested_table_evidence_can_be_materialized() -> None:
     assert len(evidence_objects) == 1
     assert evidence_objects[0]["table_id"] == "table_001"
     assert evidence_objects[0]["evidence_id"] == "table_001"
+
+
+def test_stage2_figure_class_is_inherited_for_figure_type() -> None:
+    evidence_objects = _split_evidence_objects_payload(
+        payload=[
+            {
+                "id": "图2.18",
+                "type": "figure",
+                "caption": "图2.18 旋蒸后铝溶胶的IR谱图",
+                "fact": "红外证据",
+            }
+        ],
+        figure_metadata_map={"图2.18": {"figure_id": "图2.18", "figure_class": "ftir_spectrum"}},
+        tables_summary=[],
+    )
+
+    assert len(evidence_objects) == 1
+    assert evidence_objects[0]["figure_id"] == "图2.18"
+    assert evidence_objects[0]["figure_type"] == "ftir_spectrum"
+    assert "inherited_figure_type_from_stage2" in str(evidence_objects[0].get("normalization_note") or "")
+    assert "peak_positions" not in evidence_objects[0]
+    assert "assignments" not in evidence_objects[0]
+
+
+def test_caption_fallback_sets_spectral_figure_type_without_stage2_metadata() -> None:
+    evidence_objects = _split_evidence_objects_payload(
+        payload=[
+            {"id": "图2.18", "type": "figure", "caption": "图2.18 IR谱图"},
+            {"id": "图2.11", "type": "figure", "caption": "图2.11 27Al NMR谱图"},
+            {"id": "图2.12", "type": "figure", "caption": "图2.12 Al-Ferron标准曲线"},
+            {"id": "图2.19", "type": "figure", "caption": "图2.19 XRD谱图"},
+            {"id": "图2.20", "type": "figure", "caption": "图2.20 Raman谱图"},
+        ],
+        figure_metadata_map={},
+        tables_summary=[],
+    )
+
+    assert [item["figure_type"] for item in evidence_objects] == [
+        "ftir_spectrum",
+        "nmr_spectrum",
+        "ferron_curve",
+        "xrd_pattern",
+        "raman_spectrum",
+    ]
+    assert all(
+        "fallback_figure_type_from_caption" in str(item.get("normalization_note") or "")
+        for item in evidence_objects
+    )
+
+
+def test_missing_stage2_figure_metadata_does_not_crash() -> None:
+    evidence_objects = _split_evidence_objects_payload(
+        payload=[{"id": "图9.9", "type": "figure", "caption": "图9.9 未知图谱"}],
+        figure_metadata_map={},
+        tables_summary=[],
+    )
+
+    assert len(evidence_objects) == 1
+    assert evidence_objects[0]["figure_id"] == "图9.9"

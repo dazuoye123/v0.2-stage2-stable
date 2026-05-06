@@ -1473,8 +1473,31 @@ def _finalize_evidence_item(
         result = _apply_single_evidence_target(result, target, figure_metadata_map)
         if target["kind"] == "figure":
             metadata = figure_metadata_map.get(target["id"], {})
+    elif str(result.get("type") or "").strip().lower() == "figure":
+        inferred_figure_id = str(result.get("figure_id") or result.get("id") or "").strip()
+        if inferred_figure_id:
+            result["figure_id"] = inferred_figure_id
+            metadata = figure_metadata_map.get(inferred_figure_id, {})
+            if metadata:
+                result["caption"] = result.get("caption") or metadata.get("caption")
+                result["object_type"] = result.get("object_type") or "figure"
     result.setdefault("evidence_type", result.get("object_type"))
-    result["figure_type"] = result.get("figure_type") or _map_figure_type({**metadata, **result})
+    if not result.get("figure_type"):
+        inherited_figure_type = _stage2_figure_type(metadata)
+        if inherited_figure_type:
+            result["figure_type"] = inherited_figure_type
+            result["normalization_note"] = _append_normalization_note(
+                result.get("normalization_note"),
+                "inherited_figure_type_from_stage2",
+            )
+        else:
+            fallback_figure_type = _map_figure_type({**metadata, **result})
+            if fallback_figure_type:
+                result["figure_type"] = fallback_figure_type
+                result["normalization_note"] = _append_normalization_note(
+                    result.get("normalization_note"),
+                    "fallback_figure_type_from_caption",
+                )
     if not result.get("evidence_id"):
         base_id = str(result.get("figure_id") or result.get("table_id") or result.get("object_id") or "").strip()
         if base_id:
@@ -1535,7 +1558,21 @@ def _apply_single_evidence_target(
         metadata = figure_metadata_map.get(target["id"], {})
         result["evidence_id"] = target["id"]
         result["figure_id"] = target["id"]
-        result["figure_type"] = _map_figure_type(metadata)
+        inherited_figure_type = _stage2_figure_type(metadata)
+        if inherited_figure_type:
+            result["figure_type"] = inherited_figure_type
+            result["normalization_note"] = _append_normalization_note(
+                result.get("normalization_note"),
+                "inherited_figure_type_from_stage2",
+            )
+        else:
+            fallback_figure_type = _map_figure_type(metadata)
+            if fallback_figure_type:
+                result["figure_type"] = fallback_figure_type
+                result["normalization_note"] = _append_normalization_note(
+                    result.get("normalization_note"),
+                    "fallback_figure_type_from_caption",
+                )
         result["caption"] = metadata.get("caption") or result.get("caption")
         result["object_type"] = "figure"
     else:
@@ -1584,37 +1621,82 @@ def _ensure_unique_evidence_ids(payload: list[dict[str, Any]]) -> list[dict[str,
     return payload
 
 
+def _stage2_figure_type(metadata: dict[str, Any]) -> str | None:
+    for key in ("figure_class", "technique"):
+        value = str(metadata.get(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _append_normalization_note(existing: Any, note: str) -> str:
+    existing_text = str(existing or "").strip()
+    if not existing_text:
+        return note
+    notes = [part.strip() for part in existing_text.split(";") if part.strip()]
+    if note in notes:
+        return "; ".join(notes)
+    notes.append(note)
+    return "; ".join(notes)
+
+
 def _map_figure_type(metadata: dict[str, Any]) -> str | None:
     figure_class = str(metadata.get("figure_class") or "").lower()
+    technique = str(metadata.get("technique") or "").lower()
     caption = str(metadata.get("caption") or "")
     description = str(metadata.get("description_text") or "")
     fact_summary = str(metadata.get("fact_summary") or metadata.get("fact") or "")
     text = f"{caption} {description} {fact_summary}"
     lowered = text.lower()
+    if "nmr" in technique or "27al" in technique:
+        return "nmr_spectrum"
+    if "ferron" in technique:
+        return "ferron_curve"
+    if "ftir" in technique or "infrared" in technique or technique == "ir":
+        return "ftir_spectrum"
+    if "xrd" in technique or "diffraction" in technique:
+        return "xrd_pattern"
+    if "raman" in technique:
+        return "raman_spectrum"
+    if "sem" in technique or "tem" in technique or "microscopy" in technique:
+        return "microscopy"
     if "27al" in lowered or " nmr" in lowered or "nmr" in lowered:
         return "nmr_spectrum"
     if "ferron" in lowered or "al-ferron" in lowered:
         return "ferron_curve"
-    if "ftir" in lowered or "infrared" in lowered:
+    if (
+        "ftir" in lowered
+        or "infrared" in lowered
+        or "ir谱图" in lowered
+        or "红外" in text
+        or "傅里叶红外" in text
+    ):
         return "ftir_spectrum"
     if "xrd" in lowered or "diffraction" in lowered:
         return "xrd_pattern"
+    if "raman" in lowered:
+        return "raman_spectrum"
     if "tem" in lowered:
         return "microscopy"
     if "sem" in lowered:
         return "microscopy"
+    if "显微" in text:
+        return "microscopy"
     if "spinnability" in lowered or "可纺" in text:
         return "photo_image"
     mapping = {
-        "xrd_pattern": "XRD",
-        "ftir_spectrum": "FTIR",
-        "raman_spectrum": "Raman",
+        "xrd_pattern": "xrd_pattern",
+        "ftir_spectrum": "ftir_spectrum",
+        "raman_spectrum": "raman_spectrum",
         "mass_spectrum": "mass_spectrum",
         "rheology_curve": "rheology_curve",
-        "photo_image": "photo",
-        "microscopy_image": "microscopy_image",
-        "elemental_mapping": "EDS",
-        "thermal_analysis_plot": "TG_DSC",
+        "photo_image": "photo_image",
+        "microscopy_image": "microscopy",
+        "microscopy": "microscopy",
+        "elemental_mapping": "elemental_mapping",
+        "thermal_analysis_plot": "thermal_analysis_plot",
+        "nmr_spectrum": "nmr_spectrum",
+        "ferron_curve": "ferron_curve",
     }
     return mapping.get(figure_class, metadata.get("figure_class"))
 
