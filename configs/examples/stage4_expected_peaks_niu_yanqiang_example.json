@@ -1,0 +1,14 @@
+{
+  "图2.18": {
+    "figure_type": "ftir_spectrum",
+    "unit": "cm^-1",
+    "tolerance": 10,
+    "expected_positions": [3400, 1645, 761, 615]
+  },
+  "图2.19": {
+    "figure_type": "xrd_pattern",
+    "unit": "2theta_deg",
+    "tolerance": 0.5,
+    "expected_positions": [7]
+  }
+}
