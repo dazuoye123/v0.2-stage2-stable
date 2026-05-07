@@ -450,7 +450,7 @@ def _render_markdown_review(review_payload: dict[str, Any]) -> str:
                 "pass": "可进入下一张图 live-smoke",
                 "warning": "需要人工复核",
                 "fail": "不建议继续扩大 live 批量",
-            }[summary["overall_status"]],
+            }.get(summary["overall_status"], "needs manual review"),
             "",
         ]
     )

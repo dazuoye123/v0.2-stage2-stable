@@ -60,9 +60,19 @@ STAGE4_PRIORITY_TYPES = (
 DEFAULT_STAGE3_SECTION_KEYWORDS = ["Al13", "NMR", "Ferron", "FTIR", "XRD", "pH", "可纺性"]
 
 
+def _normalize_stage4a_figure_types(
+    figure_types: list[str] | tuple[str, ...] | set[str] | None,
+) -> tuple[str, ...]:
+    if not figure_types:
+        return STAGE4_PRIORITY_TYPES
+    normalized = tuple(str(item).strip() for item in figure_types if str(item).strip())
+    return normalized or STAGE4_PRIORITY_TYPES
+
+
 def build_full_resume_plan(
     status: dict[str, Any],
     *,
+    auto_complete: bool = False,
     allow_stage2_refresh: bool,
     live_stage3: bool,
     live_stage4a: bool,
@@ -71,6 +81,9 @@ def build_full_resume_plan(
     force_stage4a: bool,
     force_stage5: bool,
     force_linking: bool,
+    stage3_budget_available: bool = True,
+    stage4a_budget_available: bool = True,
+    model_call_budget_available: bool = True,
 ) -> dict[str, str]:
     actions: dict[str, str] = {}
 
@@ -81,9 +94,12 @@ def build_full_resume_plan(
     else:
         actions["stage2"] = "pending_stage2_missing_inputs"
 
+    stage3_allowed = live_stage3 or (auto_complete and stage3_budget_available and model_call_budget_available)
+    stage4a_allowed = live_stage4a or (auto_complete and stage4a_budget_available and model_call_budget_available)
+
     if status["stage3"]["completed"] and not force_stage3:
         actions["stage3"] = "skip_stage3"
-    elif live_stage3:
+    elif stage3_allowed:
         actions["stage3"] = "run_stage3"
     else:
         actions["stage3"] = "pending_stage3_requires_llm"
@@ -93,13 +109,18 @@ def build_full_resume_plan(
         actions["stage4a"] = "skip_stage4a"
     elif not stage3_ready_or_running:
         actions["stage4a"] = "pending_stage4a_depends_on_stage3"
-    elif live_stage4a:
+    elif stage4a_allowed:
         actions["stage4a"] = "run_stage4a"
     else:
         actions["stage4a"] = "pending_stage4a_requires_vlm"
 
+    auto_impacted = (
+        not status["stage5"]["completed"]
+        or actions["stage3"] == "run_stage3"
+        or actions["stage4a"] == "run_stage4a"
+    )
     stage5_requires_rerun = (
-        force_stage5
+        (force_stage5 and (not auto_complete or auto_impacted))
         or not status["stage5"]["completed"]
         or actions["stage3"] == "run_stage3"
         or actions["stage4a"] == "run_stage4a"
@@ -112,7 +133,7 @@ def build_full_resume_plan(
         actions["stage5"] = "skip_stage5"
 
     stage55_requires_rerun = (
-        force_linking
+        (force_linking and (not auto_complete or auto_impacted or actions["stage5"] == "run_stage5"))
         or not status["stage55"]["completed"]
         or actions["stage5"] == "run_stage5"
     )
@@ -133,6 +154,7 @@ def run_stage6c_full_resume(
     outputs_dir: Path | str,
     max_papers: int = 4,
     paper_ids: list[str] | None = None,
+    auto_complete: bool = False,
     allow_stage2_refresh: bool = False,
     live_stage3: bool = False,
     live_stage4a: bool = False,
@@ -143,12 +165,18 @@ def run_stage6c_full_resume(
     force_linking: bool = False,
     stop_on_error: bool = False,
     dry_run_plan_only: bool = False,
+    max_stage4a_figures_per_paper: int = 4,
+    max_stage3_papers: int = 2,
+    max_stage4a_papers: int = 2,
+    max_total_model_calls: int = 10,
+    stage4a_figure_types: list[str] | tuple[str, ...] | set[str] | None = None,
     output_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     project_root = Path(project_root)
     markdown_dir = Path(markdown_dir)
     outputs_dir = Path(outputs_dir)
     load_project_dotenv(project_root)
+    allowed_stage4a_types = _normalize_stage4a_figure_types(stage4a_figure_types)
 
     discovered = discover_resume_candidates(markdown_dir, outputs_dir, max_papers=max_papers)
     if paper_ids:
@@ -161,6 +189,9 @@ def run_stage6c_full_resume(
     plan_rows: list[dict[str, Any]] = []
     execution_log: list[dict[str, Any]] = []
     per_paper_summary: list[dict[str, Any]] = []
+    stage3_planned = 0
+    stage4a_planned = 0
+    model_stage_planned = 0
 
     for candidate in discovered:
         paper_id = candidate["paper_id"]
@@ -172,8 +203,12 @@ def run_stage6c_full_resume(
             markdown_path=markdown_path,
             output_dir=output_dir_path,
         )
+        stage3_budget_available = max_stage3_papers <= 0 or stage3_planned < max_stage3_papers
+        stage4a_budget_available = max_stage4a_papers <= 0 or stage4a_planned < max_stage4a_papers
+        model_budget_available = max_total_model_calls <= 0 or model_stage_planned < max_total_model_calls
         plan = build_full_resume_plan(
             before,
+            auto_complete=auto_complete,
             allow_stage2_refresh=allow_stage2_refresh,
             live_stage3=live_stage3,
             live_stage4a=live_stage4a,
@@ -182,7 +217,16 @@ def run_stage6c_full_resume(
             force_stage4a=force_stage4a,
             force_stage5=force_stage5,
             force_linking=force_linking,
+            stage3_budget_available=stage3_budget_available,
+            stage4a_budget_available=stage4a_budget_available,
+            model_call_budget_available=model_budget_available,
         )
+        if plan.get("stage3") == "run_stage3":
+            stage3_planned += 1
+            model_stage_planned += 1
+        if plan.get("stage4a") == "run_stage4a":
+            stage4a_planned += 1
+            model_stage_planned += 1
         plan_rows.append({"paper_id": paper_id, "stage_status_before": before, "planned_actions": plan})
 
         executed_actions: list[dict[str, Any]] = []
@@ -195,6 +239,8 @@ def run_stage6c_full_resume(
                     markdown_path=markdown_path,
                     output_dir=output_dir_path,
                     plan=plan,
+                    max_stage4a_figures_per_paper=max_stage4a_figures_per_paper,
+                    stage4a_figure_types=allowed_stage4a_types,
                 )
             except Exception as exc:  # pragma: no cover - top-level batch guard
                 paper_failed_reason = f"{type(exc).__name__}: {exc}"
@@ -349,6 +395,8 @@ def _execute_full_resume_plan(
     markdown_path: Path,
     output_dir: Path,
     plan: dict[str, str],
+    max_stage4a_figures_per_paper: int,
+    stage4a_figure_types: tuple[str, ...],
 ) -> list[dict[str, Any]]:
     logs: list[dict[str, Any]] = []
     current_status = detect_stage_status(project_root=project_root, paper_id=paper_id, markdown_path=markdown_path, output_dir=output_dir)
@@ -385,13 +433,25 @@ def _execute_full_resume_plan(
                     log_item["reason"] = reason
                     logs.append(log_item)
                     continue
-                selected_figure_ids = _select_stage4_figure_ids(paper_id=paper_id, output_dir=output_dir, max_figures=4)
+                selected_figure_ids = _select_stage4_figure_ids(
+                    paper_id=paper_id,
+                    output_dir=output_dir,
+                    max_figures=max_stage4a_figures_per_paper,
+                    allowed_figure_types=stage4a_figure_types,
+                )
                 if not selected_figure_ids:
+                    _write_stage4a_not_applicable(paper_id=paper_id, output_dir=output_dir)
                     log_item["status"] = "not_applicable"
                     log_item["reason"] = "no_high_value_spectra_candidates"
                     logs.append(log_item)
                     continue
-                _run_stage4a_live(paper_id=paper_id, output_dir=output_dir, figure_ids=selected_figure_ids)
+                log_item["figure_ids"] = selected_figure_ids
+                _run_stage4a_live(
+                    paper_id=paper_id,
+                    output_dir=output_dir,
+                    figure_ids=selected_figure_ids,
+                    allowed_figure_types=stage4a_figure_types,
+                )
             elif stage == "stage5":
                 current_status = detect_stage_status(project_root=project_root, paper_id=paper_id, markdown_path=markdown_path, output_dir=output_dir)
                 if not current_status["stage3"]["completed"]:
@@ -484,12 +544,18 @@ def _stage4a_live_ready() -> tuple[bool, str | None]:
     return True, None
 
 
-def _select_stage4_figure_ids(*, paper_id: str, output_dir: Path, max_figures: int = 4) -> list[str]:
+def _select_stage4_figure_ids(
+    *,
+    paper_id: str,
+    output_dir: Path,
+    max_figures: int = 4,
+    allowed_figure_types: tuple[str, ...] | None = None,
+) -> list[str]:
     extractor = Stage4VisionSpectraExtractor(
         paper_id=paper_id,
         output_dir=output_dir,
         max_figures=max_figures,
-        allowed_figure_types=set(STAGE4_PRIORITY_TYPES),
+        allowed_figure_types=set(allowed_figure_types or STAGE4_PRIORITY_TYPES),
         dry_run=True,
     )
     figures = read_jsonl(output_dir / "figures.jsonl")
@@ -503,22 +569,70 @@ def _select_stage4_figure_ids(*, paper_id: str, output_dir: Path, max_figures: i
         stage3_schema=stage3_schema,
     )
     sendable = [item for item in candidates if item.get("send_to_vlm")]
-    priority_map = {name: index for index, name in enumerate(STAGE4_PRIORITY_TYPES)}
+    priority_order = allowed_figure_types or STAGE4_PRIORITY_TYPES
+    priority_map = {name: index for index, name in enumerate(priority_order)}
     sendable.sort(key=lambda item: (priority_map.get(str(item.get("figure_type") or "unknown"), 999), str(item.get("figure_id") or "")))
     return [str(item.get("figure_id")) for item in sendable[:max_figures] if item.get("figure_id")]
 
 
-def _run_stage4a_live(*, paper_id: str, output_dir: Path, figure_ids: list[str]) -> None:
+def _run_stage4a_live(
+    *,
+    paper_id: str,
+    output_dir: Path,
+    figure_ids: list[str],
+    allowed_figure_types: tuple[str, ...] | None = None,
+) -> None:
     extractor = Stage4VisionSpectraExtractor(
         paper_id=paper_id,
         output_dir=output_dir,
         max_figures=len(figure_ids) or 4,
+        allowed_figure_types=set(allowed_figure_types or STAGE4_PRIORITY_TYPES),
         figure_ids=figure_ids,
         dry_run=False,
     )
     extractor.run()
     stage4_dir = output_dir / "stage4_vision_spectra"
     review_payload = review_stage4_extractions(load_stage4_outputs(stage4_dir))
+    write_stage4_quality_review(
+        review_payload,
+        output_md=stage4_dir / "stage4_quality_review.md",
+        output_json=stage4_dir / "stage4_quality_review.json",
+    )
+
+
+def _write_stage4a_not_applicable(*, paper_id: str, output_dir: Path) -> None:
+    stage4_dir = output_dir / "stage4_vision_spectra"
+    stage4_dir.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "paper_id": paper_id,
+        "total_candidates": 0,
+        "processed_count": 0,
+        "skipped_count": 0,
+        "dry_run_count": 0,
+        "live_count": 0,
+        "validation_error_count": 0,
+        "failed_record_count": 0,
+        "by_figure_type": {},
+        "not_applicable": True,
+        "reason": "no_high_value_spectra_candidates",
+    }
+    review_payload = {
+        "summary": {
+            "total_records": 0,
+            "failed_record_count": 0,
+            "validation_error_count": 0,
+            "source_distribution": {},
+            "overall_status": "not_applicable",
+        },
+        "figures": [],
+        "global_warnings": [{"figure_id": None, "warning": "stage4a_not_applicable"}],
+    }
+    write_jsonl([], stage4_dir / "stage4_candidates.jsonl")
+    write_jsonl([], stage4_dir / "stage4_prompts.jsonl")
+    write_jsonl([], stage4_dir / "spectra_extractions.jsonl")
+    write_jsonl([], stage4_dir / "raw_vlm_outputs.jsonl")
+    write_jsonl([], stage4_dir / "failed_records.jsonl")
+    _write_json(stage4_dir / "stage4_summary.json", summary)
     write_stage4_quality_review(
         review_payload,
         output_md=stage4_dir / "stage4_quality_review.md",

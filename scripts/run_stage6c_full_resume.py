@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--outputs-dir", required=True)
     parser.add_argument("--max-papers", type=int, default=4)
     parser.add_argument("--paper-ids", default="")
+    parser.add_argument("--auto-complete", action="store_true")
     parser.add_argument("--allow-stage2-refresh", action="store_true")
     parser.add_argument("--live-stage3", action="store_true")
     parser.add_argument("--live-stage4a", action="store_true")
@@ -30,6 +31,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force-linking", action="store_true")
     parser.add_argument("--stop-on-error", action="store_true")
     parser.add_argument("--dry-run-plan-only", action="store_true")
+    parser.add_argument("--max-stage4a-figures-per-paper", type=int, default=4)
+    parser.add_argument("--max-stage3-papers", type=int, default=2)
+    parser.add_argument("--max-stage4a-papers", type=int, default=2)
+    parser.add_argument("--max-total-model-calls", type=int, default=10)
+    parser.add_argument(
+        "--stage4a-figure-types",
+        default="ftir_spectrum,xrd_pattern,nmr_spectrum,raman_spectrum,ferron_curve,tg_curve,dsc_curve,tg_dsc_curve,sem_image,tem_image",
+    )
     parser.add_argument("--output-dir")
     return parser.parse_args()
 
@@ -49,6 +58,7 @@ def main() -> int:
         outputs_dir=_resolve(args.outputs_dir),
         max_papers=max(1, args.max_papers),
         paper_ids=[item.strip() for item in args.paper_ids.split(",") if item.strip()] or None,
+        auto_complete=args.auto_complete,
         allow_stage2_refresh=args.allow_stage2_refresh,
         live_stage3=args.live_stage3,
         live_stage4a=args.live_stage4a,
@@ -59,6 +69,11 @@ def main() -> int:
         force_linking=args.force_linking,
         stop_on_error=args.stop_on_error,
         dry_run_plan_only=args.dry_run_plan_only,
+        max_stage4a_figures_per_paper=max(1, args.max_stage4a_figures_per_paper),
+        max_stage3_papers=max(0, args.max_stage3_papers),
+        max_stage4a_papers=max(0, args.max_stage4a_papers),
+        max_total_model_calls=max(0, args.max_total_model_calls),
+        stage4a_figure_types=[item.strip() for item in args.stage4a_figure_types.split(",") if item.strip()],
         output_dir=_resolve(args.output_dir),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
