@@ -1064,6 +1064,35 @@ parameters:
   - nitrate source
   is_core_statistical_field: false
   description: Nitrate-containing source used in the precursor solution.
+- canonical_key: feeding_method
+  category: process
+  standard_unit: text
+  zh_name: 加料方式
+  en_name: feeding method
+  aliases_zh:
+  - 加料方式
+  - 进料方式
+  - 加料方法
+  aliases_en:
+  - feeding method
+  - feed addition mode
+  - feed mode
+  is_core_statistical_field: false
+  description: Qualitative description of how reagents are fed or added during synthesis.
+- canonical_key: Al_to_nitrate_molar_ratio
+  category: composition
+  standard_unit: ratio
+  zh_name: 铝硝摩尔比
+  en_name: aluminum to nitrate molar ratio
+  aliases_zh:
+  - 铝硝摩尔比
+  - Al/NO3摩尔比
+  aliases_en:
+  - aluminum to nitrate molar ratio
+  - Al/NO3 ratio
+  - Al:NO3 ratio
+  is_core_statistical_field: true
+  description: Molar ratio between total aluminum species and nitrate species.
 - canonical_key: acid_type
   category: composition
   standard_unit: text
