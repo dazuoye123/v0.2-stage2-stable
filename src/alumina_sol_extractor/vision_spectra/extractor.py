@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .io import parse_json_payload, read_json, read_jsonl, write_json, write_jsonl
+from .normalization import normalize_vlm_payload_for_schema
 from .prompt_templates import get_prompt_for_figure_type
 from .routing import get_schema_for_figure_type, normalize_figure_type, should_process_figure
 from .validators import build_stage4_summary, validate_stage4_extraction
@@ -301,8 +302,12 @@ class Stage4VisionSpectraExtractor:
                 parsed.setdefault("extraction_model", response.get("model"))
                 parsed.setdefault("input_context_summary", self._build_input_context_summary(candidate))
                 parsed.setdefault("used_context_sources", list(candidate.get("context_source", {}).values()))
-                parsed, normalization_warnings = self._normalize_live_payload(parsed, figure_type=str(candidate.get("figure_type") or ""))
                 schema_cls = get_schema_for_figure_type(candidate.get("figure_type"))
+                parsed, normalization_warnings = self._normalize_live_payload(
+                    parsed,
+                    figure_type=str(candidate.get("figure_type") or ""),
+                    schema_name=schema_cls.__name__,
+                )
                 validated = schema_cls(**parsed).model_dump()
                 validated["schema_name"] = schema_cls.__name__
                 if normalization_warnings:
@@ -329,7 +334,12 @@ class Stage4VisionSpectraExtractor:
         return extractions, raw_outputs, failed_records
 
     @staticmethod
-    def _normalize_live_payload(parsed: dict[str, Any], *, figure_type: str = "") -> tuple[dict[str, Any], list[str]]:
+    def _normalize_live_payload(
+        parsed: dict[str, Any],
+        *,
+        figure_type: str = "",
+        schema_name: str = "",
+    ) -> tuple[dict[str, Any], list[str]]:
         normalized = dict(parsed)
         warnings: list[str] = []
         list_fields = ("peaks", "endothermic_peaks", "exothermic_peaks")
@@ -355,6 +365,9 @@ class Stage4VisionSpectraExtractor:
                 warnings.append("confidence_cleared_from_invalid_string")
             else:
                 normalized["confidence"] = coerced_confidence
+        schema_normalized, schema_warnings = normalize_vlm_payload_for_schema(normalized, schema_name)
+        normalized = schema_normalized
+        warnings.extend(schema_warnings)
         return normalized, warnings
 
     @staticmethod
