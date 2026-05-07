@@ -849,6 +849,7 @@ def _postprocess_paper_basic_info(
 ) -> dict[str, Any]:
     result = payload if isinstance(payload, dict) else {}
     result = dict(result)
+    normalization_warnings: list[str] = []
 
     head_lines = [line.strip().lstrip("#").strip() for line in paper_text[:5000].splitlines() if line.strip()]
     title_candidate = next((line for line in head_lines if _looks_like_title_line(line)), None)
@@ -866,6 +867,7 @@ def _postprocess_paper_basic_info(
     authors = result.get("authors")
     if authors is None:
         result["authors"] = []
+        normalization_warnings.append("authors:normalized_none_to_empty_list")
     elif not isinstance(authors, list):
         result["authors"] = [str(authors)]
     if not result.get("authors") and result.get("author"):
@@ -889,7 +891,8 @@ def _postprocess_paper_basic_info(
         for key in ("abstract_summary", "abstract_zh", "abstract_en")
     )
     title_blob = str(result.get("title") or "")
-    keywords = [str(item) for item in result.get("keywords", []) if item]
+    keywords = [str(item) for item in _ensure_list(result.get("keywords"), "keywords", normalization_warnings) if item]
+    result["keywords"] = keywords
     keyword_blob = " ".join(keywords)
     combined = f"{title_blob} {abstract_blob} {keyword_blob} {source_file.stem}"
     if not result.get("authors"):
@@ -910,8 +913,20 @@ def _postprocess_paper_basic_info(
             result["process_route"] = process_route
             inferred["process_route_evidence"] = "inferred_from_abstract_or_keywords"
             inferred["process_route_confidence"] = 0.4
+    if normalization_warnings:
+        existing_warnings = _ensure_list(result.get("normalization_warnings"), "normalization_warnings", [])
+        result["normalization_warnings"] = [*existing_warnings, *normalization_warnings]
     result.update(inferred)
     return result
+
+
+def _ensure_list(value: Any, field_name: str, warnings: list[str]) -> list[Any]:
+    if value is None:
+        warnings.append(f"{field_name}:normalized_none_to_empty_list")
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
 
 
 def _infer_material_system(text: str) -> str | None:
@@ -1517,7 +1532,7 @@ def _extract_evidence_targets(
     detailed_observation_text = str(item.get("detailed_observation") or "")
     reference_sentences = [
         str(text)
-        for text in item.get("reference_sentences", [])
+        for text in _ensure_list(item.get("reference_sentences"), "reference_sentences", [])
         if text
     ]
     allowed_sources = [

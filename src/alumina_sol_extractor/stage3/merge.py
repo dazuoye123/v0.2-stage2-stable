@@ -223,7 +223,7 @@ def _fill_nested_defaults(payload: dict[str, Any]) -> dict[str, Any]:
 def _coerce_model(item: dict[str, Any] | SchemaBaseModel, model_cls: type[SchemaBaseModel]):
     if isinstance(item, model_cls):
         return item
-    payload = _normalize_identifier_fields(item or {}, model_cls)
+    payload = _sanitize_model_payload(_normalize_identifier_fields(item or {}, model_cls), model_cls)
     return model_cls.model_validate(payload)
 
 
