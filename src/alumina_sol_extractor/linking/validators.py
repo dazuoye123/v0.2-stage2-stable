@@ -12,6 +12,20 @@ VALID_CONFIDENCE = {"high", "medium", "low"}
 VALID_DECISIONS = {"accept", "reject", "unmatched"}
 
 
+def merge_live_unmatched_candidates(
+    base_unmatched_candidates: list[dict[str, Any]],
+    llm_candidates: list[dict[str, Any]],
+    llm_unmatched_candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    reviewed_ids = {str(item.get("candidate_id")) for item in llm_candidates if item.get("candidate_id") is not None}
+    preserved = [
+        item
+        for item in base_unmatched_candidates
+        if str(item.get("candidate_id")) not in reviewed_ids
+    ]
+    return preserved + list(llm_unmatched_candidates)
+
+
 def validate_llm_link_decisions(
     candidates: list[dict[str, Any]],
     decisions: list[dict[str, Any]],
@@ -107,6 +121,25 @@ def validate_llm_link_decisions(
         else:
             unmatched.append({"candidate_id": candidate.candidate_id, "reason": "llm_unmatched", "raw_decision": payload})
     return accepted, rejected, unmatched, stats
+
+
+def sanitize_link_decision_payloads(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sanitized: list[dict[str, Any]] = []
+    for payload in decisions:
+        if not isinstance(payload, dict):
+            continue
+        sanitized.append(
+            {
+                "candidate_id": payload.get("candidate_id"),
+                "decision": payload.get("decision"),
+                "link_type": payload.get("link_type"),
+                "confidence": payload.get("confidence"),
+                "reasoning": payload.get("reasoning"),
+                "source_id": payload.get("source_id"),
+                "target_id": payload.get("target_id"),
+            }
+        )
+    return sanitized
 
 
 def build_linking_summary(

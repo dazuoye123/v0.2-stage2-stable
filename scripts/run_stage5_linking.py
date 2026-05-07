@@ -10,6 +10,7 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from alumina_sol_extractor.dspy_modules.settings import load_project_dotenv
 from alumina_sol_extractor.linking.candidate_builder import (
     DEFAULT_LINK_FAMILIES,
     build_deterministic_links,
@@ -19,7 +20,12 @@ from alumina_sol_extractor.linking.candidate_builder import (
 from alumina_sol_extractor.linking.exporters import export_linking_outputs
 from alumina_sol_extractor.linking.llm_linker import EvidenceSpectraParameterLinker
 from alumina_sol_extractor.linking.report import render_linking_report
-from alumina_sol_extractor.linking.validators import build_linking_summary, validate_llm_link_decisions
+from alumina_sol_extractor.linking.validators import (
+    build_linking_summary,
+    merge_live_unmatched_candidates,
+    sanitize_link_decision_payloads,
+    validate_llm_link_decisions,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,10 +41,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--live", action="store_true")
+    parser.add_argument("--only-needs-llm", action="store_true", help="In live mode, only submit candidates already marked needs_llm.")
     return parser.parse_args()
 
 
 def main() -> int:
+    load_project_dotenv(PROJECT_ROOT)
     args = parse_args()
     dry_run = True if not args.live else False
     final_dataset_dir = Path(args.final_dataset_dir)
@@ -64,13 +72,15 @@ def main() -> int:
     invalid_target_id_count = 0
 
     if not dry_run:
-        llm_candidates = [item for item in candidates if item.get("needs_llm")][: args.max_llm_candidates]
+        llm_candidate_pool = [item for item in candidates if item.get("needs_llm")]
+        llm_candidates = llm_candidate_pool[: args.max_llm_candidates]
         linker = EvidenceSpectraParameterLinker(dry_run=False)
         decisions, raw_llm_outputs, parse_failures = linker.run(
             llm_candidates,
             paper_context=inputs["paper"],
             max_candidates_per_call=args.max_llm_candidates,
         )
+        decisions = sanitize_link_decision_payloads(decisions)
         reviewed, rejected, unmatched, stats = validate_llm_link_decisions(
             llm_candidates,
             decisions,
@@ -78,7 +88,7 @@ def main() -> int:
         )
         accepted_links.extend(reviewed)
         rejected_links.extend(rejected)
-        unmatched_candidates.extend(unmatched)
+        unmatched_candidates = merge_live_unmatched_candidates(unmatched_candidates, llm_candidates, unmatched)
         rejected_links.extend(parse_failures)
         invalid_source_id_count = stats["invalid_source_id_count"]
         invalid_target_id_count = stats["invalid_target_id_count"]
