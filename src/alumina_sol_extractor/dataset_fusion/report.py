@@ -11,6 +11,7 @@ def render_fusion_report(bundle: dict[str, Any]) -> str:
     quality_summary = bundle["quality_summary"]
     weak_links = bundle.get("weak_links", [])
     ontology_gaps = bundle.get("ontology_gaps", [])
+    rejected_parameters = bundle.get("rejected_parameters", [])
     spectra_warnings = [
         {
             "figure_id": item.get("figure_id"),
@@ -28,7 +29,16 @@ def render_fusion_report(bundle: dict[str, Any]) -> str:
             "quality_flags": item.get("quality_flags", []),
         }
         for item in bundle["parameters"]
-        if not item.get("linked_evidence_ids")
+        if not item.get("linked_evidence_ids") and "weak_link_from_spectra" not in set(item.get("quality_flags", []))
+    ]
+    paper_level_parameters = [
+        {
+            "parameter_id": item.get("parameter_id"),
+            "canonical_key": item.get("canonical_key"),
+            "quality_flags": item.get("quality_flags", []),
+        }
+        for item in bundle["parameters"]
+        if not item.get("linked_evidence_ids") and not item.get("sample_id")
     ]
     recommend_batch = (
         bool(quality_summary.get("stage3_schema_valid"))
@@ -47,14 +57,29 @@ def render_fusion_report(bundle: dict[str, Any]) -> str:
         f"- evidence: {len(bundle['evidence'])}",
         f"- spectra: {len(bundle['spectra'])}",
         f"- samples: {len(bundle['samples'])}",
+        f"- rejected invalid canonical keys: {len(rejected_parameters)}",
         "",
-        "## Parameters Without Evidence",
+        "## Parameters Without Strong Evidence",
         f"- count: {len(parameters_without_evidence)}",
     ]
     if parameters_without_evidence:
         for item in parameters_without_evidence[:10]:
             lines.append(
                 f"- {item['parameter_id']}: canonical_key={item['canonical_key']} sample_id={item['sample_id']} flags={json.dumps(item['quality_flags'], ensure_ascii=False)}"
+            )
+    else:
+        lines.append("- none")
+    lines.extend(
+        [
+            "",
+            "## Paper-level Parameters Without Direct Evidence",
+            f"- count: {len(paper_level_parameters)}",
+        ]
+    )
+    if paper_level_parameters:
+        for item in paper_level_parameters[:10]:
+            lines.append(
+                f"- {item['parameter_id']}: canonical_key={item['canonical_key']} flags={json.dumps(item['quality_flags'], ensure_ascii=False)}"
             )
     else:
         lines.append("- none")
@@ -80,6 +105,14 @@ def render_fusion_report(bundle: dict[str, Any]) -> str:
             )
     else:
         lines.append("- none")
+    lines.extend(["", "## Invalid Canonical Keys", f"- count: {len(rejected_parameters)}"])
+    if rejected_parameters:
+        for item in rejected_parameters[:10]:
+            lines.append(
+                f"- {item.get('parameter_id')}: raw_name={item.get('raw_name')} canonical_key={item.get('canonical_key')} reason={item.get('reason')}"
+            )
+    else:
+        lines.append("- none")
     lines.extend(["", "## Ontology Gaps", f"- count: {len(ontology_gaps)}"])
     if ontology_gaps:
         for item in ontology_gaps[:10]:
@@ -95,4 +128,3 @@ def render_fusion_report(bundle: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines)
-

@@ -16,8 +16,20 @@ def build_quality_summary(
     spectra: list[dict[str, Any]],
     samples: list[dict[str, Any]],
     fusion_warnings: list[str],
+    rejected_parameters: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    parameters_without_evidence = sum(1 for item in parameters if not item.get("linked_evidence_ids"))
+    parameters_with_strong_evidence = sum(1 for item in parameters if item.get("linked_evidence_ids"))
+    parameters_with_weak_spectra_link = sum(
+        1 for item in parameters if "weak_link_from_spectra" in set(item.get("quality_flags") or [])
+    )
+    parameters_without_evidence = sum(
+        1
+        for item in parameters
+        if not item.get("linked_evidence_ids") and "weak_link_from_spectra" not in set(item.get("quality_flags") or [])
+    )
+    paper_level_parameters_without_direct_evidence = sum(
+        1 for item in parameters if not item.get("linked_evidence_ids") and not item.get("sample_id")
+    )
     spectra_with_warning = sum(
         1
         for item in spectra
@@ -35,9 +47,12 @@ def build_quality_summary(
         "total_evidence": len(evidence),
         "total_spectra": len(spectra),
         "total_samples": len(samples),
+        "parameters_with_strong_evidence_count": parameters_with_strong_evidence,
+        "parameters_with_weak_spectra_link_count": parameters_with_weak_spectra_link,
         "parameters_without_evidence_count": parameters_without_evidence,
+        "paper_level_parameters_without_direct_evidence_count": paper_level_parameters_without_direct_evidence,
+        "invalid_canonical_key_count": len(rejected_parameters),
         "spectra_with_warning_count": spectra_with_warning,
         "fusion_warning_count": len(fusion_warnings),
         "fusion_warning_types": dict(Counter(fusion_warnings)),
     }
-

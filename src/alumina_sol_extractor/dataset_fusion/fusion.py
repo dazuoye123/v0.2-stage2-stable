@@ -7,10 +7,14 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from alumina_sol_extractor.ontology import get_canonical_keys, normalize_key
+
 from .loaders import load_paper_inputs
 from .models import EvidenceRecord, PaperRecord, ParameterRow, SampleRecord, SpectraRecord
 from .report import render_fusion_report
 from .validators import build_quality_summary
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def run_stage5_dataset_fusion(
@@ -36,7 +40,7 @@ def run_stage5_dataset_fusion(
         stage4.get("spectra_extractions", []),
         stage4.get("quality_review", {}).get("figures", []),
     )
-    parameters, weak_links, ontology_gaps = _build_parameter_rows(
+    parameters, weak_links, ontology_gaps, rejected_parameters = _build_parameter_rows(
         paper_id=paper_id,
         global_constants=stage3.get("global_constants", {}),
         data_points=stage3.get("data_points", []),
@@ -66,6 +70,7 @@ def run_stage5_dataset_fusion(
         spectra=spectra,
         samples=samples,
         fusion_warnings=fusion_warnings,
+        rejected_parameters=rejected_parameters,
     )
     bundle = {
         "paper": paper,
@@ -78,6 +83,7 @@ def run_stage5_dataset_fusion(
         "quality_summary": quality_summary,
         "weak_links": weak_links,
         "ontology_gaps": ontology_gaps,
+        "rejected_parameters": rejected_parameters,
         "inputs": {
             "dirs": {key: str(value) for key, value in inputs["dirs"].items()},
             "file_index": inputs["file_index"],
@@ -89,16 +95,32 @@ def run_stage5_dataset_fusion(
 
 
 def _build_paper_record(*, paper_id: str, paper_basic_info: dict[str, Any]) -> dict[str, Any]:
+    title = paper_basic_info.get("title")
+    authors = paper_basic_info.get("authors", [])
+    year = paper_basic_info.get("year")
+    source_file = paper_basic_info.get("source_file")
+    material_system = paper_basic_info.get("material_system")
+    process_route = paper_basic_info.get("process_route")
+    keywords = paper_basic_info.get("keywords", [])
+    abstract = paper_basic_info.get("abstract")
+    material_system, process_route = _apply_paper_fallbacks(
+        material_system=material_system,
+        process_route=process_route,
+        title=title,
+        abstract=abstract,
+        keywords=keywords,
+        source_file=source_file,
+    )
     payload = PaperRecord(
         paper_id=paper_id,
-        title=paper_basic_info.get("title"),
-        authors=paper_basic_info.get("authors", []),
-        year=paper_basic_info.get("year"),
-        source_file=paper_basic_info.get("source_file"),
-        material_system=paper_basic_info.get("material_system"),
-        process_route=paper_basic_info.get("process_route"),
-        keywords=paper_basic_info.get("keywords", []),
-        abstract=paper_basic_info.get("abstract"),
+        title=title,
+        authors=authors,
+        year=year,
+        source_file=source_file,
+        material_system=material_system,
+        process_route=process_route,
+        keywords=keywords,
+        abstract=abstract,
     ).model_dump()
     return payload
 
@@ -165,10 +187,11 @@ def _build_parameter_rows(
     data_points: list[dict[str, Any]],
     experiment_series: list[dict[str, Any]],
     spectra: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[dict[str, Any]]]:
     records: list[dict[str, Any]] = []
     weak_links: list[dict[str, Any]] = []
     ontology_gaps: list[str] = []
+    rejected_parameters: list[dict[str, Any]] = []
     counter = itertools.count(1)
 
     for record in global_constants.get("additional_parameter_records", []) or []:
@@ -246,7 +269,22 @@ def _build_parameter_rows(
                 )
             )
 
+    accepted_records: list[dict[str, Any]] = []
     for record in records:
+        if _is_invalid_canonical_key(record.get("canonical_key")):
+            rejected_parameters.append(
+                {
+                    "parameter_id": record.get("parameter_id"),
+                    "raw_name": record.get("raw_name"),
+                    "canonical_key": record.get("canonical_key"),
+                    "source_scope": record.get("source_scope"),
+                    "reason": "invalid_canonical_key",
+                }
+            )
+            continue
+        accepted_records.append(record)
+
+    for record in accepted_records:
         if not record.get("canonical_key"):
             ontology_gaps.append(record.get("raw_name") or record.get("parameter_id"))
         if not record.get("evidence_refs"):
@@ -262,7 +300,7 @@ def _build_parameter_rows(
                     }
                 )
     ontology_gaps = list(dict.fromkeys(item for item in ontology_gaps if item))
-    return records, weak_links, ontology_gaps
+    return accepted_records, weak_links, ontology_gaps, rejected_parameters
 
 
 def _extract_parameter_records_from_mapping(
@@ -287,7 +325,7 @@ def _extract_parameter_records_from_mapping(
             return
         if node is None:
             return
-        raw_name = path[-1] if path else (raw_name_prefix or base_scope)
+        raw_name = _pick_parameter_name(path, raw_name_prefix or base_scope)
         records.append(
             {
                 "canonical_key": raw_name,
@@ -339,16 +377,18 @@ def _normalize_parameter_like_record(
         return rows
 
     parameter_id = f"{paper_id}-param-{next(counter):05d}"
+    raw_name = _string_or_none(base.get("raw_name"))
+    canonical_key = _coerce_canonical_key(base.get("canonical_key"), raw_name)
     quality_flags = list(base.get("quality_flags") or [])
-    if not base.get("canonical_key"):
+    if not canonical_key:
         quality_flags.append("canonical_key_missing")
     row = ParameterRow(
         parameter_id=parameter_id,
         paper_id=paper_id,
         sample_id=sample_id,
         series_id=series_id,
-        canonical_key=base.get("canonical_key"),
-        raw_name=base.get("raw_name"),
+        canonical_key=canonical_key,
+        raw_name=raw_name,
         value=value,
         unit=base.get("unit"),
         min_value=base.get("min_value"),
@@ -530,7 +570,16 @@ def _collect_fusion_warnings(
         for file_key, is_present in file_presence.items():
             if not is_present and file_key not in {"stage4_quality_review_md"}:
                 warnings.append(f"missing_{section_name}_{file_key}")
-    warnings.extend("parameter_without_evidence" for item in parameters if not item.get("linked_evidence_ids"))
+    warnings.extend(
+        "parameter_without_evidence"
+        for item in parameters
+        if not item.get("linked_evidence_ids") and "weak_link_from_spectra" not in set(item.get("quality_flags") or [])
+    )
+    warnings.extend(
+        "paper_level_parameter_without_direct_evidence"
+        for item in parameters
+        if not item.get("linked_evidence_ids") and not item.get("sample_id")
+    )
     warnings.extend("spectra_with_warning" for item in spectra if item.get("warning_codes") or item.get("conflict_warnings"))
     warnings.extend("weak_link_from_spectra" for _ in weak_links)
     return warnings
@@ -610,3 +659,58 @@ def _append_note(existing: str | None, extra: str) -> str:
         return f"{existing}; {extra}"
     return extra
 
+
+def _pick_parameter_name(path: list[str], fallback: str) -> str:
+    if not path:
+        return fallback
+    for segment in reversed(path):
+        text = str(segment).strip()
+        if text and not text.isdigit():
+            return text
+    return fallback
+
+
+def _coerce_canonical_key(raw_canonical: Any, raw_name: str | None) -> str | None:
+    candidates = [raw_canonical, raw_name]
+    known_keys = set(get_canonical_keys(PROJECT_ROOT))
+    for candidate in candidates:
+        text = _string_or_none(candidate)
+        if not text:
+            continue
+        normalized = normalize_key(text, PROJECT_ROOT)
+        if normalized:
+            return normalized
+        if text in known_keys:
+            return text
+    return _string_or_none(raw_canonical) or _string_or_none(raw_name)
+
+
+def _is_invalid_canonical_key(value: Any) -> bool:
+    text = _string_or_none(value)
+    return text is None or text.isdigit()
+
+
+def _apply_paper_fallbacks(
+    *,
+    material_system: str | None,
+    process_route: str | None,
+    title: str | None,
+    abstract: str | None,
+    keywords: list[Any] | None,
+    source_file: str | None,
+) -> tuple[str | None, str | None]:
+    keyword_text = " ".join(str(item) for item in (keywords or []) if item not in (None, ""))
+    combined = " ".join(item for item in [title, abstract, keyword_text, material_system, process_route, source_file] if item)
+    combined_casefold = combined.casefold()
+    looks_like_alumina_sol = any(
+        marker in combined_casefold
+        for marker in ("alumina sol", "fiber precursor", "high al13", "27al nmr", "al-ferron")
+    ) or any(marker in combined for marker in ("铝溶胶", "前驱体", "高 Al13"))
+    updated_material_system = material_system
+    updated_process_route = process_route
+    if looks_like_alumina_sol:
+        if not updated_material_system or updated_material_system == "alumina-based ceramic fiber":
+            updated_material_system = "alumina_fiber_precursor"
+        if not updated_process_route or updated_process_route == "sol-gel dry spinning":
+            updated_process_route = "alumina sol synthesis and characterization"
+    return updated_material_system, updated_process_route

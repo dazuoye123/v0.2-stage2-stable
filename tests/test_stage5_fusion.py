@@ -17,7 +17,16 @@ def _build_fixture(output_dir: Path) -> None:
     stage3_dir.mkdir(parents=True, exist_ok=True)
     stage4_dir.mkdir(parents=True, exist_ok=True)
     (stage3_dir / "paper_basic_info.json").write_text(
-        json.dumps({"title": "paper", "authors": ["A"], "material_system": "alumina_sol"}, ensure_ascii=False),
+        json.dumps(
+            {
+                "title": "Fiber precursor alumina sol paper",
+                "authors": ["A"],
+                "material_system": "alumina-based ceramic fiber",
+                "process_route": "sol-gel dry spinning",
+                "abstract": "This alumina sol fiber precursor study focuses on synthesis and characterization.",
+            },
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
     (stage3_dir / "global_constants.json").write_text(
@@ -65,7 +74,11 @@ def _build_fixture(output_dir: Path) -> None:
             {
                 "series_id": "series-1",
                 "series_name": "NMR study",
-                "variables": {"start_temperature_C": 50},
+                "variables": {
+                    "start_temperature_C": 50,
+                    "feeding_method": ["batch", "dropwise"],
+                    "Al_to_nitrate_molar_ratio": "2.125",
+                },
             }
         ],
     )
@@ -138,3 +151,31 @@ def test_fusion_links_spectra_to_evidence_and_expands_parameters(tmp_path: Path)
     weak_link_parameter = next(item for item in bundle["parameters"] if item["canonical_key"] == "nmr_27Al_peak_position_ppm")
     assert "weak_link_from_spectra" in weak_link_parameter["quality_flags"]
     assert bundle["samples"][0]["linked_spectra"] == ["图2.2"]
+    assert {item["canonical_key"] for item in bundle["parameters"] if item["canonical_key"] in {"0", "1"}} == set()
+    assert any(item["canonical_key"] == "feeding_method" for item in bundle["parameters"])
+    assert any(item["canonical_key"] == "Al_to_nitrate_molar_ratio" for item in bundle["parameters"])
+    assert bundle["paper"]["process_route"] == "alumina sol synthesis and characterization"
+    assert bundle["quality_summary"]["invalid_canonical_key_count"] == 0
+    assert bundle["rejected_parameters"] == []
+
+
+def test_invalid_numeric_canonical_keys_are_rejected(tmp_path: Path) -> None:
+    output_dir = tmp_path / "paper-output"
+    _build_fixture(output_dir)
+    stage3_dir = output_dir / "stage3_dspy_smoke"
+    payload = json.loads((stage3_dir / "global_constants.json").read_text(encoding="utf-8"))
+    payload["additional_parameter_records"].append(
+        {
+            "canonical_key": 0,
+            "raw_name": "0",
+            "value": "bad",
+            "unit": None,
+            "evidence_refs": [],
+        }
+    )
+    (stage3_dir / "global_constants.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    bundle = run_stage5_dataset_fusion(paper_id="paper-1", output_dir=output_dir)
+    assert all(str(item["canonical_key"]) != "0" for item in bundle["parameters"])
+    assert bundle["quality_summary"]["invalid_canonical_key_count"] == 1
+    assert bundle["rejected_parameters"][0]["reason"] == "invalid_canonical_key"
