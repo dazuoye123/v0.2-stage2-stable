@@ -44,6 +44,21 @@ def get_signatures():
             desc="Return JSON only. One list of experiment series."
         )
 
+    class ExtractProcessStepsSignature(dspy.Signature):
+        """Extract ordered experimental procedure steps. Output JSON only."""
+
+        procedure_text = dspy.InputField()
+        paper_basic_info_json = dspy.InputField()
+        process_steps_json = dspy.OutputField(
+            desc=(
+                "Return JSON only as a JSON list. Each item must be an object describing one ordered process step. "
+                "Keep the original sequence, include step_order and evidence_text, and do not invent missing quantities. "
+                "If a quantity is vague like '一定量', keep that text and set needs_manual_review=true. "
+                "Split heat-treatment into separate steps when temperatures/rates/holding times differ. "
+                "If no procedure steps are found, return []. Never return null."
+            )
+        )
+
     class ExtractDataPointsSignature(dspy.Signature):
         """Extract one series worth of data points. Output JSON only."""
 
@@ -90,6 +105,7 @@ def get_signatures():
         "ExtractPaperBasicInfoSignature": ExtractPaperBasicInfoSignature,
         "ExtractGlobalConstantsSignature": ExtractGlobalConstantsSignature,
         "ExtractExperimentSeriesSignature": ExtractExperimentSeriesSignature,
+        "ExtractProcessStepsSignature": ExtractProcessStepsSignature,
         "ExtractDataPointsSignature": ExtractDataPointsSignature,
         "ExtractEvidenceObjectsSignature": ExtractEvidenceObjectsSignature,
         "JudgeExtractionSignature": JudgeExtractionSignature,

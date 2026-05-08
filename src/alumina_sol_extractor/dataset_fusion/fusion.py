@@ -35,6 +35,10 @@ def run_stage5_dataset_fusion(
     stage4 = inputs["stage4"]
 
     paper = _build_paper_record(paper_id=paper_id, paper_basic_info=stage3.get("paper_basic_info", {}))
+    process_steps = _build_process_step_rows(
+        paper_id=paper_id,
+        process_steps=stage3.get("process_steps", []),
+    )
     evidence = _build_evidence_records(stage3.get("evidence_objects", []))
     spectra = _build_spectra_records(
         stage4.get("spectra_extractions", []),
@@ -69,11 +73,13 @@ def run_stage5_dataset_fusion(
         evidence=evidence,
         spectra=spectra,
         samples=samples,
+        process_steps=process_steps,
         fusion_warnings=fusion_warnings,
         rejected_parameters=rejected_parameters,
     )
     bundle = {
         "paper": paper,
+        "process_steps": process_steps,
         "evidence": evidence,
         "spectra": spectra,
         "parameters": parameters,
@@ -123,6 +129,26 @@ def _build_paper_record(*, paper_id: str, paper_basic_info: dict[str, Any]) -> d
         abstract=abstract,
     ).model_dump()
     return payload
+
+
+def _build_process_step_rows(
+    *,
+    paper_id: str,
+    process_steps: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, record in enumerate(process_steps, start=1):
+        if not isinstance(record, dict):
+            continue
+        step = dict(record)
+        step["paper_id"] = paper_id
+        step["step_id"] = step.get("step_id") or f"{paper_id}-step-{index:03d}"
+        step["step_order"] = step.get("step_order") or index
+        step["linked_parameter_keys"] = _ensure_str_list(step.get("linked_parameter_keys"))
+        if step.get("evidence_text") is not None:
+            step["evidence_text"] = str(step.get("evidence_text")).strip()
+        rows.append(step)
+    return rows
 
 
 def _build_evidence_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:

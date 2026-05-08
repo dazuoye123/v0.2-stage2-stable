@@ -26,13 +26,11 @@ def test_section_aware_smoke_uses_rule_based_selection_and_writes_artifacts(tmp_
     markdown_path = tmp_path / "paper.md"
     markdown_path.write_text(
         """# 纤维用铝溶胶前驱体的制备及表征
-
 ## 第二章 高 Al13 团簇含量铝溶胶的可控制备与表征
 ### 2.2 实验部分
 反应温度、pH 和搅拌速率条件如下。
 ### 2.3 结果与讨论
 图2.12 给出 27Al NMR 结果，图2.18 给出 FTIR，图2.19 给出 XRD。
-
 ## 第三章 分离研究
 图3.7 给出标准曲线。
 """,
@@ -73,6 +71,21 @@ def test_section_aware_smoke_uses_rule_based_selection_and_writes_artifacts(tmp_
     )
     monkeypatch.setattr(
         runner,
+        "ExtractProcessStepsModule",
+        lambda: _FakeModule(
+            [
+                {
+                    "step_order": 1,
+                    "action": "stir",
+                    "action_zh": "搅拌",
+                    "evidence_text": "反应温度、pH 和搅拌速率条件如下。",
+                    "confidence": "medium",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
         "ExtractEvidenceObjectsModule",
         lambda: _FakeModule({"spectra": {"nmr": {"fact": "27Al NMR 证据", "evidence_source": "图2.12", "caption": "图2.12 27Al NMR 光谱"}}}),
     )
@@ -103,3 +116,4 @@ def test_section_aware_smoke_uses_rule_based_selection_and_writes_artifacts(tmp_
     assert "第三章 分离研究" not in selected_sections
     assert evidence_scope["included_figure_ids"] == ["图2.12"]
     assert all(item.get("figure_id") != "图3.7" for item in record["evidence_objects"])
+    assert record["process_steps"][0]["action"] == "stir"

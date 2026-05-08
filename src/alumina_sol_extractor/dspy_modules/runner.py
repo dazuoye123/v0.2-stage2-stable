@@ -58,6 +58,7 @@ from .modules import (
     ExtractExperimentSeriesModule,
     ExtractGlobalConstantsModule,
     ExtractPaperBasicInfoModule,
+    ExtractProcessStepsModule,
     to_json_text,
 )
 from .settings import configure_dspy_lm, load_dspy_settings
@@ -72,6 +73,18 @@ SPECTRAL_LIST_CANONICAL_KEYS = {
     "peak_position",
     "spectral_peak_positions",
 }
+
+PROCESS_STEP_SECTION_KEYWORDS = (
+    "实验过程",
+    "实验部分",
+    "制备过程",
+    "制备",
+    "实验",
+    "synthesis",
+    "experimental procedure",
+    "preparation",
+    "fabrication",
+)
 
 
 def run_stage3_dspy_schema_extraction(
@@ -264,6 +277,33 @@ def _run_live_stage3_extraction(
         module_name="ExtractExperimentSeriesModule",
         result=experiment_series_result,
     )
+    procedure_text = _extract_procedure_text(full_paper_text)
+    process_steps_payload: list[dict[str, Any]] = []
+    if procedure_text.strip():
+        process_steps_result = ExtractProcessStepsModule().run(
+            procedure_text=procedure_text[:12000],
+            paper_basic_info_json=to_json_text(paper_basic_info_result.payload or {}),
+        )
+        _append_raw_output(
+            raw_outputs,
+            step_name="process_steps",
+            module_name="ExtractProcessStepsModule",
+            result=process_steps_result,
+        )
+        process_steps_payload = _normalize_process_steps_payload(
+            _coerce_list_payload(process_steps_result.payload, "process_steps")
+        )
+    else:
+        raw_outputs.append(
+            {
+                "step_name": "process_steps",
+                "module_name": "ExtractProcessStepsModule",
+                "json_parse_ok": True,
+                "json_parse_error": None,
+                "raw_output": "[]",
+                "warning": "procedure_text_not_found",
+            }
+        )
 
     experiment_series_payload = experiment_series_result.payload or []
     if isinstance(experiment_series_payload, dict):
@@ -336,6 +376,7 @@ def _run_live_stage3_extraction(
         global_constants=cleaned_global_constants,
         experiment_series=experiment_series_payload if isinstance(experiment_series_payload, list) else [],
         data_points=data_point_records,
+        process_steps=process_steps_payload,
         evidence_objects=evidence_payload,
         data_provenance=DataProvenance(
             source_pipeline="stage3_dspy_schema_extraction",
@@ -374,6 +415,10 @@ def _run_live_stage3_extraction(
         stage3_dir / outputs.get("data_points", "data_points.jsonl"),
     )
     write_jsonl(
+        [item.model_dump() for item in validated.process_steps],
+        stage3_dir / outputs.get("process_steps", "process_steps.jsonl"),
+    )
+    write_jsonl(
         [item.model_dump() for item in validated.evidence_objects],
         stage3_dir / outputs.get("evidence_objects", "evidence_objects.jsonl"),
     )
@@ -410,6 +455,7 @@ def _run_live_stage3_extraction(
         "paper_basic_info_ok": validated.paper_basic_info is not None,
         "experiment_series_count": len(validated.experiment_series),
         "data_point_count": sum(len(series.data_points) for series in validated.experiment_series),
+        "process_steps_count": len(validated.process_steps),
         "evidence_object_count": len(validated.evidence_objects),
         "run_judge": bool(dspy_settings.get("run_judge", False)),
         "stage3_dir": str(stage3_dir),
@@ -1321,6 +1367,454 @@ def _coerce_parameter_record_list(
             )
         return coerced
     return []
+
+
+def _extract_procedure_text(markdown_text: str) -> str:
+    sections = parse_markdown_sections(markdown_text)
+    selected_blocks: list[str] = []
+    for section in sections:
+        title = str(section.get("title") or "").strip()
+        normalized_title = title.lower()
+        if any(keyword.lower() in normalized_title for keyword in PROCESS_STEP_SECTION_KEYWORDS):
+            text = str(section.get("text") or "").strip()
+            if text:
+                selected_blocks.append(text)
+    if selected_blocks:
+        return "\n\n".join(selected_blocks).strip()
+
+    lowered = markdown_text.lower()
+    fallback_markers = ["实验过程", "experimental procedure", "preparation", "fabrication"]
+    marker_index = next((lowered.find(marker.lower()) for marker in fallback_markers if lowered.find(marker.lower()) >= 0), -1)
+    if marker_index >= 0:
+        return markdown_text[marker_index : marker_index + 6000].strip()
+    return ""
+
+
+def _normalize_process_steps_payload(payload: list[Any]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            normalized.append(
+                {
+                    "step_id": f"step-{index:02d}",
+                    "step_order": index,
+                    "action": "other",
+                    "action_zh": "其他",
+                    "evidence_text": str(item),
+                    "confidence": "low",
+                    "needs_manual_review": True,
+                    "linked_parameter_keys": [],
+                    "normalization_note": "coerced_non_object_process_step",
+                }
+            )
+            continue
+        evidence_text = (
+            item.get("evidence_text")
+            or item.get("source_text")
+            or item.get("evidence")
+            or item.get("text")
+        )
+        linked_parameter_keys = item.get("linked_parameter_keys")
+        if linked_parameter_keys is None:
+            linked_parameter_keys = []
+            normalization_note = "linked_parameter_keys:normalized_none_to_empty_list"
+        elif isinstance(linked_parameter_keys, list):
+            normalization_note = item.get("normalization_note")
+        else:
+            linked_parameter_keys = [str(linked_parameter_keys)]
+            normalization_note = _append_normalization_note(
+                item.get("normalization_note"),
+                "linked_parameter_keys:coerced_scalar_to_list",
+            )
+        normalized.append(
+            {
+                **item,
+                "step_id": item.get("step_id") or f"step-{index:02d}",
+                "step_order": item.get("step_order") or index,
+                "action": item.get("action") or "other",
+                "action_zh": item.get("action_zh") or item.get("action") or "其他",
+                "reagent_formula": item.get("reagent_formula") or item.get("formula"),
+                "reagent_amount": item.get("reagent_amount", item.get("amount")),
+                "condition_value": item.get("condition_value", item.get("value")),
+                "duration_value": item.get("duration_value", item.get("duration")),
+                "temperature_value": item.get("temperature_value", item.get("temperature")),
+                "heating_rate_value": item.get("heating_rate_value", item.get("heating_rate")),
+                "evidence_text": str(evidence_text or "").strip() or None,
+                "evidence_section": item.get("evidence_section") or item.get("section"),
+                "confidence": _normalize_step_confidence(item.get("confidence")),
+                "linked_parameter_keys": [str(value) for value in linked_parameter_keys if value not in (None, "")],
+                "needs_manual_review": bool(item.get("needs_manual_review")) if item.get("needs_manual_review") is not None else False,
+                "normalization_note": normalization_note,
+            }
+        )
+    return _enrich_process_steps(normalized)
+
+
+def _enrich_process_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    expanded: list[dict[str, Any]] = []
+    for step in steps:
+        expanded.extend(_expand_process_step(step))
+    for index, step in enumerate(expanded, start=1):
+        step["step_order"] = index
+        step["step_id"] = f"step-{index:02d}"
+    return expanded
+
+
+def _expand_process_step(step: dict[str, Any]) -> list[dict[str, Any]]:
+    text = str(step.get("evidence_text") or step.get("description") or "").strip()
+    if not text:
+        return [step]
+    normalized_text = _normalize_step_text(text)
+    lowered = normalized_text.lower()
+
+    if "alcl3" in lowered and ("去离子水" in normalized_text or "deionized water" in lowered):
+        records = [
+            _make_process_step_variant(
+                step,
+                action="dissolve",
+                action_zh="溶解",
+                reagent_name="AlCl3·6H2O",
+                reagent_formula="AlCl3·6H2O",
+                reagent_amount=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*mol\s*AlCl3"),
+                reagent_unit="mol",
+                reagent_role="aluminum_source",
+                linked_parameter_keys=["aluminum_source"],
+            ),
+            _make_process_step_variant(
+                step,
+                action="dissolve",
+                action_zh="溶解",
+                reagent_name="去离子水",
+                reagent_amount="一定量",
+                reagent_role="solvent",
+                linked_parameter_keys=["solvent_type"],
+                needs_manual_review=True,
+                note="solvent_amount_not_explicit",
+            ),
+        ]
+        return records
+
+    if "异丙醇铝" in normalized_text and "无水乙醇" in normalized_text:
+        records = [
+            _make_process_step_variant(
+                step,
+                action="add",
+                action_zh="加入",
+                reagent_name="异丙醇铝",
+                reagent_formula="C9H21AlO3",
+                reagent_amount=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*mol\s*异丙醇铝"),
+                reagent_unit="mol",
+                reagent_role="aluminum_source",
+                linked_parameter_keys=["aluminum_source"],
+            ),
+            _make_process_step_variant(
+                step,
+                action="add",
+                action_zh="加入",
+                reagent_name="无水乙醇",
+                reagent_role="solvent",
+                linked_parameter_keys=["solvent_type"],
+                needs_manual_review=True,
+                note="solvent_amount_not_explicit",
+            ),
+        ]
+        return records
+
+    if "冰醋酸" in normalized_text and "盐酸" in normalized_text:
+        duration = _extract_numeric_value(normalized_text, r"搅拌\s*([0-9]+(?:\.[0-9]+)?)\s*h")
+        records = [
+            _make_process_step_variant(
+                step,
+                action="add",
+                action_zh="加入",
+                reagent_name="冰醋酸",
+                reagent_amount=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*mL\s*冰醋酸"),
+                reagent_unit="mL",
+                reagent_role="acid",
+                linked_parameter_keys=["acid_type"],
+            ),
+            _make_process_step_variant(
+                step,
+                action="add",
+                action_zh="加入",
+                reagent_name="盐酸",
+                reagent_amount=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*mL\s*盐酸"),
+                reagent_unit="mL",
+                reagent_role="acid",
+                linked_parameter_keys=["acid_type"],
+            ),
+            _make_process_step_variant(
+                step,
+                action="stir",
+                action_zh="搅拌",
+                duration_value=duration,
+                duration_unit="h" if duration is not None else None,
+                product_or_outcome="透明溶胶" if "透明" in normalized_text else None,
+                linked_parameter_keys=["stirring_time_h"],
+            ),
+        ]
+        return records
+
+    if "PVP" in normalized_text:
+        return [
+            _make_process_step_variant(
+                step,
+                action="add_polymer",
+                action_zh="加入聚合物",
+                reagent_name="PVP",
+                reagent_amount="一定量" if "一定量" in normalized_text else None,
+                reagent_role="polymer_additive",
+                product_or_outcome="透明澄清的可纺性溶胶" if "可纺性溶胶" in normalized_text else None,
+                linked_parameter_keys=["polymer_additive"],
+                needs_manual_review="一定量" in normalized_text,
+            )
+        ]
+
+    if "注射器" in normalized_text and ("静电纺丝" in normalized_text or "电纺" in normalized_text):
+        records = [
+            _make_process_step_variant(
+                step,
+                action="inject",
+                action_zh="注入",
+                equipment=_extract_equipment_with_volume(normalized_text, "塑料注射器"),
+                linked_parameter_keys=[],
+            ),
+            _make_process_step_variant(
+                step,
+                action="electrospin",
+                action_zh="静电纺丝",
+                equipment="静电纺丝机",
+                condition_key="applied_voltage_kV",
+                condition_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*kV"),
+                condition_unit="kV",
+                linked_parameter_keys=["applied_voltage_kV", "collector_distance_cm", "feed_rate_ml_h"],
+                note="electrospin_conditions_embedded_in_evidence_text",
+            ),
+            _make_process_step_variant(
+                step,
+                action="electrospin",
+                action_zh="静电纺丝",
+                equipment="静电纺丝机",
+                condition_key="collector_distance_cm",
+                condition_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*cm"),
+                condition_unit="cm",
+                linked_parameter_keys=["collector_distance_cm"],
+            ),
+            _make_process_step_variant(
+                step,
+                action="electrospin",
+                action_zh="静电纺丝",
+                equipment="静电纺丝机",
+                condition_key="feed_rate_ml_h",
+                condition_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*mL\s*/\s*h"),
+                condition_unit="mL/h",
+                linked_parameter_keys=["feed_rate_ml_h"],
+            ),
+        ]
+        return records
+
+    if "接收器" in normalized_text and ("干凝胶纤维" in normalized_text or "凝胶纤维" in normalized_text):
+        return [
+            _make_process_step_variant(
+                step,
+                action="collect",
+                action_zh="收集",
+                equipment="齿形接收器" if "齿形接收器" in normalized_text else "接收器",
+                product_or_outcome="氧化铝干凝胶纤维" if "氧化铝干凝胶纤维" in normalized_text else "凝胶纤维",
+                linked_parameter_keys=[],
+            )
+        ]
+
+    if "600" in normalized_text and ("℃" in normalized_text or "°c" in lowered):
+        return [
+            _make_process_step_variant(
+                step,
+                action="heat",
+                action_zh="升温保温",
+                heating_rate_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*[℃°cC]+\s*/\s*min"),
+                heating_rate_unit="℃/min",
+                temperature_value=600.0,
+                temperature_unit="℃",
+                duration_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*h"),
+                duration_unit="h",
+                linked_parameter_keys=["heating_rate_C_min", "target_temperature_C", "holding_time_h"],
+            )
+        ]
+
+    if "800" in normalized_text and ("℃" in normalized_text or "°c" in lowered):
+        return [
+            _make_process_step_variant(
+                step,
+                action="heat",
+                action_zh="升温保温",
+                heating_rate_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*[℃°cC]+\s*/\s*min"),
+                heating_rate_unit="℃/min",
+                temperature_value=800.0,
+                temperature_unit="℃",
+                duration_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*h"),
+                duration_unit="h",
+                product_or_outcome="γ-Al2O3 纤维" if ("γ-Al2O3" in normalized_text or "γ-Al2O3" in lowered) else None,
+                linked_parameter_keys=["heating_rate_C_min", "target_temperature_C", "holding_time_h"],
+            )
+        ]
+
+    if "1200" in normalized_text and ("煅烧" in normalized_text or "calcine" in lowered):
+        return [
+            _make_process_step_variant(
+                step,
+                action="calcine",
+                action_zh="煅烧",
+                temperature_value=1200.0,
+                temperature_unit="℃",
+                duration_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*h"),
+                duration_unit="h",
+                linked_parameter_keys=["target_temperature_C", "holding_time_h"],
+            )
+        ]
+
+    if "室温" in normalized_text and ("α-Al2O3" in normalized_text or "纳米结构纤维" in normalized_text):
+        return [
+            _make_process_step_variant(
+                step,
+                action="obtain_product",
+                action_zh="冷却得到产物",
+                condition_key="cooling_condition",
+                condition_value="自然降至室温",
+                product_or_outcome="α-Al2O3 纳米结构纤维",
+                linked_parameter_keys=[],
+            )
+        ]
+
+    inferred_action = _infer_process_action(normalized_text)
+    if inferred_action and step.get("action") in (None, "", "other"):
+        step = dict(step)
+        step["action"] = inferred_action[0]
+        step["action_zh"] = inferred_action[1]
+    return [step]
+
+
+def _make_process_step_variant(
+    base_step: dict[str, Any],
+    *,
+    action: str,
+    action_zh: str,
+    reagent_name: str | None = None,
+    reagent_formula: str | None = None,
+    reagent_amount: Any = None,
+    reagent_unit: str | None = None,
+    reagent_role: str | None = None,
+    condition_key: str | None = None,
+    condition_value: Any = None,
+    condition_unit: str | None = None,
+    equipment: str | None = None,
+    duration_value: Any = None,
+    duration_unit: str | None = None,
+    temperature_value: Any = None,
+    temperature_unit: str | None = None,
+    heating_rate_value: Any = None,
+    heating_rate_unit: str | None = None,
+    product_or_outcome: str | None = None,
+    linked_parameter_keys: list[str] | None = None,
+    needs_manual_review: bool | None = None,
+    note: str | None = None,
+) -> dict[str, Any]:
+    step = dict(base_step)
+    step.update(
+        {
+            "action": action,
+            "action_zh": action_zh,
+            "reagent_name": reagent_name,
+            "reagent_formula": reagent_formula,
+            "reagent_amount": reagent_amount,
+            "reagent_unit": reagent_unit,
+            "reagent_role": reagent_role,
+            "condition_key": condition_key,
+            "condition_value": condition_value,
+            "condition_unit": condition_unit,
+            "equipment": equipment,
+            "duration_value": duration_value,
+            "duration_unit": duration_unit,
+            "temperature_value": temperature_value,
+            "temperature_unit": temperature_unit,
+            "heating_rate_value": heating_rate_value,
+            "heating_rate_unit": heating_rate_unit,
+            "product_or_outcome": product_or_outcome,
+            "linked_parameter_keys": linked_parameter_keys or [],
+        }
+    )
+    if needs_manual_review is not None:
+        step["needs_manual_review"] = needs_manual_review
+    if note:
+        step["normalization_note"] = _append_normalization_note(step.get("normalization_note"), note)
+    return step
+
+
+def _normalize_step_text(text: str) -> str:
+    normalized = text.replace("~", " ")
+    normalized = normalized.replace("路", "·")
+    normalized = normalized.replace("掳", "℃")
+    normalized = normalized.replace("伪", "α")
+    normalized = normalized.replace("纬", "γ")
+    normalized = normalized.replace("鈫?", "→")
+    normalized = normalized.replace("  ", " ")
+    return normalized
+
+
+def _extract_numeric_value(text: str, pattern: str) -> float | None:
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_equipment_with_volume(text: str, equipment_name: str) -> str:
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*mL\s*" + re.escape(equipment_name), text, flags=re.IGNORECASE)
+    if match:
+        return f"{match.group(1)} mL {equipment_name}"
+    return equipment_name
+
+
+def _infer_process_action(text: str) -> tuple[str, str] | None:
+    if "搅拌" in text:
+        return ("stir", "搅拌")
+    if "静电纺丝" in text or "电纺" in text:
+        return ("electrospin", "静电纺丝")
+    if "煅烧" in text:
+        return ("calcine", "煅烧")
+    if "升温" in text:
+        return ("heat", "升温保温")
+    if "收集" in text:
+        return ("collect", "收集")
+    if "注入" in text or "注射器" in text:
+        return ("inject", "注入")
+    if "加入" in text:
+        return ("add", "加入")
+    if "溶于" in text or "溶解" in text:
+        return ("dissolve", "溶解")
+    if "室温" in text:
+        return ("cool", "冷却")
+    return None
+
+
+def _normalize_step_confidence(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"high", "medium", "low"}:
+        return normalized
+    return None
+
+
+def _append_normalization_note(existing: Any, note: str) -> str:
+    base = str(existing or "").strip()
+    if not base:
+        return note
+    if note in base:
+        return base
+    return f"{base}; {note}"
 
 
 def _split_parameter_record_dict(

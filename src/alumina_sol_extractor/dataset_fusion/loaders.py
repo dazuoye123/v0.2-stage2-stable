@@ -69,6 +69,7 @@ def load_paper_inputs(
         "global_constants": stage3_dir_path / "global_constants.json",
         "experiment_series": stage3_dir_path / "experiment_series.jsonl",
         "data_points": stage3_dir_path / "data_points.jsonl",
+        "process_steps": stage3_dir_path / "process_steps.jsonl",
         "evidence_objects": stage3_dir_path / "evidence_objects.jsonl",
         "paper_extraction": stage3_dir_path / "paper_extraction.schema_v2.json",
         "stage3_summary": stage3_dir_path / "stage3_smoke_summary.json",
@@ -95,6 +96,7 @@ def load_paper_inputs(
             "global_constants": read_json(stage3_files["global_constants"], default={}) or {},
             "experiment_series": read_jsonl(stage3_files["experiment_series"]),
             "data_points": read_jsonl(stage3_files["data_points"]),
+            "process_steps": read_jsonl(stage3_files["process_steps"]),
             "evidence_objects": read_jsonl(stage3_files["evidence_objects"]),
             "paper_extraction": read_json(stage3_files["paper_extraction"], default={}) or {},
             "summary": read_json(stage3_files["stage3_summary"], default={}) or {},
@@ -112,4 +114,3 @@ def load_paper_inputs(
         },
     }
     return payload
-

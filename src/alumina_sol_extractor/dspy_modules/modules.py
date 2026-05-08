@@ -51,6 +51,11 @@ class ExtractExperimentSeriesModule(_BaseDSPyModule):
     output_field = "experiment_series_json"
 
 
+class ExtractProcessStepsModule(_BaseDSPyModule):
+    signature_name = "ExtractProcessStepsSignature"
+    output_field = "process_steps_json"
+
+
 class ExtractDataPointsModule(_BaseDSPyModule):
     signature_name = "ExtractDataPointsSignature"
     output_field = "data_points_json"

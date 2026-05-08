@@ -143,6 +143,36 @@ FINAL_SHOWCASE_FIELDS = [
     "note",
 ]
 
+PROCESS_STEPS_TABLE_FIELDS = [
+    "paper_id",
+    "title",
+    "step_id",
+    "step_order",
+    "section",
+    "action",
+    "action_zh",
+    "reagent_name",
+    "reagent_formula",
+    "reagent_amount",
+    "reagent_unit",
+    "reagent_role",
+    "condition_key",
+    "condition_value",
+    "condition_unit",
+    "equipment",
+    "duration_value",
+    "duration_unit",
+    "temperature_value",
+    "temperature_unit",
+    "heating_rate_value",
+    "heating_rate_unit",
+    "product_or_outcome",
+    "linked_parameter_keys",
+    "evidence_text",
+    "confidence",
+    "needs_manual_review",
+]
+
 
 def load_link_aware_inputs(final_dataset_dir: Path | str) -> dict[str, Any]:
     final_dataset_dir = Path(final_dataset_dir)
@@ -152,6 +182,7 @@ def load_link_aware_inputs(final_dataset_dir: Path | str) -> dict[str, Any]:
         "paper": read_json(final_dataset_dir / "paper.json", default={}) or {},
         "samples": read_jsonl(final_dataset_dir / "samples.jsonl"),
         "parameters": read_jsonl(final_dataset_dir / "parameters.jsonl"),
+        "process_steps": read_jsonl(final_dataset_dir / "process_steps.jsonl"),
         "evidence": read_jsonl(final_dataset_dir / "evidence.jsonl"),
         "spectra": read_jsonl(final_dataset_dir / "spectra.jsonl"),
         "figures": read_jsonl(final_dataset_dir / "figures.jsonl"),
@@ -177,6 +208,7 @@ def generate_link_aware_exports(
     output_dir = Path(output_dir) if output_dir else Path(final_dataset_dir) / "link_aware_exports"
 
     parameters = inputs["parameters"]
+    process_steps = inputs["process_steps"]
     evidence = inputs["evidence"]
     spectra = inputs["spectra"]
     samples = inputs["samples"]
@@ -218,6 +250,11 @@ def generate_link_aware_exports(
         samples=samples,
         final_parameters_linked=final_parameters_linked,
     )
+    process_steps_table = _build_process_steps_table(
+        paper_id=paper_id,
+        title=title,
+        process_steps=process_steps,
+    )
     final_showcase_table = _build_final_showcase_table(
         paper_id=paper_id,
         title=title,
@@ -251,6 +288,7 @@ def generate_link_aware_exports(
         spectra_parameter_links,
         SPECTRA_PARAMETER_LINK_FIELDS,
     )
+    _write_csv_with_fields(output_dir / "process_steps_table.csv", process_steps_table, PROCESS_STEPS_TABLE_FIELDS)
     _write_csv_with_fields(output_dir / "final_showcase_table.csv", final_showcase_table, FINAL_SHOWCASE_FIELDS)
     write_json(output_dir / "link_aware_export_summary.json", summary)
     write_markdown(output_dir / "link_aware_export_readme.md", readme)
@@ -262,6 +300,7 @@ def generate_link_aware_exports(
         "summary": summary,
         "final_parameters_linked": final_parameters_linked,
         "sample_parameter_matrix": sample_parameter_matrix,
+        "process_steps_table": process_steps_table,
         "evidence_parameter_links": evidence_parameter_links,
         "spectra_parameter_links": spectra_parameter_links,
         "final_showcase_table": final_showcase_table,
@@ -501,6 +540,48 @@ def _build_sample_parameter_matrix(
             row[canonical_key] = "; ".join(unique_values)
         row["multi_value_flags"] = "; ".join(multi_value_keys)
         rows.append(row)
+    return rows
+
+
+def _build_process_steps_table(
+    *,
+    paper_id: str,
+    title: str,
+    process_steps: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, step in enumerate(process_steps, start=1):
+        rows.append(
+            {
+                "paper_id": paper_id,
+                "title": title,
+                "step_id": step.get("step_id") or f"{paper_id}-step-{index:03d}",
+                "step_order": step.get("step_order") or index,
+                "section": step.get("section"),
+                "action": step.get("action"),
+                "action_zh": step.get("action_zh"),
+                "reagent_name": step.get("reagent_name"),
+                "reagent_formula": step.get("reagent_formula"),
+                "reagent_amount": step.get("reagent_amount"),
+                "reagent_unit": step.get("reagent_unit"),
+                "reagent_role": step.get("reagent_role"),
+                "condition_key": step.get("condition_key"),
+                "condition_value": step.get("condition_value"),
+                "condition_unit": step.get("condition_unit"),
+                "equipment": step.get("equipment"),
+                "duration_value": step.get("duration_value"),
+                "duration_unit": step.get("duration_unit"),
+                "temperature_value": step.get("temperature_value"),
+                "temperature_unit": step.get("temperature_unit"),
+                "heating_rate_value": step.get("heating_rate_value"),
+                "heating_rate_unit": step.get("heating_rate_unit"),
+                "product_or_outcome": step.get("product_or_outcome"),
+                "linked_parameter_keys": "; ".join(_coerce_str_list(step.get("linked_parameter_keys"))),
+                "evidence_text": step.get("evidence_text"),
+                "confidence": step.get("confidence"),
+                "needs_manual_review": step.get("needs_manual_review"),
+            }
+        )
     return rows
 
 
@@ -850,6 +931,7 @@ def _build_link_aware_readme() -> str:
 - `sample_parameter_matrix.csv`: sample-centric matrix for comparison and presentation.
 - `evidence_parameter_links.csv`: evidence-to-parameter relationships.
 - `spectra_parameter_links.csv`: spectra/peak-to-parameter relationships, including indirect spectra→evidence→parameter paths.
+- `process_steps_table.csv`: ordered experimental procedure steps for process-centric review and presentation.
 - `final_showcase_table.csv`: compact display table for meetings and quick review.
 - `link_aware_export_summary.json`: export statistics.
 

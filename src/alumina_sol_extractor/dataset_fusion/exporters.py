@@ -62,6 +62,7 @@ def export_fusion_outputs(bundle: dict[str, Any], dataset_dir: Path | str) -> di
         "paper": str(write_json(dataset_dir / "paper.json", bundle["paper"])),
         "samples": str(write_jsonl(bundle["samples"], dataset_dir / "samples.jsonl")),
         "parameters": str(write_jsonl(bundle["parameters"], dataset_dir / "parameters.jsonl")),
+        "process_steps": str(write_jsonl(bundle.get("process_steps", []), dataset_dir / "process_steps.jsonl")),
         "evidence": str(write_jsonl(bundle["evidence"], dataset_dir / "evidence.jsonl")),
         "figures": str(write_jsonl(bundle["figures"], dataset_dir / "figures.jsonl")),
         "spectra": str(write_jsonl(bundle["spectra"], dataset_dir / "spectra.jsonl")),

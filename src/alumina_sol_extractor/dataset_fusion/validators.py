@@ -15,6 +15,7 @@ def build_quality_summary(
     evidence: list[dict[str, Any]],
     spectra: list[dict[str, Any]],
     samples: list[dict[str, Any]],
+    process_steps: list[dict[str, Any]],
     fusion_warnings: list[str],
     rejected_parameters: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -47,6 +48,10 @@ def build_quality_summary(
         "total_evidence": len(evidence),
         "total_spectra": len(spectra),
         "total_samples": len(samples),
+        "total_process_steps": len(process_steps),
+        "process_steps_with_reagent_amount_count": sum(1 for item in process_steps if item.get("reagent_amount") not in (None, "")),
+        "process_steps_with_evidence_count": sum(1 for item in process_steps if str(item.get("evidence_text") or "").strip()),
+        "process_steps_needs_manual_review_count": sum(1 for item in process_steps if bool(item.get("needs_manual_review"))),
         "parameters_with_strong_evidence_count": parameters_with_strong_evidence,
         "parameters_with_weak_spectra_link_count": parameters_with_weak_spectra_link,
         "parameters_without_evidence_count": parameters_without_evidence,

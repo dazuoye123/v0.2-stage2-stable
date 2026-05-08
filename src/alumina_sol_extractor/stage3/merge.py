@@ -16,6 +16,7 @@ from alumina_sol_extractor.models.schema_v2 import (
     ParameterRecord,
     PaperBasicInfo,
     PaperExtractionRecord,
+    ProcessStepRecord,
     SchemaBaseModel,
 )
 
@@ -51,6 +52,7 @@ def ensure_required_top_level_sections(payload: dict[str, Any]) -> dict[str, Any
     result.setdefault("paper_basic_info", None)
     result.setdefault("global_constants", None)
     result.setdefault("experiment_series", [])
+    result.setdefault("process_steps", [])
     result.setdefault("evidence_objects", [])
     result.setdefault("multimodal_extractions", [])
     result.setdefault("cross_modal_links", [])
@@ -64,6 +66,7 @@ def merge_stage_outputs_to_paper_record(
     global_constants: dict[str, Any] | GlobalConstants | None = None,
     experiment_series: list[dict[str, Any] | ExperimentSeries] | None = None,
     data_points: list[dict[str, Any] | DataPoint] | None = None,
+    process_steps: list[dict[str, Any] | ProcessStepRecord] | None = None,
     evidence_objects: list[dict[str, Any] | EvidenceObject] | None = None,
     multimodal_extractions: list[dict[str, Any]] | None = None,
     cross_modal_links: list[dict[str, Any]] | None = None,
@@ -74,6 +77,7 @@ def merge_stage_outputs_to_paper_record(
 
     series_models = [_coerce_model(item, ExperimentSeries) for item in (experiment_series or [])]
     data_point_models = [_coerce_model(item, DataPoint) for item in (data_points or [])]
+    process_step_models = [_coerce_model(item, ProcessStepRecord) for item in (process_steps or [])]
     series_models = _attach_data_points_to_series(series_models, data_point_models)
 
     payload = ensure_required_top_level_sections(
@@ -82,6 +86,7 @@ def merge_stage_outputs_to_paper_record(
                 "paper_basic_info": _dump_or_none(paper_basic_info),
                 "global_constants": _dump_or_none(global_constants),
                 "experiment_series": [series.model_dump() for series in series_models],
+                "process_steps": [step.model_dump() for step in process_step_models],
                 "evidence_objects": [_dump_or_none(item) for item in (evidence_objects or [])],
                 "multimodal_extractions": [deepcopy(item) for item in (multimodal_extractions or [])],
                 "cross_modal_links": [deepcopy(item) for item in (cross_modal_links or [])],

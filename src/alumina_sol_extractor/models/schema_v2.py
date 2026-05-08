@@ -207,6 +207,36 @@ class ExperimentSeries(SchemaBaseModel):
     extended_data: dict[str, Any] = Field(default_factory=dict)
 
 
+class ProcessStepRecord(SchemaBaseModel):
+    step_id: str | None = None
+    step_order: int | None = None
+    section: str | None = None
+    action: str | None = None
+    action_zh: str | None = None
+    reagent_name: str | None = None
+    reagent_formula: str | None = None
+    reagent_amount: JsonScalar = None
+    reagent_unit: str | None = None
+    reagent_role: str | None = None
+    condition_key: str | None = None
+    condition_value: JsonScalar = None
+    condition_unit: str | None = None
+    equipment: str | None = None
+    duration_value: JsonScalar = None
+    duration_unit: str | None = None
+    temperature_value: JsonScalar = None
+    temperature_unit: str | None = None
+    heating_rate_value: JsonScalar = None
+    heating_rate_unit: str | None = None
+    product_or_outcome: str | None = None
+    linked_parameter_keys: list[str] = Field(default_factory=list)
+    evidence_text: str | None = None
+    evidence_section: str | None = None
+    confidence: str | None = None
+    needs_manual_review: bool | None = None
+    normalization_note: str | None = None
+
+
 class EvidenceObject(SchemaBaseModel):
     evidence_id: str | None = None
     figure_id: str | None = None
@@ -259,6 +289,7 @@ class PaperExtractionRecord(SchemaBaseModel):
     paper_basic_info: PaperBasicInfo | None = None
     global_constants: GlobalConstants | None = None
     experiment_series: list[ExperimentSeries] = Field(default_factory=list)
+    process_steps: list[ProcessStepRecord] = Field(default_factory=list)
     evidence_objects: list[EvidenceObject] = Field(default_factory=list)
     multimodal_extractions: list[MultimodalExtraction] = Field(default_factory=list)
     cross_modal_links: list[CrossModalLink] = Field(default_factory=list)
