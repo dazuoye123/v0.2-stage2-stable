@@ -15,6 +15,8 @@ from .models import LinkCandidate, LinkRecord
 DEFAULT_LINK_FAMILIES = {
     "process_step_to_parameter",
     "spectra_peak_to_parameter",
+    "spectra_record_to_parameter",
+    "visual_extraction_to_parameter",
     "evidence_to_parameter",
     "spectra_to_evidence",
     "parameter_to_sample",
@@ -29,6 +31,32 @@ PEAK_MATCH_RULES: dict[str, dict[str, Any]] = {
 }
 
 CONFIDENCE_SCORE = {"high": 0.95, "medium": 0.7, "low": 0.4}
+
+SPECTRA_RECORD_MATCH_RULES: dict[str, dict[str, Any]] = {
+    "tg_curve": {
+        "temperature_keys": {"calcination_temperature_C", "target_temperature_C"},
+        "mass_loss_keys": {"mass_loss_wt_percent"},
+    },
+    "dsc_curve": {
+        "temperature_keys": {"calcination_temperature_C", "target_temperature_C"},
+    },
+    "tg_dsc_curve": {
+        "temperature_keys": {"calcination_temperature_C", "target_temperature_C"},
+        "mass_loss_keys": {"mass_loss_wt_percent"},
+    },
+}
+
+VISUAL_EXTRACTION_MATCH_RULES: dict[str, dict[str, Any]] = {
+    "sem_image": {
+        "size_keys": {"particle_size_nm", "average_fiber_diameter_um", "fiber_diameter_um"},
+    },
+    "tem_image": {
+        "size_keys": {"particle_size_nm", "average_fiber_diameter_um", "fiber_diameter_um"},
+    },
+    "microscopy": {
+        "size_keys": {"particle_size_nm", "average_fiber_diameter_um", "fiber_diameter_um"},
+    },
+}
 
 
 def load_final_dataset_inputs(final_dataset_dir: Path | str) -> dict[str, Any]:
@@ -137,7 +165,7 @@ def build_link_candidates(
 
     if "evidence_to_parameter" in families:
         for parameter in parameters:
-            evidence_refs = set(_coerce_str_list(parameter.get("evidence_refs")))
+            evidence_refs = _extract_reference_ids(parameter.get("evidence_refs"))
             linked_figures = set(_coerce_str_list(parameter.get("linked_figure_ids")))
             linked_spectra = set(_coerce_str_list(parameter.get("linked_spectra_ids")))
             for evidence_id in evidence_refs:
@@ -314,8 +342,15 @@ def build_link_candidates(
                         continue
                     linked_figures = set(_coerce_str_list(parameter.get("linked_figure_ids")))
                     linked_spectra = set(_coerce_str_list(parameter.get("linked_spectra_ids")))
-                    evidence_refs = set(_coerce_str_list(parameter.get("evidence_refs")))
-                    same_figure = figure_id in linked_figures or figure_id in linked_spectra or bool(linked_evidence_ids & evidence_refs)
+                    evidence_refs = _extract_reference_ids(parameter.get("evidence_refs"))
+                    peak_source_id = f"spectra-{figure_id}-peak-{index:02d}"
+                    same_figure = (
+                        figure_id in linked_figures
+                        or figure_id in linked_spectra
+                        or figure_id in evidence_refs
+                        or peak_source_id in evidence_refs
+                        or bool(linked_evidence_ids & evidence_refs)
+                    )
                     score = 0.6
                     if same_figure:
                         score += 0.3
@@ -347,6 +382,74 @@ def build_link_candidates(
                         )
                     )
 
+    if "spectra_record_to_parameter" in families:
+        for spectra_record in spectra:
+            figure_id = spectra_record.get("figure_id")
+            if not figure_id:
+                continue
+            candidate_specs = _match_spectra_record_to_parameters(spectra_record, parameters)
+            for candidate_spec in candidate_specs:
+                if counters["spectra_record_to_parameter"] >= max_candidates_per_type:
+                    break
+                parameter = candidate_spec["parameter"]
+                candidates.append(
+                    _candidate(
+                        family="spectra_record_to_parameter",
+                        counters=counters,
+                        paper_id=paper_id,
+                        source_type="spectra_record",
+                        source_id=_spectra_record_id(figure_id),
+                        source_text=candidate_spec.get("source_text") or _spectra_summary_text(spectra_record),
+                        source_value=candidate_spec.get("matched_value"),
+                        source_unit=candidate_spec.get("matched_unit"),
+                        source_figure_id=figure_id,
+                        target_type="parameter",
+                        target_id=parameter.get("parameter_id"),
+                        target_text=parameter.get("raw_name") or parameter.get("canonical_key"),
+                        target_value=parameter.get("value"),
+                        target_unit=parameter.get("unit"),
+                        target_figure_id=figure_id,
+                        candidate_reason=candidate_spec["reason"],
+                        deterministic_score=float(candidate_spec["score"]),
+                        needs_llm=bool(candidate_spec.get("needs_llm", False)),
+                        candidate_status="deterministic" if not candidate_spec.get("needs_llm") else "needs_llm",
+                    )
+                )
+
+    if "visual_extraction_to_parameter" in families:
+        for spectra_record in spectra:
+            figure_id = spectra_record.get("figure_id")
+            if not figure_id:
+                continue
+            candidate_specs = _match_visual_extraction_to_parameters(spectra_record, parameters)
+            for candidate_spec in candidate_specs:
+                if counters["visual_extraction_to_parameter"] >= max_candidates_per_type:
+                    break
+                parameter = candidate_spec["parameter"]
+                candidates.append(
+                    _candidate(
+                        family="visual_extraction_to_parameter",
+                        counters=counters,
+                        paper_id=paper_id,
+                        source_type="visual_extraction",
+                        source_id=f"visual-{figure_id}-{candidate_spec['source_key']}",
+                        source_text=candidate_spec.get("source_text") or _spectra_summary_text(spectra_record),
+                        source_value=candidate_spec.get("matched_value"),
+                        source_unit=candidate_spec.get("matched_unit"),
+                        source_figure_id=figure_id,
+                        target_type="parameter",
+                        target_id=parameter.get("parameter_id"),
+                        target_text=parameter.get("raw_name") or parameter.get("canonical_key"),
+                        target_value=parameter.get("value"),
+                        target_unit=parameter.get("unit"),
+                        target_figure_id=figure_id,
+                        candidate_reason=candidate_spec["reason"],
+                        deterministic_score=float(candidate_spec["score"]),
+                        needs_llm=bool(candidate_spec.get("needs_llm", False)),
+                        candidate_status="deterministic" if not candidate_spec.get("needs_llm") else "needs_llm",
+                    )
+                )
+
     return [item.model_dump() for item in candidates]
 
 
@@ -374,6 +477,12 @@ def build_deterministic_links(candidates: list[dict[str, Any]]) -> tuple[list[di
         elif candidate.source_type == "process_step" and candidate.target_type == "parameter":
             link_type = "supports"
             confidence = "high" if candidate.deterministic_score >= 0.9 else "medium"
+        elif candidate.source_type == "spectra_record" and candidate.target_type == "parameter":
+            link_type = "supports"
+            confidence = "high" if candidate.deterministic_score >= 0.9 else "medium"
+        elif candidate.source_type == "visual_extraction" and candidate.target_type == "parameter":
+            link_type = "supports"
+            confidence = "high" if candidate.deterministic_score >= 0.9 else "medium"
         else:
             unresolved.append({**candidate.model_dump(), "unmatched_reason": "unsupported_deterministic_pair"})
             continue
@@ -392,11 +501,31 @@ def build_deterministic_links(candidates: list[dict[str, Any]]) -> tuple[list[di
                 evidence_text=candidate.source_text,
                 validation_status="accepted",
                 validation_warnings=[],
-                created_by="deterministic",
+                created_by=_deterministic_created_by(candidate),
             ).model_dump()
         )
         counter += 1
     return links, unresolved
+
+
+def _deterministic_created_by(candidate: LinkCandidate) -> str:
+    if candidate.source_type == "process_step" and candidate.target_type == "parameter":
+        return "deterministic_process_step_value_match"
+    if candidate.source_type == "evidence_object" and candidate.target_type == "parameter":
+        if "evidence_refs" in str(candidate.candidate_reason or ""):
+            return "direct_evidence_refs"
+        return "deterministic_evidence_value_match"
+    if candidate.source_type == "spectra_peak" and candidate.target_type == "parameter":
+        return "deterministic_spectra_peak_value_match"
+    if candidate.source_type == "spectra_record" and candidate.target_type == "parameter":
+        return "deterministic_spectra_record_value_match"
+    if candidate.source_type == "visual_extraction" and candidate.target_type == "parameter":
+        return "deterministic_visual_value_match"
+    if candidate.source_type == "parameter" and candidate.target_type == "sample":
+        return "deterministic_parameter_sample_match"
+    if candidate.source_type == "spectra_record" and candidate.target_type == "evidence_object":
+        return "deterministic_same_figure_match"
+    return "deterministic"
 
 
 def _candidate(
@@ -500,47 +629,59 @@ def _normalize_unit_text(value: Any) -> str | None:
     text = str(value).strip()
     if not text:
         return None
-    normalized = text.lower()
-    return (
-        normalized.replace("℃", "c")
-        .replace("°c", "c")
-        .replace("ml/h", "ml_h")
-        .replace("ml h-1", "ml_h")
-        .replace("mL/h".lower(), "ml_h")
-        .replace("℃/min".lower(), "c_min")
-        .replace("°c/min", "c_min")
-        .replace("c/min", "c_min")
-        .replace("pa*s", "pa_s")
-        .replace("pa.s", "pa_s")
-        .replace("pa·s", "pa_s")
-        .replace("/min", "_min")
-    )
-
+    normalized = _normalize_match_text(text)
+    normalized = normalized.replace("ml h^-1", "ml_h").replace("ml h-1", "ml_h")
+    normalized = normalized.replace("c min-1", "c_min").replace("c min^-1", "c_min")
+    normalized = normalized.replace("per_min", "_min")
+    return normalized
 
 def _text_contains_value(text: str | None, value: Any, unit: Any = None, tolerance: float = 0.0) -> bool:
     if not text:
         return False
-    haystack = text.lower()
+    haystack = _normalize_match_text(text)
     numeric = _to_float(value)
     if numeric is not None:
         value_tokens = {f"{numeric:g}", f"{numeric:.1f}", f"{numeric:.2f}"}
         for token in value_tokens:
             if token in haystack:
                 if unit:
-                    unit_text = str(unit).strip().lower()
+                    unit_text = _normalize_unit_text(unit)
                     if unit_text and unit_text not in haystack:
                         continue
                 return True
         if tolerance > 0:
-            range_match = re.search(r"(\d+(?:\.\d+)?)\s*[-~]\s*(\d+(?:\.\d+)?)", haystack)
-            if range_match:
+            for range_match in re.finditer(r"(\d+(?:\.\d+)?)\s*[-~]\s*(\d+(?:\.\d+)?)", haystack):
                 low = float(range_match.group(1))
                 high = float(range_match.group(2))
-                return low - tolerance <= numeric <= high + tolerance
+                if low - tolerance <= numeric <= high + tolerance:
+                    return True
         return False
-    value_text = str(value).strip().lower()
+    value_text = _normalize_match_text(str(value))
     return bool(value_text) and value_text in haystack
 
+
+def _normalize_match_text(text: str) -> str:
+    normalized = str(text).lower()
+    for token in ("–", "—", "−", "~"):
+        normalized = normalized.replace(token, "-")
+    replacements = {
+        "·": "*",
+        "pa*s": "pa_s",
+        "pa.s": "pa_s",
+        "pa·s": "pa_s",
+        "ml/h": "ml_h",
+        "ml h-1": "ml_h",
+        "ml·h-1": "ml_h",
+        "ml h^-1": "ml_h",
+        "°c/min": "c_min",
+        "℃/min": "c_min",
+        "c/min": "c_min",
+        "per min": "per_min",
+        "cm^-1": "cm-1",
+    }
+    for src, dst in replacements.items():
+        normalized = normalized.replace(src, dst)
+    return normalized
 
 def _normalized_parameter_unit(parameter: dict[str, Any]) -> str | None:
     unit = parameter.get("unit")
@@ -637,20 +778,19 @@ def _match_process_step_to_parameters(
 
 def _evidence_semantic_match(parameter: dict[str, Any], evidence_text: str) -> bool:
     canonical_key = str(parameter.get("canonical_key") or "").lower()
-    text = evidence_text.lower()
+    text = _normalize_match_text(evidence_text)
     if "viscosity" in canonical_key:
-        return "viscosity" in text or "pa*s" in text or "pa·s" in text or "pa.s" in text
+        return "viscosity" in text or "pa_s" in text
     if "nmr" in canonical_key:
         return "nmr" in text or "ppm" in text
     if "ftir" in canonical_key:
-        return "ftir" in text or "ir" in text or "cm-1" in text
+        return "ftir" in text or " ir " in f" {text} " or "cm-1" in text
     if "xrd" in canonical_key:
-        return "xrd" in text or "2θ" in text or "2theta" in text or "衍射" in text
+        return "xrd" in text or "2theta" in text or "2θ" in text or "diffraction" in text
     if "raman" in canonical_key:
         return "raman" in text or "cm-1" in text
     raw_name = str(parameter.get("raw_name") or "").strip().lower()
-    return bool(raw_name and raw_name in text)
-
+    return bool(raw_name and _normalize_match_text(raw_name) in text)
 
 def _match_evidence_to_parameters(evidence_record: dict[str, Any], parameters: list[dict[str, Any]]) -> list[dict[str, Any]]:
     text = _evidence_summary_text(evidence_record) or ""
@@ -697,6 +837,129 @@ def _parameter_value_matches(parameter: dict[str, Any], value: Any, unit: Any) -
         return abs(target_numeric - source_numeric) <= tolerance
     return str(target_value).strip().lower() == str(value).strip().lower()
 
+
+
+def _extract_reference_ids(refs: Any) -> set[str]:
+    values = refs if isinstance(refs, list) else [refs] if refs is not None else []
+    tokens: set[str] = set()
+    for ref in values:
+        if isinstance(ref, dict):
+            for key in ("source_id", "evidence_id", "figure_id", "table_id"):
+                value = ref.get(key)
+                if value:
+                    tokens.add(str(value))
+        elif ref is not None:
+            text = str(ref).strip()
+            if text:
+                tokens.add(text)
+    return tokens
+
+
+def _spectra_record_id(figure_id: Any) -> str:
+    return f"spectra-{figure_id}"
+
+
+def _match_spectra_record_to_parameters(
+    spectra_record: dict[str, Any],
+    parameters: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    figure_type = str(spectra_record.get("figure_type") or "").lower()
+    rule = SPECTRA_RECORD_MATCH_RULES.get(figure_type)
+    if not rule:
+        return []
+    matches: list[dict[str, Any]] = []
+    temperature_observations: list[tuple[Any, str]] = []
+    mass_loss_observations: list[tuple[Any, str]] = []
+
+    for peak in spectra_record.get("peaks", []) or []:
+        temperature = peak.get("temperature")
+        if temperature is not None:
+            temperature_observations.append((temperature, peak.get("description") or _spectra_summary_text(spectra_record)))
+        mass_loss = peak.get("mass_loss_percent")
+        if mass_loss is not None:
+            mass_loss_observations.append((mass_loss, peak.get("description") or _spectra_summary_text(spectra_record)))
+
+    for item in spectra_record.get("transition_temperatures", []) or []:
+        temperature_observations.append((item, _spectra_summary_text(spectra_record)))
+    for key in ("mass_loss_percent", "residual_mass_percent"):
+        value = spectra_record.get(key)
+        if value is not None:
+            mass_loss_observations.append((value, _spectra_summary_text(spectra_record)))
+
+    for temperature, source_text in temperature_observations:
+        for parameter in parameters:
+            if parameter.get("canonical_key") not in rule.get("temperature_keys", set()):
+                continue
+            if _parameter_value_matches(parameter, temperature, "C"):
+                matches.append({
+                    "parameter": parameter,
+                    "matched_value": temperature,
+                    "matched_unit": "C",
+                    "score": 0.9,
+                    "reason": "spectra_record_temperature_match",
+                    "needs_llm": False,
+                    "source_text": source_text,
+                })
+
+    for mass_loss, source_text in mass_loss_observations:
+        for parameter in parameters:
+            if parameter.get("canonical_key") not in rule.get("mass_loss_keys", set()):
+                continue
+            if _parameter_value_matches(parameter, mass_loss, "wt_percent"):
+                matches.append({
+                    "parameter": parameter,
+                    "matched_value": mass_loss,
+                    "matched_unit": "wt_percent",
+                    "score": 0.88,
+                    "reason": "spectra_record_mass_loss_match",
+                    "needs_llm": False,
+                    "source_text": source_text,
+                })
+    return _dedupe_match_specs(matches)
+
+
+def _match_visual_extraction_to_parameters(
+    spectra_record: dict[str, Any],
+    parameters: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    figure_type = str(spectra_record.get("figure_type") or "").lower()
+    rule = VISUAL_EXTRACTION_MATCH_RULES.get(figure_type)
+    if not rule:
+        return []
+    candidate_values: list[tuple[str, Any, Any]] = []
+    quantitative_values = spectra_record.get("quantitative_values") or {}
+    for key, value in quantitative_values.items():
+        unit = None
+        if str(key).endswith("_nm"):
+            unit = "nm"
+        elif str(key).endswith("_um"):
+            unit = "um"
+        candidate_values.append((str(key), value, unit))
+    for top_level_key in ("particle_size_nm", "estimated_size_nm", "fiber_diameter_um", "average_fiber_diameter_um"):
+        if spectra_record.get(top_level_key) is not None:
+            unit = "nm" if top_level_key.endswith("_nm") else "um"
+            candidate_values.append((top_level_key, spectra_record.get(top_level_key), unit))
+
+    matches: list[dict[str, Any]] = []
+    for source_key, observed_value, observed_unit in candidate_values:
+        for parameter in parameters:
+            if parameter.get("canonical_key") not in rule.get("size_keys", set()):
+                continue
+            if _parameter_value_matches(parameter, observed_value, observed_unit):
+                matches.append({
+                    "parameter": parameter,
+                    "matched_value": observed_value,
+                    "matched_unit": observed_unit,
+                    "score": 0.9,
+                    "reason": "visual_extraction_numeric_match",
+                    "needs_llm": False,
+                    "source_key": source_key,
+                    "source_text": _spectra_summary_text(spectra_record),
+                })
+    deduped = _dedupe_match_specs(matches)
+    for row in deduped:
+        row.setdefault("source_key", row.get("parameter", {}).get("canonical_key") or "observed_value")
+    return deduped
 
 def _dedupe_match_specs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     best: dict[str, dict[str, Any]] = {}

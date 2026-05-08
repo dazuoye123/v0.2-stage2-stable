@@ -295,6 +295,15 @@ def _build_parameter_rows(
                 )
             )
 
+    records.extend(
+        _build_spectra_parameter_rows(
+            paper_id=paper_id,
+            spectra=spectra,
+            counter=counter,
+            existing_records=records,
+        )
+    )
+
     accepted_records: list[dict[str, Any]] = []
     for record in records:
         if _is_invalid_canonical_key(record.get("canonical_key")):
@@ -429,6 +438,79 @@ def _normalize_parameter_like_record(
     row["linked_figure_ids"] = []
     row["linked_spectra_ids"] = []
     return [row]
+
+
+def _build_spectra_parameter_rows(
+    *,
+    paper_id: str,
+    spectra: list[dict[str, Any]],
+    counter: itertools.count,
+    existing_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    figure_type_to_key = {
+        "ftir_spectrum": "ftir_peak_position_cm_1",
+        "ir_spectrum": "ftir_peak_position_cm_1",
+        "xrd_pattern": "xrd_peak_position_2theta_deg",
+        "nmr_spectrum": "nmr_27Al_peak_position_ppm",
+        "raman_spectrum": "raman_peak_position_cm_1",
+    }
+    existing_signatures = {
+        (
+            _string_or_none(row.get("canonical_key")),
+            _string_or_none(row.get("value")),
+            _string_or_none(row.get("unit")),
+            _string_or_none(next(iter(_extract_reference_tokens(row.get("evidence_refs") or [])), None)),
+        )
+        for row in existing_records
+    }
+    derived_rows: list[dict[str, Any]] = []
+    for spectra_record in spectra:
+        figure_id = _string_or_none(spectra_record.get("figure_id"))
+        canonical_key = figure_type_to_key.get(_string_or_none(spectra_record.get("figure_type")) or "")
+        if not figure_id or not canonical_key:
+            continue
+        for index, peak in enumerate(spectra_record.get("peaks") or [], start=1):
+            if not isinstance(peak, dict):
+                continue
+            position = peak.get("position")
+            if position is None:
+                continue
+            unit = peak.get("unit")
+            evidence_ref = f"spectra-{figure_id}-peak-{index:02d}"
+            signature = (
+                _string_or_none(canonical_key),
+                _string_or_none(position),
+                _string_or_none(unit),
+                evidence_ref,
+            )
+            if signature in existing_signatures:
+                continue
+            raw_name = canonical_key
+            note = "stage5_derived_from_stage4_spectra_peak"
+            if peak.get("assignment"):
+                note = f"{note}; assignment={peak.get('assignment')}"
+            derived_rows.extend(
+                _normalize_parameter_like_record(
+                    {
+                        "canonical_key": canonical_key,
+                        "raw_name": raw_name,
+                        "value": position,
+                        "unit": unit,
+                        "evidence_refs": [
+                            {"source_id": evidence_ref, "figure_id": figure_id},
+                        ],
+                        "normalization_note": note,
+                        "quality_flags": ["derived_from_stage4_spectra"],
+                    },
+                    paper_id=paper_id,
+                    sample_id=None,
+                    series_id=None,
+                    source_scope="stage4.spectra.peaks",
+                    counter=counter,
+                )
+            )
+            existing_signatures.add(signature)
+    return derived_rows
 
 
 def _build_evidence_index(evidence: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:

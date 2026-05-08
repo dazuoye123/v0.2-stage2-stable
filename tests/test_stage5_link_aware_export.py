@@ -271,6 +271,8 @@ def test_link_aware_export_handles_missing_links_and_empty_spectra(tmp_path: Pat
         "peak_unit",
         "assignment",
         "source",
+        "observed_value",
+        "observed_unit",
         "parameter_id",
         "canonical_key",
         "parameter_value",

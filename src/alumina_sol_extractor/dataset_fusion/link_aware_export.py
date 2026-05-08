@@ -121,6 +121,8 @@ SPECTRA_PARAMETER_LINK_FIELDS = [
     "peak_unit",
     "assignment",
     "source",
+    "observed_value",
+    "observed_unit",
     "parameter_id",
     "canonical_key",
     "parameter_value",
@@ -790,7 +792,6 @@ def _build_spectra_parameter_links(
 ) -> list[dict[str, Any]]:
     parameter_by_id = indexes["parameters_by_id"]
     spectra_by_id = indexes["spectra_by_id"]
-    evidence_by_id = indexes["evidence_by_id"]
     rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
 
@@ -804,6 +805,8 @@ def _build_spectra_parameter_links(
         peak_unit: str | None,
         assignment: str | None,
         source: str | None,
+        observed_value: Any,
+        observed_unit: str | None,
         parameter_id: str,
         canonical_key: str | None,
         parameter_value: Any,
@@ -829,6 +832,8 @@ def _build_spectra_parameter_links(
                 "peak_unit": peak_unit,
                 "assignment": assignment,
                 "source": source,
+                "observed_value": observed_value,
+                "observed_unit": observed_unit,
                 "parameter_id": parameter_id,
                 "canonical_key": canonical_key,
                 "parameter_value": parameter_value,
@@ -863,6 +868,77 @@ def _build_spectra_parameter_links(
             peak_unit=peak.get("unit"),
             assignment=peak.get("assignment"),
             source=peak.get("source"),
+            observed_value=peak.get("position"),
+            observed_unit=peak.get("unit"),
+            parameter_id=parameter_id,
+            canonical_key=parameter_row.get("canonical_key"),
+            parameter_value=parameter_row.get("value"),
+            unit=parameter_row.get("unit"),
+            sample_id=parameter_row.get("sample_id"),
+            link_type=link.get("link_type") or "supports",
+            confidence=link.get("confidence") or "medium",
+            reasoning=link.get("reasoning"),
+            created_by=link.get("created_by") or "deterministic",
+        )
+
+    for link in links:
+        source_type = link.get("source_type")
+        target_type = link.get("target_type")
+        if {source_type, target_type} != {"spectra_record", "parameter"}:
+            continue
+        spectra_id = link.get("source_id") if source_type == "spectra_record" else link.get("target_id")
+        parameter_id = link.get("target_id") if target_type == "parameter" else link.get("source_id")
+        parameter_row = parameter_by_id.get(parameter_id)
+        spectra_row = spectra_by_id.get(spectra_id)
+        if not (parameter_row and spectra_row):
+            continue
+        observed_value, observed_unit = _pick_observed_value_for_parameter(parameter_row, spectra_row)
+        add_row(
+            spectra_id=spectra_id,
+            figure_id=spectra_row.get("figure_id"),
+            figure_type=spectra_row.get("figure_type"),
+            technique=spectra_row.get("technique"),
+            peak_position=None,
+            peak_unit=None,
+            assignment=None,
+            source=None,
+            observed_value=observed_value,
+            observed_unit=observed_unit,
+            parameter_id=parameter_id,
+            canonical_key=parameter_row.get("canonical_key"),
+            parameter_value=parameter_row.get("value"),
+            unit=parameter_row.get("unit"),
+            sample_id=parameter_row.get("sample_id"),
+            link_type=link.get("link_type") or "supports",
+            confidence=link.get("confidence") or "medium",
+            reasoning=link.get("reasoning"),
+            created_by=link.get("created_by") or "deterministic",
+        )
+
+    for link in links:
+        source_type = link.get("source_type")
+        target_type = link.get("target_type")
+        if {source_type, target_type} != {"visual_extraction", "parameter"}:
+            continue
+        visual_id = link.get("source_id") if source_type == "visual_extraction" else link.get("target_id")
+        parameter_id = link.get("target_id") if target_type == "parameter" else link.get("source_id")
+        parameter_row = parameter_by_id.get(parameter_id)
+        visual_info = _parse_visual_source_id(visual_id)
+        spectra_row = spectra_by_id.get(_spectra_id_for_figure(visual_info["figure_id"])) if visual_info else None
+        if not (parameter_row and spectra_row):
+            continue
+        observed_value, observed_unit = _pick_observed_value_for_parameter(parameter_row, spectra_row, preferred_key=visual_info.get("source_key"))
+        add_row(
+            spectra_id=_spectra_id_for_figure(visual_info["figure_id"]),
+            figure_id=spectra_row.get("figure_id"),
+            figure_type=spectra_row.get("figure_type"),
+            technique=spectra_row.get("technique"),
+            peak_position=None,
+            peak_unit=None,
+            assignment=None,
+            source=visual_info.get("source_key"),
+            observed_value=observed_value,
+            observed_unit=observed_unit,
             parameter_id=parameter_id,
             canonical_key=parameter_row.get("canonical_key"),
             parameter_value=parameter_row.get("value"),
@@ -909,6 +985,8 @@ def _build_spectra_parameter_links(
                 peak_unit=all_units or None,
                 assignment=all_assignments or None,
                 source=all_sources or None,
+                observed_value=all_positions or None,
+                observed_unit=all_units or None,
                 parameter_id=row.get("parameter_id"),
                 canonical_key=parameter_row.get("canonical_key"),
                 parameter_value=parameter_row.get("value"),
@@ -1178,6 +1256,15 @@ def _parse_peak_source_id(source_id: str | None) -> dict[str, Any] | None:
     return {"spectra_id": match.group(1), "peak_index": int(match.group(2))}
 
 
+def _parse_visual_source_id(source_id: str | None) -> dict[str, Any] | None:
+    if not source_id:
+        return None
+    match = re.match(r"^visual-(.+?)-([^:-]+(?:_[^:-]+)*)$", str(source_id))
+    if not match:
+        return None
+    return {"figure_id": match.group(1), "source_key": match.group(2)}
+
+
 def _get_peak_by_index(spectra_row: dict[str, Any] | None, peak_index: int | None) -> dict[str, Any] | None:
     if not spectra_row or not peak_index:
         return None
@@ -1193,6 +1280,46 @@ def _spectra_id_for_figure(figure_id: Any) -> str | None:
     if not figure_id:
         return None
     return f"spectra-{figure_id}"
+
+
+def _pick_observed_value_for_parameter(
+    parameter_row: dict[str, Any],
+    spectra_row: dict[str, Any],
+    *,
+    preferred_key: str | None = None,
+) -> tuple[Any, str | None]:
+    quantitative_values = spectra_row.get("quantitative_values") or {}
+    if preferred_key and preferred_key in quantitative_values:
+        return quantitative_values.get(preferred_key), _infer_observed_unit(preferred_key)
+    canonical_key = str(parameter_row.get("canonical_key") or "")
+    if canonical_key in quantitative_values:
+        return quantitative_values.get(canonical_key), _infer_observed_unit(canonical_key)
+    for key in (
+        preferred_key,
+        canonical_key,
+        "particle_size_nm",
+        "estimated_size_nm",
+        "fiber_diameter_um",
+        "average_fiber_diameter_um",
+    ):
+        if key and spectra_row.get(key) is not None:
+            return spectra_row.get(key), _infer_observed_unit(key)
+    return None, None
+
+
+def _infer_observed_unit(key: str | None) -> str | None:
+    if not key:
+        return None
+    text = str(key)
+    if text.endswith("_nm"):
+        return "nm"
+    if text.endswith("_um"):
+        return "um"
+    if text.endswith("_wt_percent"):
+        return "wt_percent"
+    if text.endswith("_C"):
+        return "C"
+    return None
 
 
 def _evidence_preview(evidence_row: dict[str, Any], *, limit: int = 80) -> str:
@@ -1379,6 +1506,22 @@ def _build_link_aware_summary(
     showcase_complete = include_showcase and bool(showcase_rows) and any(
         row.get("evidence_status") in primary_statuses for row in final_parameters_linked
     )
+    process_step_parameter_links = sum(1 for row in evidence_parameter_links if row.get("source_type") == "process_step")
+    evidence_object_parameter_links = sum(
+        1
+        for row in evidence_parameter_links
+        if row.get("source_type") == "evidence_object" or row.get("created_by") == "direct_evidence_refs"
+    )
+    spectra_parameter_links_count = sum(
+        1
+        for row in spectra_parameter_links
+        if row.get("created_by") not in {"deterministic_visual_value_match", "indirect"}
+    )
+    visual_parameter_links = sum(
+        1
+        for row in spectra_parameter_links
+        if row.get("created_by") == "deterministic_visual_value_match"
+    )
     return {
         "total_parameters": len(final_parameters_linked),
         "parameters_with_any_link": sum(
@@ -1398,6 +1541,10 @@ def _build_link_aware_summary(
         ),
         "total_evidence_parameter_links": len(evidence_parameter_links),
         "total_spectra_parameter_links": len(spectra_parameter_links),
+        "process_step_parameter_links": process_step_parameter_links,
+        "evidence_object_parameter_links": evidence_object_parameter_links,
+        "spectra_parameter_links": spectra_parameter_links_count,
+        "visual_parameter_links": visual_parameter_links,
         "total_samples": len(samples),
         "sample_matrix_rows": len(samples),
         "showcase_rows": len(showcase_rows),

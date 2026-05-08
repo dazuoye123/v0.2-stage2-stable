@@ -2,13 +2,13 @@
 
 ## Environment
 
-Prepare the project root:
+Set the project root first:
 
 ```powershell
 Set-Location "G:\paper\Al-gel-sol\alumina_sol_extractor"
 ```
 
-Required environment variables for live stages:
+Live stages need these environment variables:
 
 - `OPENAI_API_KEY` or `DASHSCOPE_API_KEY`
 - `OPENAI_BASE_URL`
@@ -27,7 +27,7 @@ $env:VLM_MODEL_NAME="qwen-vl-max"
 
 ## Safe mode
 
-No model calls. Completed stages are skipped, missing model-dependent stages stay pending, and link-aware exports can be refreshed from existing outputs.
+Safe mode does not call any model. Completed stages are skipped, model-dependent missing stages stay pending, and existing Stage 5+ outputs can still be refreshed.
 
 ```powershell
 python .\scripts\run_full_pipeline.py `
@@ -41,7 +41,7 @@ python .\scripts\run_full_pipeline.py `
 
 ## Single paper full pipeline
 
-Use this when we want one paper to run through resume, fusion, linking dry-run, and link-aware export. Existing valid stages are skipped automatically.
+Use this when we want a single paper to go through controlled auto completion. Existing valid stages are skipped automatically.
 
 ```powershell
 python .\scripts\run_full_pipeline.py `
@@ -57,14 +57,19 @@ python .\scripts\run_full_pipeline.py `
   --no-showcase
 ```
 
-## Linking + export only
+## Stage 5 / Stage 5.5 / export only
 
-Use this when Stage 3 and Stage 4A are already valid and we only want to refresh Stage 5, Stage 5.5 dry-run, and link-aware exports.
+Use this after Stage 4A is already valid and we only want to refresh:
+
+- Stage 5 fusion
+- Stage 5.5 deterministic dry-run linking
+- link-aware export
+
+No markdown directory is required for this path.
 
 ```powershell
 python .\scripts\run_full_pipeline.py `
   --outputs-dir ".\data\outputs" `
-  --markdown-dir ".\data\markdown" `
   --paper-ids "柔性α-Al_2O_3纳米结构纤维的制备与表征_贾玉娜" `
   --force-stage5 `
   --force-linking `
@@ -94,14 +99,14 @@ python .\scripts\run_full_pipeline.py `
 
 ## Stage 1 support from PDF
 
-If markdown is missing and PDF files are available, allow Stage 1:
+If markdown is missing and PDFs are available, allow Stage 1:
 
 ```powershell
 python .\scripts\run_full_pipeline.py `
   --pdf-dir ".\data\pdfs" `
   --markdown-dir ".\data\markdown" `
   --outputs-dir ".\data\outputs" `
-  --paper-ids "paper_name_here" `
+  --paper-ids "柔性α-Al_2O_3纳米结构纤维的制备与表征_贾玉娜" `
   --allow-stage1 `
   --auto-complete `
   --live-stage3 `
@@ -111,6 +116,8 @@ python .\scripts\run_full_pipeline.py `
 ```
 
 ## Rebuild link-aware export only
+
+Per paper:
 
 ```powershell
 python .\scripts\export_link_aware_dataset.py `
@@ -141,7 +148,7 @@ python .\scripts\export_batch_link_aware_dataset.py `
 
 ## Primary outputs
 
-Treat these as the authoritative tables:
+Use these as the authoritative, traceable tables:
 
 - `final_parameters_linked.csv`
 - `process_steps_table.csv`
@@ -149,7 +156,7 @@ Treat these as the authoritative tables:
 - `spectra_parameter_links.csv`
 - `sample_parameter_matrix.csv`
 
-`final_showcase_table.csv` is only a preview table when generated. It is not the primary source for statistics or database loading.
+`final_showcase_table.csv` is only a quick preview when generated. It is not the primary source for database loading or final statistics.
 
 ## Files not to commit
 
@@ -165,19 +172,37 @@ Treat these as the authoritative tables:
 
 ### `evidence_parameter_links.csv` is empty
 
-Check whether:
+Check:
 
 1. `process_steps.jsonl` exists and contains `evidence_text`
 2. `links.jsonl` contains `process_step -> parameter` or `evidence_object -> parameter`
-3. `run_full_pipeline.py` was executed with `--force-linking`
+3. `link_candidates.jsonl` contains the expected candidate family
+4. `run_full_pipeline.py` was executed with `--force-linking`
+5. the export step is reading the generated `source_type`
 
 ### `spectra_parameter_links.csv` is empty
 
-Check whether:
+Check:
 
-1. `spectra.jsonl` contains parsed peaks
-2. parameter canonical keys exist for the peak type, such as `ftir_peak_position_cm_1`, `xrd_peak_position_2theta_deg`, `nmr_27Al_peak_position_ppm`
-3. peak values numerically match parameter values
+1. `spectra.jsonl` contains parsed peaks or quantitative values
+2. `parameters.jsonl` contains compatible canonical keys such as:
+   - `ftir_peak_position_cm_1`
+   - `xrd_peak_position_2theta_deg`
+   - `nmr_27Al_peak_position_ppm`
+   - `raman_peak_position_cm_1`
+3. peak or observed values numerically match parameter values
+4. `links.jsonl` contains `spectra_peak`, `spectra_record`, or `visual_extraction` links
+5. if only `figure_id` matches but no value matches, deterministic spectra links should stay empty by design
+
+### How to inspect linking quickly
+
+Useful files:
+
+- `final_dataset/linking/linking_summary.json`
+- `final_dataset/linking/link_candidates.jsonl`
+- `final_dataset/linking/links.jsonl`
+- `final_dataset/link_aware_exports/evidence_parameter_links.csv`
+- `final_dataset/link_aware_exports/spectra_parameter_links.csv`
 
 ### Stage 4A failed
 
@@ -189,18 +214,29 @@ Inspect:
 
 ### Windows `PermissionError` / file lock
 
-Close Excel, WPS, VS Code preview, or any viewer that may have opened:
+Close Excel, WPS, VS Code preview, or any viewer that may still have open:
 
 - `final_dataset.csv`
 - `final_parameters_linked.csv`
 - `sample_parameter_matrix.csv`
+- `process_steps_table.csv`
 
 Then rerun the same command.
 
 ### How to confirm skip / run / pending
 
-Check the latest batch report:
+Check the latest run outputs:
 
 - `data/batch_validation/{timestamp}/full_pipeline_run/run_summary.json`
 - `data/batch_validation/{timestamp}/full_pipeline_run/run_report.md`
 - `data/batch_validation/{timestamp}/full_pipeline_run/stage6c_full_resume/full_resume_report.md`
+
+### Why preview/showcase is not the core output
+
+Preview/showcase rows are intentionally incomplete when:
+
+- links are still missing
+- evidence coverage is partial
+- spectra have no deterministic parameter match
+
+That is why the recommended primary tables are the linked parameter, process step, evidence link, spectra link, and sample matrix exports rather than the preview table.

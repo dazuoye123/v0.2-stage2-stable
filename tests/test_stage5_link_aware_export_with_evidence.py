@@ -92,3 +92,78 @@ def test_link_aware_export_surfaces_process_step_links_and_can_skip_showcase(tmp
     assert result["final_parameters_linked"][0]["evidence_status"] == "process_step_evidence"
     showcase_path = dataset_dir / "link_aware_exports" / "final_showcase_table.csv"
     assert showcase_path.exists()
+
+
+def test_link_aware_export_surfaces_spectra_links(tmp_path: Path) -> None:
+    dataset_dir = tmp_path / "final_dataset"
+    _write_json(dataset_dir / "paper.json", {"paper_id": "paper-1", "title": "Test Paper"})
+    _write_jsonl(dataset_dir / "samples.jsonl", [])
+    _write_jsonl(
+        dataset_dir / "parameters.jsonl",
+        [
+            {
+                "parameter_id": "param-ftir-467",
+                "paper_id": "paper-1",
+                "sample_id": None,
+                "canonical_key": "ftir_peak_position_cm_1",
+                "raw_name": "FTIR peak",
+                "value": 467,
+                "unit": "cm^-1",
+                "source_scope": "stage4.spectra.peaks",
+                "evidence_refs": [{"source_id": "spectra-Fig.5-peak-01", "figure_id": "Fig.5"}],
+                "quality_flags": ["derived_from_stage4_spectra"],
+                "normalization_note": None,
+                "linked_figure_ids": ["Fig.5"],
+                "linked_spectra_ids": ["Fig.5"],
+            }
+        ],
+    )
+    _write_jsonl(dataset_dir / "process_steps.jsonl", [])
+    _write_jsonl(dataset_dir / "evidence.jsonl", [])
+    _write_jsonl(
+        dataset_dir / "spectra.jsonl",
+        [
+            {
+                "figure_id": "Fig.5",
+                "figure_type": "ftir_spectrum",
+                "schema_name": "VibrationalSpectrumExtraction",
+                "technique": "FTIR",
+                "peaks": [
+                    {
+                        "position": 467,
+                        "unit": "cm^-1",
+                        "assignment": "Al-O",
+                        "source": "image_and_text",
+                    }
+                ],
+            }
+        ],
+    )
+    _write_jsonl(dataset_dir / "figures.jsonl", [])
+    _write_json(dataset_dir / "quality_summary.json", {"invalid_canonical_key_count": 0})
+    _write_jsonl(
+        dataset_dir / "linking" / "links.jsonl",
+        [
+            {
+                "link_id": "link-1",
+                "paper_id": "paper-1",
+                "source_type": "spectra_peak",
+                "source_id": "spectra-Fig.5-peak-01",
+                "target_type": "parameter",
+                "target_id": "param-ftir-467",
+                "link_type": "supports",
+                "confidence": "high",
+                "reasoning": "467 cm^-1 FTIR peak matches parameter",
+                "created_by": "deterministic_spectra_peak_value_match",
+            }
+        ],
+    )
+    _write_json(dataset_dir / "linking" / "linking_summary.json", {"accepted_links": 1})
+
+    result = generate_link_aware_exports(dataset_dir, include_showcase=False)
+
+    assert result["summary"]["parameters_with_spectra_link"] == 1
+    assert result["summary"]["total_spectra_parameter_links"] == 1
+    assert result["spectra_parameter_links"]
+    assert result["spectra_parameter_links"][0]["canonical_key"] == "ftir_peak_position_cm_1"
+    assert result["final_parameters_linked"][0]["evidence_status"] == "linked_spectra"

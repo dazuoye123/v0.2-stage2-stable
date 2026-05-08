@@ -18,8 +18,14 @@ from alumina_sol_extractor.batch_validation.full_resume import run_stage6c_full_
 from alumina_sol_extractor.batch_validation.resume import discover_resume_candidates
 from alumina_sol_extractor.config import build_runtime_settings, resolve_project_path
 from alumina_sol_extractor.dataset_fusion.batch_link_aware_export import export_batch_link_aware_dataset
+from alumina_sol_extractor.dataset_fusion.exporters import export_fusion_outputs
 from alumina_sol_extractor.dataset_fusion.exporters import write_json, write_markdown
+from alumina_sol_extractor.dataset_fusion.fusion import run_stage5_dataset_fusion
 from alumina_sol_extractor.dataset_fusion.link_aware_export import generate_link_aware_exports
+from alumina_sol_extractor.linking.candidate_builder import build_deterministic_links, build_link_candidates, load_final_dataset_inputs
+from alumina_sol_extractor.linking.exporters import export_linking_outputs
+from alumina_sol_extractor.linking.report import render_linking_report
+from alumina_sol_extractor.linking.validators import build_linking_summary
 from alumina_sol_extractor.pipeline.stage1_pdf_to_markdown import run_stage1_pdf_to_markdown
 
 
@@ -200,6 +206,122 @@ def _build_run_report(
     return "\n".join(lines)
 
 
+def _run_stage5_and_stage55_dry_run(
+    *,
+    outputs_dir: Path,
+    paper_ids: list[str],
+    include_showcase: bool,
+    export_link_aware: bool,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]:
+    per_paper_summary: list[dict[str, Any]] = []
+    exports: list[dict[str, Any]] = []
+
+    for paper_id in paper_ids:
+        paper_output_dir = outputs_dir / paper_id
+        final_dataset_dir = paper_output_dir / "final_dataset"
+        if not paper_output_dir.exists():
+            per_paper_summary.append(
+                {
+                    "paper_id": paper_id,
+                    "status_before": "missing_output_dir",
+                    "status_after": "failed",
+                    "completed_stages_after": [],
+                    "failed_reason": "missing_output_dir",
+                }
+            )
+            continue
+
+        bundle = run_stage5_dataset_fusion(paper_id=paper_id, output_dir=paper_output_dir)
+        export_fusion_outputs(bundle, final_dataset_dir)
+
+        linking_dir = final_dataset_dir / "linking"
+        inputs = load_final_dataset_inputs(final_dataset_dir)
+        candidates = build_link_candidates(
+            inputs["paper"],
+            inputs["parameters"],
+            inputs["evidence"],
+            inputs["spectra"],
+            inputs["samples"],
+            process_steps=inputs.get("process_steps"),
+        )
+        accepted_links, unmatched_candidates = build_deterministic_links(candidates)
+        rejected_links: list[dict[str, Any]] = []
+        raw_llm_outputs: list[dict[str, Any]] = []
+        summary = build_linking_summary(
+            candidates=candidates,
+            accepted_links=accepted_links,
+            rejected_links=rejected_links,
+            unmatched_candidates=unmatched_candidates,
+            raw_llm_outputs=raw_llm_outputs,
+            invalid_source_id_count=0,
+            invalid_target_id_count=0,
+        )
+        report = render_linking_report(
+            file_presence={
+                "paper": (final_dataset_dir / "paper.json").exists(),
+                "samples": (final_dataset_dir / "samples.jsonl").exists(),
+                "parameters": (final_dataset_dir / "parameters.jsonl").exists(),
+                "evidence": (final_dataset_dir / "evidence.jsonl").exists(),
+                "spectra": (final_dataset_dir / "spectra.jsonl").exists(),
+                "quality_summary": (final_dataset_dir / "quality_summary.json").exists(),
+                "fusion_report": (final_dataset_dir / "fusion_report.md").exists(),
+                "figures": (final_dataset_dir / "figures.jsonl").exists(),
+            },
+            candidates=candidates,
+            accepted_links=accepted_links,
+            unmatched_candidates=unmatched_candidates,
+            rejected_links=rejected_links,
+            summary=summary,
+        )
+        export_linking_outputs(
+            linking_dir,
+            candidates=candidates,
+            accepted_links=accepted_links,
+            unmatched_candidates=unmatched_candidates,
+            rejected_links=rejected_links,
+            raw_llm_outputs=raw_llm_outputs,
+            summary=summary,
+            report=report,
+        )
+
+        if export_link_aware:
+            exports.append(
+                generate_link_aware_exports(
+                    final_dataset_dir,
+                    paper_id=paper_id,
+                    project_root=PROJECT_ROOT,
+                    include_showcase=include_showcase,
+                )
+            )
+        per_paper_summary.append(
+            {
+                "paper_id": paper_id,
+                "status_before": "existing_final_dataset",
+                "status_after": "complete",
+                "completed_stages_after": ["stage5", "stage55"],
+                "failed_reason": None,
+            }
+        )
+
+    batch_export = None
+    if export_link_aware and exports:
+        batch_export = export_batch_link_aware_dataset(
+            outputs_dir,
+            output_dir=outputs_dir / "_batch_final_exports",
+            paper_ids=paper_ids,
+        )
+
+    full_resume_result = {
+        "full_resume_summary": {
+            "completed_after": sum(1 for row in per_paper_summary if row.get("status_after") == "complete"),
+            "partial_after": sum(1 for row in per_paper_summary if row.get("status_after") == "partial"),
+            "failed_papers": sum(1 for row in per_paper_summary if row.get("status_after") == "failed"),
+        },
+        "per_paper_summary": per_paper_summary,
+    }
+    return full_resume_result, exports, batch_export
+
+
 def run_full_pipeline(
     *,
     pdf_dir: Path | None,
@@ -244,58 +366,65 @@ def run_full_pipeline(
             pdf_dir=pdf_dir,
         )
 
-    if markdown_dir is None:
-        raise ValueError("--markdown-dir is required unless stage1 is used to create markdown files first.")
-
     batch_dir = output_dir or PROJECT_ROOT / "data" / "batch_validation" / datetime.now().strftime("%Y%m%d_%H%M%S") / "full_pipeline_run"
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    full_resume_result = run_stage6c_full_resume(
-        project_root=PROJECT_ROOT,
-        markdown_dir=markdown_dir,
-        outputs_dir=outputs_dir,
-        max_papers=max_papers,
-        paper_ids=selected_paper_ids or None,
-        auto_complete=auto_complete and not safe,
-        allow_stage2_refresh=allow_stage2_refresh,
-        live_stage3=live_stage3 and not safe,
-        live_stage4a=live_stage4a and not safe,
-        live_linking=live_linking and not safe,
-        force_stage3=force_stage3,
-        force_stage4a=force_stage4a,
-        force_stage5=force_stage5,
-        force_linking=force_linking,
-        dry_run_plan_only=dry_run,
-        max_stage3_papers=max_stage3_papers,
-        max_stage4a_papers=max_stage4a_papers,
-        max_stage4a_figures_per_paper=max_stage4a_figures_per_paper,
-        max_total_model_calls=max_total_model_calls,
-        stage4a_figure_types=stage4a_figure_types,
-        output_dir=batch_dir / "stage6c_full_resume",
-    )
-
-    exports: list[dict[str, Any]] = []
-    if export_link_aware and not dry_run:
-        for paper_id in selected_paper_ids:
-            final_dataset_dir = outputs_dir / paper_id / "final_dataset"
-            if not final_dataset_dir.exists():
-                continue
-            exports.append(
-                generate_link_aware_exports(
-                    final_dataset_dir,
-                    paper_id=paper_id,
-                    project_root=PROJECT_ROOT,
-                    include_showcase=include_showcase,
-                )
-            )
-
-    batch_export = None
-    if export_link_aware and not dry_run and exports:
-        batch_export = export_batch_link_aware_dataset(
-            outputs_dir,
-            output_dir=outputs_dir / "_batch_final_exports",
-            paper_ids=selected_paper_ids or None,
+    if markdown_dir is None:
+        if not selected_paper_ids:
+            raise ValueError("--paper-ids or --markdown-dir is required to select papers for a Stage 5-only rerun.")
+        full_resume_result, exports, batch_export = _run_stage5_and_stage55_dry_run(
+            outputs_dir=outputs_dir,
+            paper_ids=selected_paper_ids,
+            include_showcase=include_showcase,
+            export_link_aware=export_link_aware and not dry_run,
         )
+    else:
+        full_resume_result = run_stage6c_full_resume(
+            project_root=PROJECT_ROOT,
+            markdown_dir=markdown_dir,
+            outputs_dir=outputs_dir,
+            max_papers=max_papers,
+            paper_ids=selected_paper_ids or None,
+            auto_complete=auto_complete and not safe,
+            allow_stage2_refresh=allow_stage2_refresh,
+            live_stage3=live_stage3 and not safe,
+            live_stage4a=live_stage4a and not safe,
+            live_linking=live_linking and not safe,
+            force_stage3=force_stage3,
+            force_stage4a=force_stage4a,
+            force_stage5=force_stage5,
+            force_linking=force_linking,
+            dry_run_plan_only=dry_run,
+            max_stage3_papers=max_stage3_papers,
+            max_stage4a_papers=max_stage4a_papers,
+            max_stage4a_figures_per_paper=max_stage4a_figures_per_paper,
+            max_total_model_calls=max_total_model_calls,
+            stage4a_figure_types=stage4a_figure_types,
+            output_dir=batch_dir / "stage6c_full_resume",
+        )
+
+        exports = []
+        if export_link_aware and not dry_run:
+            for paper_id in selected_paper_ids:
+                final_dataset_dir = outputs_dir / paper_id / "final_dataset"
+                if not final_dataset_dir.exists():
+                    continue
+                exports.append(
+                    generate_link_aware_exports(
+                        final_dataset_dir,
+                        paper_id=paper_id,
+                        project_root=PROJECT_ROOT,
+                        include_showcase=include_showcase,
+                    )
+                )
+
+        batch_export = None
+        if export_link_aware and not dry_run and exports:
+            batch_export = export_batch_link_aware_dataset(
+                outputs_dir,
+                output_dir=outputs_dir / "_batch_final_exports",
+                paper_ids=selected_paper_ids or None,
+            )
 
     summary = _build_run_summary(
         stage1_runs=stage1_runs,
