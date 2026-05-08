@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--final-dataset-dir", required=True)
     parser.add_argument("--paper-id")
     parser.add_argument("--output-dir")
+    parser.add_argument("--no-showcase", action="store_true")
     return parser.parse_args()
 
 
@@ -35,6 +36,7 @@ def main() -> int:
         output_dir=output_dir,
         paper_id=args.paper_id,
         project_root=PROJECT_ROOT,
+        include_showcase=not args.no_showcase,
     )
     print(
         json.dumps(

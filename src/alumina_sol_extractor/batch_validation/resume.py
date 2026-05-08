@@ -470,6 +470,7 @@ def _run_stage55_dry_run(*, output_dir: Path) -> None:
         inputs["evidence"],
         inputs["spectra"],
         inputs["samples"],
+        process_steps=inputs.get("process_steps"),
         max_candidates_per_type=100,
     )
     accepted_links, unmatched_candidates = build_deterministic_links(candidates)

@@ -654,6 +654,7 @@ def _run_stage55(*, output_dir: Path, live: bool) -> None:
         inputs["evidence"],
         inputs["spectra"],
         inputs["samples"],
+        process_steps=inputs.get("process_steps"),
         link_types=DEFAULT_LINK_FAMILIES,
         max_candidates_per_type=100,
     )

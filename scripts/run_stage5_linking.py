@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-llm-candidates", type=int, default=20)
     parser.add_argument(
         "--link-types",
-        default="spectra_peak_to_parameter,evidence_to_parameter,spectra_to_evidence,parameter_to_sample",
+        default="process_step_to_parameter,spectra_peak_to_parameter,evidence_to_parameter,spectra_to_evidence,parameter_to_sample",
         help="Comma-separated candidate families.",
     )
     parser.add_argument("--dry-run", action="store_true")
@@ -60,6 +60,7 @@ def main() -> int:
         inputs["evidence"],
         inputs["spectra"],
         inputs["samples"],
+        process_steps=inputs.get("process_steps"),
         link_types=link_types,
         max_candidates_per_type=max(1, args.max_candidates),
     )

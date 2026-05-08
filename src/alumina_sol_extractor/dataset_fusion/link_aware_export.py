@@ -90,13 +90,15 @@ SAMPLE_PARAMETER_MATRIX_FIELDS = [
 
 EVIDENCE_PARAMETER_LINK_FIELDS = [
     "paper_id",
+    "source_type",
+    "source_id",
+    "evidence_text_preview",
     "evidence_id",
     "evidence_type",
     "figure_id",
     "table_id",
     "figure_type",
     "caption",
-    "evidence_text_preview",
     "parameter_id",
     "canonical_key",
     "parameter_value",
@@ -168,6 +170,11 @@ PROCESS_STEPS_TABLE_FIELDS = [
     "heating_rate_unit",
     "product_or_outcome",
     "linked_parameter_keys",
+    "linked_parameter_ids",
+    "linked_canonical_keys",
+    "linked_values",
+    "linked_units",
+    "link_confidences",
     "evidence_text",
     "confidence",
     "needs_manual_review",
@@ -199,6 +206,7 @@ def generate_link_aware_exports(
     output_dir: Path | str | None = None,
     paper_id: str | None = None,
     project_root: Path | str | None = None,
+    include_showcase: bool = True,
 ) -> dict[str, Any]:
     inputs = load_link_aware_inputs(final_dataset_dir)
     ontology_map = get_ontology_entry_map(project_root)
@@ -214,7 +222,7 @@ def generate_link_aware_exports(
     samples = inputs["samples"]
     links = inputs["links"]
 
-    indexes = _build_indexes(parameters, evidence, spectra, samples, links)
+    indexes = _build_indexes(parameters, process_steps, evidence, spectra, samples, links)
     evidence_parameter_links = _build_evidence_parameter_links(
         paper_id=paper_id,
         parameters=parameters,
@@ -254,42 +262,63 @@ def generate_link_aware_exports(
         paper_id=paper_id,
         title=title,
         process_steps=process_steps,
+        indexes=indexes,
     )
     final_showcase_table = _build_final_showcase_table(
         paper_id=paper_id,
         title=title,
         final_parameters_linked=final_parameters_linked,
         samples=samples,
+        include_showcase=include_showcase,
     )
+    write_warnings: list[str] = []
     summary = _build_link_aware_summary(
         final_parameters_linked=final_parameters_linked,
         evidence_parameter_links=evidence_parameter_links,
         spectra_parameter_links=spectra_parameter_links,
         samples=samples,
         showcase_rows=final_showcase_table,
+        include_showcase=include_showcase,
     )
-    readme = _build_link_aware_readme()
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    _write_csv_with_fields(output_dir / "final_parameters_linked.csv", final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS)
-    _write_parquet_with_fields(
+    _safe_write(
+        output_dir / "final_parameters_linked.csv",
+        lambda path: _write_csv_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
+        write_warnings,
+    )
+    _safe_write(
         output_dir / "final_parameters_linked.parquet",
-        final_parameters_linked,
-        FINAL_PARAMETERS_LINKED_FIELDS,
+        lambda path: _write_parquet_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
+        write_warnings,
     )
-    _write_csv_with_fields(output_dir / "sample_parameter_matrix.csv", sample_parameter_matrix, SAMPLE_PARAMETER_MATRIX_FIELDS)
-    _write_csv_with_fields(
+    _safe_write(
+        output_dir / "sample_parameter_matrix.csv",
+        lambda path: _write_csv_with_fields(path, sample_parameter_matrix, SAMPLE_PARAMETER_MATRIX_FIELDS),
+        write_warnings,
+    )
+    _safe_write(
         output_dir / "evidence_parameter_links.csv",
-        evidence_parameter_links,
-        EVIDENCE_PARAMETER_LINK_FIELDS,
+        lambda path: _write_csv_with_fields(path, evidence_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
+        write_warnings,
     )
-    _write_csv_with_fields(
+    _safe_write(
         output_dir / "spectra_parameter_links.csv",
-        spectra_parameter_links,
-        SPECTRA_PARAMETER_LINK_FIELDS,
+        lambda path: _write_csv_with_fields(path, spectra_parameter_links, SPECTRA_PARAMETER_LINK_FIELDS),
+        write_warnings,
     )
-    _write_csv_with_fields(output_dir / "process_steps_table.csv", process_steps_table, PROCESS_STEPS_TABLE_FIELDS)
-    _write_csv_with_fields(output_dir / "final_showcase_table.csv", final_showcase_table, FINAL_SHOWCASE_FIELDS)
+    _safe_write(
+        output_dir / "process_steps_table.csv",
+        lambda path: _write_csv_with_fields(path, process_steps_table, PROCESS_STEPS_TABLE_FIELDS),
+        write_warnings,
+    )
+    _safe_write(
+        output_dir / "final_showcase_table.csv",
+        lambda path: _write_csv_with_fields(path, final_showcase_table, FINAL_SHOWCASE_FIELDS),
+        write_warnings,
+    )
+    summary["output_warnings"] = write_warnings
+    readme = _build_link_aware_readme(include_showcase=include_showcase, output_warnings=write_warnings)
     write_json(output_dir / "link_aware_export_summary.json", summary)
     write_markdown(output_dir / "link_aware_export_readme.md", readme)
 
@@ -309,11 +338,17 @@ def generate_link_aware_exports(
 
 def _build_indexes(
     parameters: list[dict[str, Any]],
+    process_steps: list[dict[str, Any]],
     evidence: list[dict[str, Any]],
     spectra: list[dict[str, Any]],
     samples: list[dict[str, Any]],
     links: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    process_steps_by_id = {}
+    for index, row in enumerate(process_steps, start=1):
+        step_id = row.get("step_id") or f"process-step-{index:03d}"
+        row.setdefault("step_id", step_id)
+        process_steps_by_id[step_id] = row
     evidence_by_id = {row.get("evidence_id"): row for row in evidence if row.get("evidence_id")}
     evidence_by_figure = defaultdict(list)
     for row in evidence:
@@ -334,6 +369,7 @@ def _build_indexes(
     links_by_evidence = defaultdict(list)
     links_by_sample = defaultdict(list)
     links_by_spectra = defaultdict(list)
+    links_by_process_step = defaultdict(list)
     for link in links:
         for kind, key, bucket in (
             ("parameter", link.get("source_id") if link.get("source_type") == "parameter" else None, links_by_parameter),
@@ -344,6 +380,8 @@ def _build_indexes(
             ("sample", link.get("target_id") if link.get("target_type") == "sample" else None, links_by_sample),
             ("spectra_record", link.get("source_id") if link.get("source_type") == "spectra_record" else None, links_by_spectra),
             ("spectra_record", link.get("target_id") if link.get("target_type") == "spectra_record" else None, links_by_spectra),
+            ("process_step", link.get("source_id") if link.get("source_type") == "process_step" else None, links_by_process_step),
+            ("process_step", link.get("target_id") if link.get("target_type") == "process_step" else None, links_by_process_step),
         ):
             if key:
                 bucket[key].append(link)
@@ -352,12 +390,14 @@ def _build_indexes(
     return {
         "evidence_by_id": evidence_by_id,
         "evidence_by_figure": evidence_by_figure,
+        "process_steps_by_id": process_steps_by_id,
         "spectra_by_id": spectra_by_id,
         "spectra_by_figure": spectra_by_figure,
         "samples_by_id": samples_by_id,
         "parameters_by_id": parameters_by_id,
         "links_by_parameter": links_by_parameter,
         "links_by_evidence": links_by_evidence,
+        "links_by_process_step": links_by_process_step,
         "links_by_sample": links_by_sample,
         "links_by_spectra": links_by_spectra,
     }
@@ -410,11 +450,17 @@ def _build_final_parameters_linked(
             indexes["evidence_by_figure"],
         )
         evidence_rows = evidence_link_rows_by_parameter.get(parameter_id, [])
+        process_step_rows = [row for row in evidence_rows if row.get("source_type") == "process_step"]
+        evidence_object_rows = [row for row in evidence_rows if row.get("source_type") == "evidence_object" or row.get("created_by") == "direct_evidence_refs"]
         spectra_rows = spectra_link_rows_by_parameter.get(parameter_id, [])
-        linked_evidence_ids = _sorted_unique(explicit_evidence_ids + [row.get("evidence_id") for row in evidence_rows])
+        linked_evidence_ids = _sorted_unique(
+            explicit_evidence_ids
+            + [row.get("evidence_id") for row in evidence_object_rows]
+            + [row.get("source_id") for row in process_step_rows if row.get("source_id")]
+        )
         linked_figure_ids = _sorted_unique(
             _coerce_str_list(parameter.get("linked_figure_ids"))
-            + [row.get("figure_id") for row in evidence_rows]
+            + [row.get("figure_id") for row in evidence_object_rows]
             + [row.get("figure_id") for row in spectra_rows]
         )
         linked_spectra_ids = _sorted_unique(
@@ -427,10 +473,19 @@ def _build_final_parameters_linked(
         link_reasoning_preview = _sorted_unique(
             [_truncate(str(link.get("reasoning") or ""), 120) for link in parameter_links if link.get("reasoning")]
         )
-        evidence_text_preview = _sorted_unique([row.get("evidence_text_preview") for row in evidence_rows if row.get("evidence_text_preview")])
+        evidence_text_preview = _sorted_unique(
+            [row.get("evidence_text_preview") for row in process_step_rows if row.get("evidence_text_preview")]
+            + [row.get("evidence_text_preview") for row in evidence_object_rows if row.get("evidence_text_preview")]
+        )
 
         value_meta = _normalize_parameter_value(parameter.get("value"), parameter.get("unit"))
-        evidence_status = _resolve_evidence_status(explicit_evidence_ids, evidence_rows, spectra_rows, linked_sample_ids)
+        evidence_status = _resolve_evidence_status(
+            explicit_evidence_ids,
+            evidence_object_rows,
+            spectra_rows,
+            linked_sample_ids,
+            process_step_rows,
+        )
         quality_flags = list(parameter.get("quality_flags") or [])
         if len(linked_sample_ids) > 1:
             quality_flags.append("multiple_sample_links")
@@ -439,7 +494,7 @@ def _build_final_parameters_linked(
             1
             for link in parameter_links
             if (link.get("confidence") in {"high", "medium"} and link.get("link_type") != "weak_supports")
-        ) + len([row for row in evidence_rows if row.get("created_by") == "direct_evidence_refs"])
+        ) + len([row for row in evidence_rows if row.get("created_by") in {"direct_evidence_refs", "deterministic_process_step_value_match"}])
         weak_link_count = sum(
             1
             for link in parameter_links
@@ -548,14 +603,27 @@ def _build_process_steps_table(
     paper_id: str,
     title: str,
     process_steps: list[dict[str, Any]],
+    indexes: dict[str, Any],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, step in enumerate(process_steps, start=1):
+        step_id = step.get("step_id") or f"{paper_id}-step-{index:03d}"
+        step_links = [
+            link
+            for link in indexes["links_by_process_step"].get(step_id, [])
+            if {link.get("source_type"), link.get("target_type")} == {"process_step", "parameter"}
+        ]
+        linked_parameters = []
+        for link in step_links:
+            parameter_id = link.get("target_id") if link.get("target_type") == "parameter" else link.get("source_id")
+            parameter_row = indexes["parameters_by_id"].get(parameter_id)
+            if parameter_row:
+                linked_parameters.append((link, parameter_row))
         rows.append(
             {
                 "paper_id": paper_id,
                 "title": title,
-                "step_id": step.get("step_id") or f"{paper_id}-step-{index:03d}",
+                "step_id": step_id,
                 "step_order": step.get("step_order") or index,
                 "section": step.get("section"),
                 "action": step.get("action"),
@@ -577,6 +645,15 @@ def _build_process_steps_table(
                 "heating_rate_unit": step.get("heating_rate_unit"),
                 "product_or_outcome": step.get("product_or_outcome"),
                 "linked_parameter_keys": "; ".join(_coerce_str_list(step.get("linked_parameter_keys"))),
+                "linked_parameter_ids": "; ".join(_sorted_unique([row.get("parameter_id") for _, row in linked_parameters])),
+                "linked_canonical_keys": "; ".join(_sorted_unique([row.get("canonical_key") for _, row in linked_parameters])),
+                "linked_values": "; ".join(
+                    _sorted_unique([_display_value_from_parameter(row) for _, row in linked_parameters if _display_value_from_parameter(row)])
+                ),
+                "linked_units": "; ".join(
+                    _sorted_unique([None if row.get("unit") == "text" else row.get("unit") for _, row in linked_parameters])
+                ),
+                "link_confidences": "; ".join(_sorted_unique([link.get("confidence") for link, _ in linked_parameters])),
                 "evidence_text": step.get("evidence_text"),
                 "confidence": step.get("confidence"),
                 "needs_manual_review": step.get("needs_manual_review"),
@@ -596,10 +673,13 @@ def _build_evidence_parameter_links(
     evidence_by_id = indexes["evidence_by_id"]
     parameter_by_id = indexes["parameters_by_id"]
     rows: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
 
     def add_row(
-        evidence_row: dict[str, Any],
+        source_type: str,
+        source_id: str | None,
+        evidence_text_preview: str | None,
+        evidence_row: dict[str, Any] | None,
         parameter_row: dict[str, Any],
         *,
         link_type: str,
@@ -608,20 +688,22 @@ def _build_evidence_parameter_links(
         created_by: str,
         validation_status: str = "accepted",
     ) -> None:
-        key = (str(evidence_row.get("evidence_id")), str(parameter_row.get("parameter_id")))
+        key = (str(source_type), str(source_id), str(parameter_row.get("parameter_id")))
         if key in seen:
             return
         seen.add(key)
         rows.append(
             {
                 "paper_id": paper_id,
-                "evidence_id": evidence_row.get("evidence_id"),
-                "evidence_type": evidence_row.get("evidence_type"),
-                "figure_id": evidence_row.get("figure_id"),
-                "table_id": evidence_row.get("table_id"),
-                "figure_type": evidence_row.get("figure_type"),
-                "caption": evidence_row.get("caption"),
-                "evidence_text_preview": _evidence_preview(evidence_row, limit=120),
+                "source_type": source_type,
+                "source_id": source_id,
+                "evidence_text_preview": evidence_text_preview,
+                "evidence_id": evidence_row.get("evidence_id") if evidence_row else None,
+                "evidence_type": evidence_row.get("evidence_type") if evidence_row else source_type,
+                "figure_id": evidence_row.get("figure_id") if evidence_row else None,
+                "table_id": evidence_row.get("table_id") if evidence_row else None,
+                "figure_type": evidence_row.get("figure_type") if evidence_row else None,
+                "caption": evidence_row.get("caption") if evidence_row else None,
                 "parameter_id": parameter_row.get("parameter_id"),
                 "canonical_key": parameter_row.get("canonical_key"),
                 "parameter_value": parameter_row.get("value"),
@@ -638,22 +720,43 @@ def _build_evidence_parameter_links(
     for link in links:
         source_type = link.get("source_type")
         target_type = link.get("target_type")
-        if {source_type, target_type} != {"evidence_object", "parameter"}:
+        if {source_type, target_type} == {"evidence_object", "parameter"}:
+            evidence_id = link.get("source_id") if source_type == "evidence_object" else link.get("target_id")
+            parameter_id = link.get("target_id") if target_type == "parameter" else link.get("source_id")
+            evidence_row = evidence_by_id.get(evidence_id)
+            parameter_row = parameter_by_id.get(parameter_id)
+            if evidence_row and parameter_row:
+                add_row(
+                    "evidence_object",
+                    evidence_id,
+                    _evidence_preview(evidence_row, limit=120),
+                    evidence_row,
+                    parameter_row,
+                    link_type=link.get("link_type") or "supports",
+                    confidence=link.get("confidence") or "medium",
+                    reasoning=link.get("reasoning"),
+                    created_by=link.get("created_by") or "llm",
+                    validation_status=link.get("validation_status") or "accepted",
+                )
             continue
-        evidence_id = link.get("source_id") if source_type == "evidence_object" else link.get("target_id")
-        parameter_id = link.get("target_id") if target_type == "parameter" else link.get("source_id")
-        evidence_row = evidence_by_id.get(evidence_id)
-        parameter_row = parameter_by_id.get(parameter_id)
-        if evidence_row and parameter_row:
-            add_row(
-                evidence_row,
-                parameter_row,
-                link_type=link.get("link_type") or "supports",
-                confidence=link.get("confidence") or "medium",
-                reasoning=link.get("reasoning"),
-                created_by=link.get("created_by") or "llm",
-                validation_status=link.get("validation_status") or "accepted",
-            )
+        if {source_type, target_type} == {"process_step", "parameter"}:
+            process_step_id = link.get("source_id") if source_type == "process_step" else link.get("target_id")
+            parameter_id = link.get("target_id") if target_type == "parameter" else link.get("source_id")
+            process_step_row = indexes["process_steps_by_id"].get(process_step_id)
+            parameter_row = parameter_by_id.get(parameter_id)
+            if process_step_row and parameter_row:
+                add_row(
+                    "process_step",
+                    process_step_id,
+                    _truncate(str(process_step_row.get("evidence_text") or ""), 120),
+                    None,
+                    parameter_row,
+                    link_type=link.get("link_type") or "supports",
+                    confidence=link.get("confidence") or "medium",
+                    reasoning=link.get("reasoning"),
+                    created_by=link.get("created_by") or "deterministic_process_step_value_match",
+                    validation_status=link.get("validation_status") or "accepted",
+                )
 
     evidence_by_figure = indexes["evidence_by_figure"]
     for parameter_row in parameters:
@@ -662,6 +765,9 @@ def _build_evidence_parameter_links(
             evidence_row = evidence_by_id.get(evidence_id)
             if evidence_row:
                 add_row(
+                    "evidence_object",
+                    evidence_id,
+                    _evidence_preview(evidence_row, limit=120),
                     evidence_row,
                     parameter_row,
                     link_type="supports",
@@ -822,14 +928,18 @@ def _build_final_showcase_table(
     title: str,
     final_parameters_linked: list[dict[str, Any]],
     samples: list[dict[str, Any]],
+    include_showcase: bool,
 ) -> list[dict[str, Any]]:
+    if not include_showcase:
+        return []
     sample_names = {row.get("sample_id"): row.get("sample_name") for row in samples if row.get("sample_id")}
     priority = {
         "strong_evidence": 0,
-        "linked_evidence": 1,
-        "linked_spectra": 2,
-        "sample_link_only": 3,
-        "missing": 4,
+        "process_step_evidence": 1,
+        "linked_evidence": 2,
+        "linked_spectra": 3,
+        "sample_link_only": 4,
+        "missing": 5,
     }
     role_priority = {
         "aluminum_source": 0,
@@ -864,6 +974,7 @@ def _build_final_showcase_table(
                 spectra_display = f"{spectra_display} | {row.get('linked_peak_positions')}"
         link_status_map = {
             "strong_evidence": "evidence-linked",
+            "process_step_evidence": "evidence-linked",
             "linked_evidence": "evidence-linked",
             "linked_spectra": "spectra-linked",
             "sample_link_only": "sample-linked",
@@ -893,7 +1004,12 @@ def _build_link_aware_summary(
     spectra_parameter_links: list[dict[str, Any]],
     samples: list[dict[str, Any]],
     showcase_rows: list[dict[str, Any]],
+    include_showcase: bool,
 ) -> dict[str, Any]:
+    showcase_complete = include_showcase and bool(showcase_rows) and any(
+        row.get("evidence_status") in {"strong_evidence", "process_step_evidence", "linked_evidence", "linked_spectra"}
+        for row in final_parameters_linked
+    )
     return {
         "total_parameters": len(final_parameters_linked),
         "parameters_with_any_link": sum(
@@ -914,6 +1030,17 @@ def _build_link_aware_summary(
         "total_samples": len(samples),
         "sample_matrix_rows": len(samples),
         "showcase_rows": len(showcase_rows),
+        "showcase_is_complete": showcase_complete,
+        "showcase_warning": None
+        if showcase_complete
+        else "Preview/showcase table is incomplete or disabled; use the linked parameter, process step, evidence, spectra, and sample matrix tables as the primary outputs.",
+        "recommended_primary_tables": [
+            "final_parameters_linked.csv",
+            "process_steps_table.csv",
+            "evidence_parameter_links.csv",
+            "spectra_parameter_links.csv",
+            "sample_parameter_matrix.csv",
+        ],
         "warning_count": sum(
             1
             for row in final_parameters_linked
@@ -1185,6 +1312,13 @@ def _write_parquet_with_fields(path: Path, rows: list[dict[str, Any]], fieldname
     frame.to_parquet(path, index=False)
 
 
+def _safe_write(path: Path, writer: Any, warnings: list[str]) -> None:
+    try:
+        writer(path)
+    except PermissionError:
+        warnings.append(f"could_not_overwrite_locked_file:{path.name}")
+
+
 def _csv_value(value: Any) -> Any:
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False)
@@ -1197,3 +1331,126 @@ def _parquet_value(value: Any) -> Any:
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
+
+
+def _display_value_from_parameter(row: dict[str, Any]) -> str:
+    value_meta = _normalize_parameter_value(row.get("value"), row.get("unit"))
+    display_row = {
+        "value_text": value_meta.get("value_text"),
+        "value_num": value_meta.get("value_num"),
+        "value_min": value_meta.get("value_min"),
+        "value_max": value_meta.get("value_max"),
+        "value_raw": value_meta.get("value_raw"),
+        "unit": value_meta.get("unit"),
+    }
+    return _display_value(display_row)
+
+
+def _resolve_evidence_status(
+    explicit_evidence_ids: list[str],
+    evidence_rows: list[dict[str, Any]],
+    spectra_rows: list[dict[str, Any]],
+    linked_sample_ids: list[str],
+    process_step_rows: list[dict[str, Any]] | None = None,
+) -> str:
+    if explicit_evidence_ids:
+        return "strong_evidence"
+    if process_step_rows:
+        return "process_step_evidence"
+    if evidence_rows:
+        return "linked_evidence"
+    if spectra_rows:
+        return "linked_spectra"
+    if linked_sample_ids:
+        return "sample_link_only"
+    return "missing"
+
+
+def _build_link_aware_summary(
+    *,
+    final_parameters_linked: list[dict[str, Any]],
+    evidence_parameter_links: list[dict[str, Any]],
+    spectra_parameter_links: list[dict[str, Any]],
+    samples: list[dict[str, Any]],
+    showcase_rows: list[dict[str, Any]],
+    include_showcase: bool,
+) -> dict[str, Any]:
+    primary_statuses = {"strong_evidence", "process_step_evidence", "linked_evidence", "linked_spectra"}
+    showcase_complete = include_showcase and bool(showcase_rows) and any(
+        row.get("evidence_status") in primary_statuses for row in final_parameters_linked
+    )
+    return {
+        "total_parameters": len(final_parameters_linked),
+        "parameters_with_any_link": sum(
+            1
+            for row in final_parameters_linked
+            if row.get("linked_sample_ids") or row.get("linked_evidence_ids") or row.get("linked_spectra_ids")
+        ),
+        "parameters_with_sample_link": sum(1 for row in final_parameters_linked if row.get("linked_sample_ids")),
+        "parameters_with_evidence_link": sum(
+            1 for row in final_parameters_linked if row.get("evidence_status") in {"strong_evidence", "process_step_evidence", "linked_evidence"}
+        ),
+        "parameters_with_spectra_link": sum(1 for row in final_parameters_linked if row.get("linked_spectra_ids")),
+        "parameters_missing_all_links": sum(
+            1
+            for row in final_parameters_linked
+            if not row.get("linked_sample_ids") and not row.get("linked_evidence_ids") and not row.get("linked_spectra_ids")
+        ),
+        "total_evidence_parameter_links": len(evidence_parameter_links),
+        "total_spectra_parameter_links": len(spectra_parameter_links),
+        "total_samples": len(samples),
+        "sample_matrix_rows": len(samples),
+        "showcase_rows": len(showcase_rows),
+        "showcase_is_complete": showcase_complete,
+        "showcase_warning": None
+        if showcase_complete
+        else "Preview/showcase table is incomplete or disabled; use the linked parameter, process step, evidence, spectra, and sample matrix tables as the primary outputs.",
+        "recommended_primary_tables": [
+            "final_parameters_linked.csv",
+            "process_steps_table.csv",
+            "evidence_parameter_links.csv",
+            "spectra_parameter_links.csv",
+            "sample_parameter_matrix.csv",
+        ],
+        "warning_count": sum(
+            1
+            for row in final_parameters_linked
+            if row.get("evidence_status") == "missing" or "multi" in str(row.get("quality_flags") or "")
+        ),
+    }
+
+
+def _build_link_aware_readme(*, include_showcase: bool, output_warnings: list[str] | None = None) -> str:
+    showcase_note = (
+        "- `final_showcase_table.csv`: quick preview only; it is not the authoritative table for downstream statistics or database ingestion."
+        if include_showcase
+        else "- `final_showcase_table.csv`: preview generation was skipped; rely on the primary linked tables below."
+    )
+    warning_lines = (
+        ["", "## Output Warnings", *[f"- `{item}`" for item in output_warnings]]
+        if output_warnings
+        else []
+    )
+    return "\n".join(
+        [
+            "# Link-aware Final Dataset Exports",
+            "",
+            "## Primary Tables",
+            "- `final_parameters_linked.csv`: the main parameter-level table with resolved sample, evidence, process-step, and spectra links.",
+            "- `process_steps_table.csv`: ordered experimental procedure steps with linked parameters and evidence text.",
+            "- `evidence_parameter_links.csv`: direct process-step and evidence-object links to parameters.",
+            "- `spectra_parameter_links.csv`: direct spectra peak links and indirect spectra-evidence-parameter links.",
+            "- `sample_parameter_matrix.csv`: sample-centric comparison matrix for meetings and sample-level review.",
+            "",
+            "## Additional Files",
+            "- `final_parameters_linked.parquet`: parquet version of the linked parameter table.",
+            showcase_note,
+            "- `link_aware_export_summary.json`: export statistics and guidance on which tables to treat as primary.",
+            "",
+            "## Notes",
+            "- Original `parameters.jsonl`, `process_steps.jsonl`, `evidence.jsonl`, `spectra.jsonl`, and `samples.jsonl` are not modified.",
+            "- Missing links remain explicit; the exporter does not invent unsupported evidence or spectra relationships.",
+            "- Prefer the primary tables above for final analysis, database loading, and group-meeting reporting.",
+            *warning_lines,
+        ]
+    )
