@@ -114,13 +114,8 @@ def build_full_resume_plan(
     else:
         actions["stage4a"] = "pending_stage4a_requires_vlm"
 
-    auto_impacted = (
-        not status["stage5"]["completed"]
-        or actions["stage3"] == "run_stage3"
-        or actions["stage4a"] == "run_stage4a"
-    )
     stage5_requires_rerun = (
-        (force_stage5 and (not auto_complete or auto_impacted))
+        force_stage5
         or not status["stage5"]["completed"]
         or actions["stage3"] == "run_stage3"
         or actions["stage4a"] == "run_stage4a"
@@ -133,7 +128,7 @@ def build_full_resume_plan(
         actions["stage5"] = "skip_stage5"
 
     stage55_requires_rerun = (
-        (force_linking and (not auto_complete or auto_impacted or actions["stage5"] == "run_stage5"))
+        force_linking
         or not status["stage55"]["completed"]
         or actions["stage5"] == "run_stage5"
     )

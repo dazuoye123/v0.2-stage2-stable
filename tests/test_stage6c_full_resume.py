@@ -110,6 +110,26 @@ def test_stage5_and_stage55_rerun_when_forced() -> None:
     assert plan["stage55"] == "run_stage55_dry_run"
 
 
+def test_stage5_and_stage55_rerun_when_forced_in_auto_complete_mode() -> None:
+    plan = build_full_resume_plan(
+        _status(stage2=True, stage3=True, stage4a=True, stage5=True, stage55=True),
+        auto_complete=True,
+        allow_stage2_refresh=False,
+        live_stage3=False,
+        live_stage4a=False,
+        live_linking=False,
+        force_stage3=False,
+        force_stage4a=False,
+        force_stage5=True,
+        force_linking=True,
+        stage3_budget_available=True,
+        stage4a_budget_available=True,
+        model_call_budget_available=True,
+    )
+    assert plan["stage5"] == "run_stage5"
+    assert plan["stage55"] == "run_stage55_dry_run"
+
+
 def test_auto_complete_runs_missing_stage4a_and_reruns_downstream() -> None:
     plan = build_full_resume_plan(
         _status(stage2=True, stage3=True, stage4a=False, stage5=True, stage55=True),
