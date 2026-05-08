@@ -6,9 +6,9 @@ from alumina_sol_extractor.vision_spectra.extractor import Stage4VisionSpectraEx
 def test_xrd_detected_phases_dicts_are_normalized_to_strings() -> None:
     payload = {
         "detected_phases": [
-            {"phase": "莫来石", "source": "image_and_text", "confidence": "high"},
-            {"name": "刚玉"},
-            {"label": "石英"},
+            {"phase": "mullite", "source": "image_and_text", "confidence": "high"},
+            {"name": "corundum"},
+            {"label": "quartz"},
         ]
     }
     normalized, warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
@@ -16,19 +16,30 @@ def test_xrd_detected_phases_dicts_are_normalized_to_strings() -> None:
         figure_type="xrd_pattern",
         schema_name="XRDExtraction",
     )
-    assert normalized["detected_phases"] == ["莫来石", "刚玉", "石英"]
+    assert normalized["detected_phases"] == ["mullite", "corundum", "quartz"]
     assert any(item.startswith("detected_phases_item_mapped_from_dict") for item in warnings)
 
 
 def test_xrd_detected_phases_strings_are_preserved() -> None:
-    payload = {"detected_phases": ["莫来石", "刚玉"]}
+    payload = {"detected_phases": ["mullite", "corundum"]}
     normalized, warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
         payload,
         figure_type="xrd_pattern",
         schema_name="XRDExtraction",
     )
-    assert normalized["detected_phases"] == ["莫来石", "刚玉"]
+    assert normalized["detected_phases"] == ["mullite", "corundum"]
     assert warnings == []
+
+
+def test_xrd_crystallinity_trend_dict_is_normalized_to_string() -> None:
+    payload = {"crystallinity_trend": {"description": "broader halo suggests low crystallinity", "source": "text"}}
+    normalized, warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
+        payload,
+        figure_type="xrd_pattern",
+        schema_name="XRDExtraction",
+    )
+    assert normalized["crystallinity_trend"] == "broader halo suggests low crystallinity"
+    assert any(item.startswith("crystallinity_trend_mapped_from_dict") for item in warnings)
 
 
 def test_microscopy_scale_bar_dict_is_normalized_to_string() -> None:
@@ -50,6 +61,34 @@ def test_microscopy_scale_bar_string_is_preserved() -> None:
         schema_name="MicroscopyExtraction",
     )
     assert normalized["scale_bar"] == "200 nm"
+    assert warnings == []
+
+
+def test_thermal_transition_temperatures_dict_list_is_normalized_to_float_list() -> None:
+    payload = {
+        "transition_temperatures": [
+            {"temperature": 150, "description": "water loss", "source": "text"},
+            {"value": 450, "description": "decomposition", "source": "text"},
+            {"temp": 900},
+        ]
+    }
+    normalized, warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
+        payload,
+        figure_type="tg_curve",
+        schema_name="ThermalAnalysisExtraction",
+    )
+    assert normalized["transition_temperatures"] == [150.0, 450.0, 900.0]
+    assert any(item.startswith("transition_temperatures_item_mapped_from_dict") for item in warnings)
+
+
+def test_thermal_transition_temperatures_plain_list_is_preserved() -> None:
+    payload = {"transition_temperatures": [150.0, 450.0]}
+    normalized, warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
+        payload,
+        figure_type="tg_curve",
+        schema_name="ThermalAnalysisExtraction",
+    )
+    assert normalized["transition_temperatures"] == [150.0, 450.0]
     assert warnings == []
 
 
