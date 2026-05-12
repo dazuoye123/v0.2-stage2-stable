@@ -58,6 +58,21 @@ VISUAL_EXTRACTION_MATCH_RULES: dict[str, dict[str, Any]] = {
     },
 }
 
+SEMANTIC_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "particle_size_nm": ("particle size", "\u7c92\u5f84", "\u80f6\u7c92"),
+    "mass_loss_wt_percent": ("mass loss", "\u603b\u5931\u91cd", "\u8d28\u91cf\u635f\u5931", "\u5931\u91cd"),
+    "pvp_content_wt_percent": ("pvp", "\u8d28\u91cf\u5206\u6570", "wt_percent"),
+    "ambient_temperature_c": ("ambient temperature", "operation box", "spinning chamber", "\u6052\u6e29", "\u73af\u5883\u6e29\u5ea6", "\u64cd\u4f5c\u7bb1"),
+    "ph": ("ph", "\u9178\u5ea6"),
+    "applied_voltage_kv": ("voltage", "\u7535\u573a", "\u7535\u538b"),
+    "collector_distance_cm": ("distance", "\u63a5\u6536\u677f", "\u55b7\u4e1d\u5934", "\u8ddd\u79bb"),
+    "feed_rate_ml_h": ("feed rate", "\u8fdb\u6599\u901f\u7387", "\u9001\u6599\u901f\u7387"),
+    "calcination_temperature_c": ("calcination", "\u7145\u70e7", "\u70ed\u5904\u7406", "\u5347\u6e29\u81f3", "temperature"),
+    "target_temperature_c": ("temperature", "\u5347\u6e29\u81f3", "\u70ed\u5904\u7406"),
+    "holding_time_h": ("holding", "hold", "\u4fdd\u6301", "\u4fdd\u6e29"),
+    "heating_rate_c_min": ("heating rate", "\u5347\u6e29\u901f\u7387", "\u901f\u7387"),
+}
+
 
 def load_final_dataset_inputs(final_dataset_dir: Path | str) -> dict[str, Any]:
     final_dataset_dir = Path(final_dataset_dir)
@@ -340,6 +355,7 @@ def build_link_candidates(
                     target_value = _to_float(parameter.get("value"))
                     if target_value is None or abs(target_value - position) > float(rule["tolerance"]):
                         continue
+                    delta = abs(target_value - position)
                     linked_figures = set(_coerce_str_list(parameter.get("linked_figure_ids")))
                     linked_spectra = set(_coerce_str_list(parameter.get("linked_spectra_ids")))
                     evidence_refs = _extract_reference_ids(parameter.get("evidence_refs"))
@@ -351,9 +367,9 @@ def build_link_candidates(
                         or peak_source_id in evidence_refs
                         or bool(linked_evidence_ids & evidence_refs)
                     )
-                    score = 0.6
+                    score = 0.55 if delta > 0 else 0.6
                     if same_figure:
-                        score += 0.3
+                        score += 0.2 if delta > 0 else 0.3
                     if peak.get("assignment") and parameter.get("raw_name") and str(peak.get("assignment")).lower() in str(parameter.get("raw_name")).lower():
                         score += 0.05
                     if counters["spectra_peak_to_parameter"] >= max_candidates_per_type:
@@ -375,10 +391,10 @@ def build_link_candidates(
                             target_value=parameter.get("value"),
                             target_unit=parameter.get("unit"),
                             target_figure_id=next(iter(linked_figures), None),
-                            candidate_reason="technique_and_numeric_tolerance_match",
+                            candidate_reason="technique_and_approximate_numeric_match" if delta > 0 else "technique_and_numeric_tolerance_match",
                             deterministic_score=min(score, 1.0),
                             needs_llm=not same_figure,
-                            candidate_status="deterministic" if same_figure and score >= 0.85 else "needs_llm",
+                            candidate_status="deterministic" if same_figure and score >= 0.7 else "needs_llm",
                         )
                     )
 
@@ -633,6 +649,11 @@ def _normalize_unit_text(value: Any) -> str | None:
     normalized = normalized.replace("ml h^-1", "ml_h").replace("ml h-1", "ml_h")
     normalized = normalized.replace("c min-1", "c_min").replace("c min^-1", "c_min")
     normalized = normalized.replace("per_min", "_min")
+    normalized = normalized.replace("wt%", "wt_percent").replace("wt.%", "wt_percent")
+    if normalized == "%":
+        normalized = "wt_percent"
+    if normalized == "dimensionless":
+        return None
     return normalized
 
 def _text_contains_value(text: str | None, value: Any, unit: Any = None, tolerance: float = 0.0) -> bool:
@@ -657,31 +678,52 @@ def _text_contains_value(text: str | None, value: Any, unit: Any = None, toleran
                     return True
         return False
     value_text = _normalize_match_text(str(value))
+    range_match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*[-~]\s*(\d+(?:\.\d+)?)\s*", value_text)
+    if range_match:
+        low = float(range_match.group(1))
+        high = float(range_match.group(2))
+        unit_text = _normalize_unit_text(unit)
+        if unit_text and unit_text not in haystack:
+            return False
+        haystack_for_range = haystack.replace(unit_text, "") if unit_text else haystack
+        for observed_range in re.finditer(r"(\d+(?:\.\d+)?)\s*[-~]\s*(\d+(?:\.\d+)?)", haystack_for_range):
+            observed_low = float(observed_range.group(1))
+            observed_high = float(observed_range.group(2))
+            if abs(low - observed_low) <= max(tolerance, 0.05) and abs(high - observed_high) <= max(tolerance, 0.05):
+                return True
     return bool(value_text) and value_text in haystack
 
 
 def _normalize_match_text(text: str) -> str:
     normalized = str(text).lower()
-    for token in ("–", "—", "−", "~"):
+    for token in ("\u2013", "\u2014", "\uff5e", "~"):
         normalized = normalized.replace(token, "-")
     replacements = {
-        "·": "*",
         "pa*s": "pa_s",
         "pa.s": "pa_s",
-        "pa·s": "pa_s",
+        "pa\u00b7s": "pa_s",
         "ml/h": "ml_h",
         "ml h-1": "ml_h",
-        "ml·h-1": "ml_h",
+        "ml\u00b7h-1": "ml_h",
         "ml h^-1": "ml_h",
-        "°c/min": "c_min",
-        "℃/min": "c_min",
+        "\u00b0c/min": "c_min",
+        "\u2103/min": "c_min",
         "c/min": "c_min",
         "per min": "per_min",
+        "2\u03b8": "2theta",
         "cm^-1": "cm-1",
+        "wt%": "wt_percent",
+        "wt.%": "wt_percent",
+        "%": "wt_percent",
+        "\u2103": "c",
+        "\u00b0c": "c",
+        "\u00b0": "",
+        "ph \u503c": "ph",
     }
     for src, dst in replacements.items():
         normalized = normalized.replace(src, dst)
     return normalized
+
 
 def _normalized_parameter_unit(parameter: dict[str, Any]) -> str | None:
     unit = parameter.get("unit")
@@ -789,6 +831,9 @@ def _evidence_semantic_match(parameter: dict[str, Any], evidence_text: str) -> b
         return "xrd" in text or "2theta" in text or "2θ" in text or "diffraction" in text
     if "raman" in canonical_key:
         return "raman" in text or "cm-1" in text
+    keyword_tokens = SEMANTIC_KEYWORDS.get(canonical_key)
+    if keyword_tokens and any(_normalize_match_text(token) in text for token in keyword_tokens):
+        return True
     raw_name = str(parameter.get("raw_name") or "").strip().lower()
     return bool(raw_name and _normalize_match_text(raw_name) in text)
 

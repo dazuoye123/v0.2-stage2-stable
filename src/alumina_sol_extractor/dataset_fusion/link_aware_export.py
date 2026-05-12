@@ -84,6 +84,14 @@ SAMPLE_PARAMETER_MATRIX_FIELDS = [
     "linked_parameter_count",
     "evidence_count",
     "spectra_count",
+    "evidence_linked_parameter_count",
+    "process_step_linked_parameter_count",
+    "spectra_linked_parameter_count",
+    "linked_spectra_count",
+    "linked_spectra_ids",
+    "linked_spectra_figure_ids",
+    "linked_spectra_techniques",
+    "linked_figure_ids",
     *CORE_SAMPLE_MATRIX_KEYS,
     "multi_value_flags",
 ]
@@ -259,6 +267,7 @@ def generate_link_aware_exports(
         paper=paper,
         samples=samples,
         final_parameters_linked=final_parameters_linked,
+        spectra=spectra,
     )
     process_steps_table = _build_process_steps_table(
         paper_id=paper_id,
@@ -274,6 +283,8 @@ def generate_link_aware_exports(
         include_showcase=include_showcase,
     )
     write_warnings: list[str] = []
+    locked_files: list[str] = []
+    fallback_outputs: list[str] = []
     summary = _build_link_aware_summary(
         final_parameters_linked=final_parameters_linked,
         evidence_parameter_links=evidence_parameter_links,
@@ -288,38 +299,55 @@ def generate_link_aware_exports(
         output_dir / "final_parameters_linked.csv",
         lambda path: _write_csv_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
         write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
     )
     _safe_write(
         output_dir / "final_parameters_linked.parquet",
         lambda path: _write_parquet_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
         write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
     )
     _safe_write(
         output_dir / "sample_parameter_matrix.csv",
         lambda path: _write_csv_with_fields(path, sample_parameter_matrix, SAMPLE_PARAMETER_MATRIX_FIELDS),
         write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
     )
     _safe_write(
         output_dir / "evidence_parameter_links.csv",
         lambda path: _write_csv_with_fields(path, evidence_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
         write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
     )
     _safe_write(
         output_dir / "spectra_parameter_links.csv",
         lambda path: _write_csv_with_fields(path, spectra_parameter_links, SPECTRA_PARAMETER_LINK_FIELDS),
         write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
     )
     _safe_write(
         output_dir / "process_steps_table.csv",
         lambda path: _write_csv_with_fields(path, process_steps_table, PROCESS_STEPS_TABLE_FIELDS),
         write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
     )
     _safe_write(
         output_dir / "final_showcase_table.csv",
         lambda path: _write_csv_with_fields(path, final_showcase_table, FINAL_SHOWCASE_FIELDS),
         write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
     )
     summary["output_warnings"] = write_warnings
+    summary["locked_files"] = locked_files
+    summary["fallback_outputs"] = fallback_outputs
+    summary["process_steps_table_current_is_stale"] = "process_steps_table.csv" in locked_files
     readme = _build_link_aware_readme(include_showcase=include_showcase, output_warnings=write_warnings)
     write_json(output_dir / "link_aware_export_summary.json", summary)
     write_markdown(output_dir / "link_aware_export_readme.md", readme)
@@ -480,7 +508,7 @@ def _build_final_parameters_linked(
             + [row.get("evidence_text_preview") for row in evidence_object_rows if row.get("evidence_text_preview")]
         )
 
-        value_meta = _normalize_parameter_value(parameter.get("value"), parameter.get("unit"))
+        value_meta = _normalize_parameter_value(parameter.get("value"), parameter.get("unit"), parameter.get("canonical_key"))
         evidence_status = _resolve_evidence_status(
             explicit_evidence_ids,
             evidence_object_rows,
@@ -549,15 +577,56 @@ def _build_sample_parameter_matrix(
     paper: dict[str, Any],
     samples: list[dict[str, Any]],
     final_parameters_linked: list[dict[str, Any]],
+    spectra: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     parameters_by_sample = defaultdict(list)
+    sole_sample_id = samples[0].get("sample_id") if len(samples) == 1 else None
     for row in final_parameters_linked:
-        if row.get("resolved_sample_id"):
-            parameters_by_sample[row["resolved_sample_id"]].append(row)
+        resolved_sample_id = row.get("resolved_sample_id")
+        if resolved_sample_id:
+            parameters_by_sample[resolved_sample_id].append(row)
+        elif sole_sample_id and (
+            row.get("linked_sample_ids")
+            or row.get("linked_evidence_ids")
+            or row.get("linked_spectra_ids")
+        ):
+            parameters_by_sample[sole_sample_id].append(row)
+    spectra_by_id = {_spectra_id_for_figure(item.get("figure_id")): item for item in spectra if item.get("figure_id")}
     for sample in samples:
         sample_id = sample.get("sample_id")
         sample_parameters = parameters_by_sample.get(sample_id, [])
+        linked_evidence_ids = _sorted_unique(
+            [
+                evidence_id
+                for item in sample_parameters
+                for evidence_id in str(item.get("linked_evidence_ids") or "").split("; ")
+                if evidence_id
+            ]
+        )
+        linked_spectra_ids = _sorted_unique(
+            [
+                spectra_id if str(spectra_id).startswith("spectra-") else _spectra_id_for_figure(spectra_id)
+                for item in sample_parameters
+                for spectra_id in str(item.get("linked_spectra_ids") or "").split("; ")
+                if spectra_id
+            ]
+        )
+        linked_figure_ids = _sorted_unique(
+            [
+                figure_id
+                for item in sample_parameters
+                for figure_id in str(item.get("linked_figure_ids") or "").split("; ")
+                if figure_id
+            ]
+        )
+        linked_techniques = _sorted_unique(
+            [
+                spectra_by_id.get(spectra_id, {}).get("technique")
+                for spectra_id in linked_spectra_ids
+                if spectra_by_id.get(spectra_id, {}).get("technique")
+            ]
+        )
         row: dict[str, Any] = {
             "paper_id": paper_id,
             "title": title,
@@ -567,26 +636,22 @@ def _build_sample_parameter_matrix(
             "process_route": paper.get("process_route"),
             "parameter_count": len(sample.get("linked_parameters") or []),
             "linked_parameter_count": len(sample_parameters),
-            "evidence_count": len(
-                _sorted_unique(
-                    [
-                        evidence_id
-                        for item in sample_parameters
-                        for evidence_id in str(item.get("linked_evidence_ids") or "").split("; ")
-                        if evidence_id
-                    ]
-                )
+            "evidence_count": len(linked_evidence_ids),
+            "spectra_count": len(linked_spectra_ids),
+            "evidence_linked_parameter_count": sum(
+                1 for item in sample_parameters if item.get("evidence_status") in {"strong_evidence", "process_step_evidence", "linked_evidence"}
             ),
-            "spectra_count": len(
-                _sorted_unique(
-                    [
-                        spectra_id
-                        for item in sample_parameters
-                        for spectra_id in str(item.get("linked_spectra_ids") or "").split("; ")
-                        if spectra_id
-                    ]
-                )
+            "process_step_linked_parameter_count": sum(
+                1 for item in sample_parameters if item.get("evidence_status") == "process_step_evidence"
             ),
+            "spectra_linked_parameter_count": sum(1 for item in sample_parameters if item.get("linked_spectra_ids")),
+            "linked_spectra_count": len(linked_spectra_ids),
+            "linked_spectra_ids": "; ".join(linked_spectra_ids),
+            "linked_spectra_figure_ids": "; ".join(
+                _sorted_unique([spectra_by_id.get(spectra_id, {}).get("figure_id") for spectra_id in linked_spectra_ids])
+            ),
+            "linked_spectra_techniques": "; ".join(linked_techniques),
+            "linked_figure_ids": "; ".join(linked_figure_ids),
         }
         multi_value_keys: list[str] = []
         for canonical_key in CORE_SAMPLE_MATRIX_KEYS:
@@ -653,7 +718,10 @@ def _build_process_steps_table(
                     _sorted_unique([_display_value_from_parameter(row) for _, row in linked_parameters if _display_value_from_parameter(row)])
                 ),
                 "linked_units": "; ".join(
-                    _sorted_unique([None if row.get("unit") == "text" else row.get("unit") for _, row in linked_parameters])
+                    _sorted_unique([
+                        _normalize_unit_text(row.get("unit")) or _infer_unit_from_canonical_key(row.get("canonical_key"))
+                        for _, row in linked_parameters
+                    ])
                 ),
                 "link_confidences": "; ".join(_sorted_unique([link.get("confidence") for link, _ in linked_parameters])),
                 "evidence_text": step.get("evidence_text"),
@@ -1147,8 +1215,8 @@ def _build_link_aware_readme() -> str:
 """
 
 
-def _normalize_parameter_value(value: Any, unit: Any) -> dict[str, Any]:
-    unit_text = _string_or_none(unit)
+def _normalize_parameter_value(value: Any, unit: Any, canonical_key: Any = None) -> dict[str, Any]:
+    unit_text = _normalize_unit_text(unit) or _infer_unit_from_canonical_key(canonical_key)
     value_raw = value
     value_num = None
     value_text = None
@@ -1361,6 +1429,74 @@ def _string_or_none(value: Any) -> str | None:
     return text or None
 
 
+def _normalize_unit_text(unit: Any) -> str | None:
+    unit_text = _string_or_none(unit)
+    if unit_text in {None, "None", "null", "dimensionless", "nan"}:
+        return None
+    normalized = {
+        "ml/h": "mL/h",
+        "ml / h": "mL/h",
+        "c/min": "C/min",
+        "?c/min": "C/min",
+        "?/min": "C/min",
+        "c": "C",
+        "?c": "C",
+        "?": "C",
+        "cm^-1": "cm-1",
+        "wt%": "wt%",
+    }
+    lookup = normalized.get(unit_text.lower())
+    return lookup or unit_text
+
+
+def _infer_unit_from_canonical_key(canonical_key: Any) -> str | None:
+    key = _string_or_none(canonical_key)
+    if not key:
+        return None
+    lookup = {
+        "pH": None,
+        "applied_voltage_kV": "kV",
+        "collector_distance_cm": "cm",
+        "feed_rate_ml_h": "mL/h",
+        "holding_time_h": "h",
+        "heating_rate_C_min": "C/min",
+        "calcination_temperature_C": "C",
+        "target_temperature_C": "C",
+        "ambient_temperature_C": "C",
+        "particle_size_nm": "nm",
+        "average_fiber_diameter_um": "um",
+        "mass_loss_wt_percent": "wt%",
+        "pvp_content_wt_percent": "wt%",
+        "xrd_peak_position_2theta_deg": "2theta_deg",
+        "ftir_peak_position_cm_1": "cm-1",
+        "raman_peak_position_cm_1": "cm-1",
+        "nmr_27Al_peak_position_ppm": "ppm",
+        "viscosity_Pa_s": "Pa*s",
+    }
+    if key in lookup:
+        return lookup[key]
+    suffix_lookup = (
+        ("_nm", "nm"),
+        ("_um", "um"),
+        ("_wt_percent", "wt%"),
+        ("_ppm", "ppm"),
+        ("_kV", "kV"),
+        ("_cm", "cm"),
+        ("_mm", "mm"),
+        ("_mL", "mL"),
+        ("_ml_h", "mL/h"),
+        ("_m_min", "m/min"),
+        ("_h", "h"),
+        ("_C", "C"),
+        ("_cm_1", "cm-1"),
+        ("_2theta_deg", "2theta_deg"),
+    )
+    for suffix, inferred_unit in suffix_lookup:
+        if key.endswith(suffix):
+            return inferred_unit
+    return None
+
+
 def _coerce_str_list(value: Any) -> list[str]:
     if value is None:
         return []
@@ -1391,7 +1527,7 @@ def _json_or_none(value: Any) -> str | None:
 
 
 def _truncate(text: str, limit: int) -> str:
-    return text if len(text) <= limit else f"{text[:limit - 1]}…"
+    return text if len(text) <= limit else f"{text[:limit - 3]}..."
 
 
 def _display_value(row: dict[str, Any]) -> str:
@@ -1399,15 +1535,16 @@ def _display_value(row: dict[str, Any]) -> str:
         return str(row["value_text"])
     if row.get("value_num") is not None:
         value = row["value_num"]
-        unit = row.get("unit")
+        unit = _normalize_unit_text(row.get("unit"))
         if float(value).is_integer():
-            text = str(int(value))
+            text = str(int(float(value)))
         else:
             text = str(value)
-        return f"{text} {unit}".strip()
+        return text if unit is None else f"{text} {unit}"
     if row.get("value_min") is not None and row.get("value_max") is not None:
-        unit = row.get("unit") or ""
-        return f"{row['value_min']}-{row['value_max']} {unit}".strip()
+        unit = _normalize_unit_text(row.get("unit"))
+        range_text = f"{row['value_min']}-{row['value_max']}"
+        return range_text if unit is None else f"{range_text} {unit}"
     return _stringify(row.get("value_raw"))
 
 
@@ -1439,11 +1576,28 @@ def _write_parquet_with_fields(path: Path, rows: list[dict[str, Any]], fieldname
     frame.to_parquet(path, index=False)
 
 
-def _safe_write(path: Path, writer: Any, warnings: list[str]) -> None:
+def _safe_write(
+    path: Path,
+    writer: Any,
+    warnings: list[str],
+    *,
+    locked_files: list[str] | None = None,
+    fallback_outputs: list[str] | None = None,
+) -> None:
     try:
         writer(path)
     except PermissionError:
         warnings.append(f"could_not_overwrite_locked_file:{path.name}")
+        if locked_files is not None:
+            locked_files.append(path.name)
+        fallback_path = path.with_name(f"{path.stem}.generated{path.suffix}")
+        try:
+            writer(fallback_path)
+            warnings.append(f"wrote_fallback_output:{fallback_path.name}")
+            if fallback_outputs is not None:
+                fallback_outputs.append(fallback_path.name)
+        except PermissionError:
+            warnings.append(f"could_not_write_fallback_output:{fallback_path.name}")
 
 
 def _csv_value(value: Any) -> Any:
@@ -1461,7 +1615,7 @@ def _parquet_value(value: Any) -> Any:
 
 
 def _display_value_from_parameter(row: dict[str, Any]) -> str:
-    value_meta = _normalize_parameter_value(row.get("value"), row.get("unit"))
+    value_meta = _normalize_parameter_value(row.get("value"), row.get("unit"), row.get("canonical_key"))
     display_row = {
         "value_text": value_meta.get("value_text"),
         "value_num": value_meta.get("value_num"),
@@ -1598,6 +1752,8 @@ def _build_link_aware_readme(*, include_showcase: bool, output_warnings: list[st
             "- Original `parameters.jsonl`, `process_steps.jsonl`, `evidence.jsonl`, `spectra.jsonl`, and `samples.jsonl` are not modified.",
             "- Missing links remain explicit; the exporter does not invent unsupported evidence or spectra relationships.",
             "- Prefer the primary tables above for final analysis, database loading, and group-meeting reporting.",
+            "- If a CSV is locked by Excel, WPS, VS Code preview, or Explorer preview pane, the exporter keeps the warning and writes a `*.generated.csv` fallback when possible.",
+            "- If `process_steps_table.csv` could not be overwritten, check `process_steps_table.generated.csv` first, then close the locking application and rerun the Stage 5+ export command.",
             *warning_lines,
         ]
     )
