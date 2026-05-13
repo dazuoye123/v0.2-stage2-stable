@@ -373,12 +373,18 @@ class Stage4VisionSpectraExtractor:
     @staticmethod
     def _normalize_peak_record(item: dict[str, Any], *, figure_type: str, warnings: list[str]) -> dict[str, Any]:
         peak = dict(item)
+        if peak.get("warnings") is None:
+            peak["warnings"] = []
+        elif not isinstance(peak.get("warnings"), list):
+            peak["warnings"] = [str(peak.get("warnings"))]
         if "position" not in peak:
             for source_key in ("wavenumber", "position_ppm", "two_theta", "2theta"):
                 if source_key in peak:
                     peak["position"] = peak.get(source_key)
                     warnings.append(f"peak_position_mapped_from_{source_key}")
                     break
+        if "chemical_shift_ppm" not in peak and "position_ppm" in peak:
+            peak["chemical_shift_ppm"] = peak.get("position_ppm")
         if "assignment" not in peak:
             for source_key in ("phase_assignment", "species_assignment"):
                 if source_key in peak:
@@ -399,14 +405,15 @@ class Stage4VisionSpectraExtractor:
                 warnings.append("peak_relative_intensity_coerced_from_label")
         if "unit" not in peak or not peak.get("unit"):
             default_unit = {
-                "ftir_spectrum": "cm-1",
-                "ir_spectrum": "cm-1",
-                "raman_spectrum": "cm-1",
+                "ftir_spectrum": "cm^-1",
+                "ir_spectrum": "cm^-1",
+                "raman_spectrum": "cm^-1",
                 "nmr_spectrum": "ppm",
                 "xrd_pattern": "2theta_deg",
             }.get(figure_type)
             if default_unit:
                 peak["unit"] = default_unit
+        peak.setdefault("intensity_level", "unknown")
         confidence = peak.get("confidence")
         if isinstance(confidence, str):
             coerced_confidence = Stage4VisionSpectraExtractor._coerce_confidence_value(confidence)
