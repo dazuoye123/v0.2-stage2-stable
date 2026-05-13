@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -15,7 +16,11 @@ def normalize_vlm_payload_for_schema(payload: dict[str, Any], schema_name: str) 
     normalized = dict(payload)
     warnings: list[str] = []
 
+    _normalize_list_field(normalized, warnings, field_name="warnings")
+    _normalize_list_field(normalized, warnings, field_name="conflict_warnings")
+
     if schema_name == "XRDExtraction":
+        _normalize_list_field(normalized, warnings, field_name="phase_assignments")
         _normalize_detected_phases(normalized, warnings)
         _normalize_text_field_from_dict(
             normalized,
@@ -32,8 +37,23 @@ def normalize_vlm_payload_for_schema(payload: dict[str, Any], schema_name: str) 
             field_name="transition_temperatures",
             warning_code="transition_temperatures_item_mapped_from_dict",
         )
+        _normalize_event_value_lists(normalized, warnings)
+    elif schema_name == "VibrationalSpectrumExtraction":
+        _normalize_vibrational_peaks(normalized, warnings)
 
     return normalized, warnings
+
+
+def _normalize_list_field(payload: dict[str, Any], warnings: list[str], *, field_name: str) -> None:
+    value = payload.get(field_name)
+    if value is None:
+        payload[field_name] = []
+        warnings.append(f"{field_name}_normalized_none_to_empty_list")
+        return
+    if isinstance(value, list):
+        return
+    payload[field_name] = [str(value)] if str(value).strip() else []
+    warnings.append(f"{field_name}_coerced_to_list")
 
 
 def _normalize_detected_phases(payload: dict[str, Any], warnings: list[str]) -> None:
@@ -173,6 +193,72 @@ def _normalize_temperature_list(
         normalized_values.append(_coerce_float(item))
         warnings.append(f"{warning_code}:coerced_unstructured_item")
     payload[field_name] = normalized_values
+
+
+def _normalize_event_value_lists(payload: dict[str, Any], warnings: list[str]) -> None:
+    for field_name in ("mass_loss_steps", "thermal_events"):
+        value = payload.get(field_name)
+        if value is None:
+            continue
+        if isinstance(value, list):
+            normalized_items: list[Any] = []
+            changed = False
+            for item in value:
+                if not isinstance(item, dict):
+                    normalized_items.append(item)
+                    continue
+                normalized_item = dict(item)
+                for key in ("temperature", "peak_temperature", "transition_temperature"):
+                    raw = normalized_item.get(key)
+                    if isinstance(raw, dict):
+                        extracted = raw.get("temperature") or raw.get("value") or raw.get("temp")
+                        if extracted is not None:
+                            normalized_item[key] = _coerce_float(extracted)
+                            warnings.append(f"{field_name}_{key}_mapped_from_dict")
+                            changed = True
+                for key in ("mass_loss_percent", "weight_loss_percent", "residue_percent"):
+                    raw = normalized_item.get(key)
+                    if isinstance(raw, dict):
+                        extracted = raw.get("value") or raw.get("percent")
+                        if extracted is not None:
+                            normalized_item[key] = _coerce_float(extracted)
+                            warnings.append(f"{field_name}_{key}_mapped_from_dict")
+                            changed = True
+                normalized_items.append(normalized_item)
+            if changed:
+                payload[field_name] = normalized_items
+
+
+_RANGE_PATTERN = re.compile(
+    r"^\s*(?P<left>-?\d+(?:\.\d+)?)\s*(?:-|–|~|to)\s*(?P<right>-?\d+(?:\.\d+)?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_vibrational_peaks(payload: dict[str, Any], warnings: list[str]) -> None:
+    peaks = payload.get("peaks")
+    if not isinstance(peaks, list):
+        return
+    normalized_peaks: list[Any] = []
+    for item in peaks:
+        if not isinstance(item, dict):
+            normalized_peaks.append(item)
+            continue
+        peak = dict(item)
+        position = peak.get("position")
+        if isinstance(position, str):
+            stripped = position.strip()
+            if _RANGE_PATTERN.match(stripped):
+                source_text = str(peak.get("source_text") or "").strip()
+                raw_text = stripped
+                if raw_text and raw_text not in source_text:
+                    peak["source_text"] = f"{source_text}; {raw_text}".strip("; ").strip()
+                peak["position"] = None
+                if not peak.get("unit"):
+                    peak["unit"] = "cm^-1"
+                warnings.append(f"range_peak_position_not_numeric:{stripped}")
+        normalized_peaks.append(peak)
+    payload["peaks"] = normalized_peaks
 
 
 def _coerce_float(value: Any) -> float:

@@ -13,7 +13,8 @@ class PromptTemplate:
 
 
 _COMMON_PREFIX = (
-    "Output JSON only. You will receive an image and text context. "
+    "Return exactly one JSON object. Do not wrap JSON in markdown. Do not include prose outside JSON. "
+    "You will receive an image and text context. "
     "Use the image as the primary source. Use caption and surrounding text as supporting context. "
     "If a value is visible in the image, mark source=image. "
     "If a value is not visually readable but is explicitly stated in text, mark source=text. "
@@ -23,7 +24,12 @@ _COMMON_PREFIX = (
     "Do not fabricate. If a field is unclear, return null. "
     "Do not invent peaks or assignments not supported by image or text. "
     "Always include figure_id, figure_type, technique, confidence. "
-    "peaks must be a JSON list. Numeric fields must be number or null. "
+    "All list fields must be JSON arrays. Never output null or a string for list fields. If no items exist, output []. "
+    "warnings must always be a JSON array. conflict_warnings must always be a JSON array. If no warnings or conflicts exist, output []. "
+    "peaks must be a JSON list. Numeric fields must be number or null. Never output numeric ranges as strings in numeric fields. "
+    "For range-like or broad-band values such as 1000-1100 cm^-1, do not put the range string into a numeric field. "
+    "Do not convert a range to a midpoint. Set the numeric position field to null, preserve the original range in source_text, describe it in assignment, "
+    "and add warning range_peak_position_not_numeric if needed. "
     "Units must be explicit when present. "
     "If the figure cannot be read reliably, return low confidence and explain in warnings."
 )
@@ -45,7 +51,11 @@ _PROMPTS: dict[str, PromptTemplate] = {
         schema_name="VibrationalSpectrumExtraction",
         text=(
             f"{_COMMON_PREFIX} Focus on cm-1 peak positions, broad band trends, and high-level band assignments. "
-            "Do not infer hidden peaks. For each peak, provide source, source_text, conflict_warning, and confidence."
+            "Do not infer hidden peaks. For each peak, provide source, source_text, conflict_warning, and confidence. "
+            "For VibrationalSpectrumExtraction, peaks must be a JSON list. peak.position must be number or null. "
+            "Do not output range strings in peak.position. If the peak is a broad band or range, set position=null, keep the range in source_text, "
+            "keep the chemical interpretation in assignment, and add warning range_peak_position_not_numeric. "
+            "Do not map 1000-1100 to 1050."
         ),
     ),
     "ir_spectrum": PromptTemplate(
@@ -53,7 +63,11 @@ _PROMPTS: dict[str, PromptTemplate] = {
         schema_name="VibrationalSpectrumExtraction",
         text=(
             f"{_COMMON_PREFIX} Focus on cm-1 peak positions, broad band trends, and high-level band assignments. "
-            "Do not infer hidden peaks. For each peak, provide source, source_text, conflict_warning, and confidence."
+            "Do not infer hidden peaks. For each peak, provide source, source_text, conflict_warning, and confidence. "
+            "For VibrationalSpectrumExtraction, peaks must be a JSON list. peak.position must be number or null. "
+            "Do not output range strings in peak.position. If the peak is a broad band or range, set position=null, keep the range in source_text, "
+            "keep the chemical interpretation in assignment, and add warning range_peak_position_not_numeric. "
+            "Do not map 1000-1100 to 1050."
         ),
     ),
     "raman_spectrum": PromptTemplate(
@@ -61,7 +75,10 @@ _PROMPTS: dict[str, PromptTemplate] = {
         schema_name="VibrationalSpectrumExtraction",
         text=(
             f"{_COMMON_PREFIX} Focus on cm-1 Raman peak positions, relative intensity trends, and broad assignments. "
-            "For each peak, provide source, source_text, conflict_warning, and confidence."
+            "For each peak, provide source, source_text, conflict_warning, and confidence. "
+            "For VibrationalSpectrumExtraction, peaks must be a JSON list. peak.position must be number or null. "
+            "Do not output range strings in peak.position. If the peak is a broad band or range, set position=null, keep the range in source_text, "
+            "keep the chemical interpretation in assignment, and add warning range_peak_position_not_numeric."
         ),
     ),
     "xrd_pattern": PromptTemplate(
@@ -69,7 +86,11 @@ _PROMPTS: dict[str, PromptTemplate] = {
         schema_name="XRDExtraction",
         text=(
             f"{_COMMON_PREFIX} Focus on 2theta peak positions, detected phases, phase assignments, and crystallinity trend. "
-            "For each peak, provide source, source_text, conflict_warning, and confidence."
+            "For each peak, provide source, source_text, conflict_warning, and confidence. "
+            "For XRDExtraction, detected_phases must be a JSON list of strings. phase_assignments must be a JSON list. "
+            "If there is only one phase assignment, still output it as an array with one string item. "
+            "Never output phase_assignments as a single string. peaks must be a JSON list. peak.position must be number or null. "
+            "crystallinity_trend may be string or null. warnings must be [] if no warnings. conflict_warnings must be [] if no conflicts."
         ),
     ),
     "ferron_curve": PromptTemplate(
@@ -105,7 +126,9 @@ _PROMPTS: dict[str, PromptTemplate] = {
         schema_name="MicroscopyExtraction",
         text=(
             f"{_COMMON_PREFIX} Focus on morphology, visible texture, and scale bar. "
-            "Do not provide precise size if no clear scale bar exists."
+            "Do not provide precise size if no clear scale bar exists. "
+            "For MicroscopyExtraction, warnings must always be a JSON array and conflict_warnings must always be a JSON array. "
+            "scale_bar should be a string like 200 nm or null unless the schema explicitly supports a dict. Never output warnings=null."
         ),
     ),
     "tem_image": PromptTemplate(
@@ -113,14 +136,18 @@ _PROMPTS: dict[str, PromptTemplate] = {
         schema_name="MicroscopyExtraction",
         text=(
             f"{_COMMON_PREFIX} Focus on morphology, visible nanoscale features, and scale bar. "
-            "Do not provide precise size if no clear scale bar exists."
+            "Do not provide precise size if no clear scale bar exists. "
+            "For MicroscopyExtraction, warnings must always be a JSON array and conflict_warnings must always be a JSON array. "
+            "scale_bar should be a string like 200 nm or null unless the schema explicitly supports a dict. Never output warnings=null."
         ),
     ),
     "microscopy": PromptTemplate(
         name="microscopy_prompt",
         schema_name="MicroscopyExtraction",
         text=(
-            f"{_COMMON_PREFIX} Focus on morphology and visible scale information only."
+            f"{_COMMON_PREFIX} Focus on morphology and visible scale information only. "
+            "For MicroscopyExtraction, warnings must always be a JSON array and conflict_warnings must always be a JSON array. "
+            "scale_bar should be a string like 200 nm or null unless the schema explicitly supports a dict. Never output warnings=null."
         ),
     ),
     "unknown": PromptTemplate(

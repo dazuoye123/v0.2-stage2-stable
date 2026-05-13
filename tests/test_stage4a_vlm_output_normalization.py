@@ -28,7 +28,8 @@ def test_xrd_detected_phases_strings_are_preserved() -> None:
         schema_name="XRDExtraction",
     )
     assert normalized["detected_phases"] == ["mullite", "corundum"]
-    assert warnings == []
+    assert normalized["warnings"] == []
+    assert normalized["conflict_warnings"] == []
 
 
 def test_xrd_crystallinity_trend_dict_is_normalized_to_string() -> None:
@@ -61,7 +62,8 @@ def test_microscopy_scale_bar_string_is_preserved() -> None:
         schema_name="MicroscopyExtraction",
     )
     assert normalized["scale_bar"] == "200 nm"
-    assert warnings == []
+    assert normalized["warnings"] == []
+    assert normalized["conflict_warnings"] == []
 
 
 def test_thermal_transition_temperatures_dict_list_is_normalized_to_float_list() -> None:
@@ -89,7 +91,8 @@ def test_thermal_transition_temperatures_plain_list_is_preserved() -> None:
         schema_name="ThermalAnalysisExtraction",
     )
     assert normalized["transition_temperatures"] == [150.0, 450.0]
-    assert warnings == []
+    assert normalized["warnings"] == []
+    assert normalized["conflict_warnings"] == []
 
 
 def test_existing_peak_normalization_still_works_for_nmr() -> None:
