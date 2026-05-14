@@ -11,6 +11,25 @@ from .io import parse_json_payload, read_json, read_jsonl, write_json, write_jso
 from .normalization import normalize_vlm_payload_for_schema
 from .prompt_templates import get_prompt_for_figure_type
 from .routing import get_schema_for_figure_type, normalize_figure_type, should_process_figure
+from .stage4_context import (
+    build_evidence_object_context,
+    build_input_context_summary,
+    collect_reference_sentences,
+    collect_stage3_parameter_records,
+    estimate_context_chars,
+    figure_metadata_for_prompt,
+    find_related_stage3_parameters,
+    group_evidence_by_figure_id,
+    index_by_figure_id,
+    prioritize_sendable_candidates,
+    truncate_text,
+)
+from .stage4_failures import (
+    build_error_raw_output,
+    build_failed_record,
+    index_previous_successes,
+    reuse_previous_success,
+)
 from .validators import build_stage4_summary, validate_stage4_extraction
 from .vlm_client import VLMRequest, VLMRequestError, VisionLanguageModelClient
 
@@ -91,10 +110,10 @@ class Stage4VisionSpectraExtractor:
         stage3_schema: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         allowed_types = self.allowed_figure_types or DEFAULT_ALLOWED_FIGURE_TYPES
-        figures_by_id = self._index_by_figure_id(figures)
-        vision_by_id = self._index_by_figure_id(vision_inputs)
-        evidence_by_id = self._group_evidence_by_figure_id(evidence_objects)
-        stage3_parameter_records = self._collect_stage3_parameter_records(stage3_schema or {})
+        figures_by_id = index_by_figure_id(figures)
+        vision_by_id = index_by_figure_id(vision_inputs)
+        evidence_by_id = group_evidence_by_figure_id(evidence_objects)
+        stage3_parameter_records = collect_stage3_parameter_records(stage3_schema or {})
         ordered_ids: list[str] = []
         for evidence in evidence_objects:
             figure_id = evidence.get("figure_id")
@@ -172,7 +191,7 @@ class Stage4VisionSpectraExtractor:
 
         if self.max_figures > 0:
             sendable = [item for item in candidates if item.get("send_to_vlm")]
-            prioritized = self._prioritize_sendable_candidates(sendable)
+            prioritized = prioritize_sendable_candidates(sendable)
             blocked_ids = {item["figure_id"] for item in prioritized[self.max_figures :]}
             for item in candidates:
                 if item["figure_id"] in blocked_ids:
@@ -191,16 +210,17 @@ class Stage4VisionSpectraExtractor:
     ) -> dict[str, Any]:
         warnings: list[str] = []
         alt_text = (vision_meta.get("alt_text") or figure_meta.get("alt_text") or "").strip() or None
-        reference_sentences = self._collect_reference_sentences(evidence_group, vision_meta, figure_meta)[:MAX_REFERENCE_SENTENCES]
-        if len(self._collect_reference_sentences(evidence_group, vision_meta, figure_meta)) > MAX_REFERENCE_SENTENCES:
+        all_reference_sentences = collect_reference_sentences(evidence_group, vision_meta, figure_meta)
+        reference_sentences = all_reference_sentences[:MAX_REFERENCE_SENTENCES]
+        if len(all_reference_sentences) > MAX_REFERENCE_SENTENCES:
             warnings.append("reference_sentences_truncated")
 
-        context_before, before_warning = self._truncate_text(
+        context_before, before_warning = truncate_text(
             (vision_meta.get("context_before") or figure_meta.get("context_before") or "").strip() or None,
             MAX_CONTEXT_CHARS,
             "context_before_truncated",
         )
-        context_after, after_warning = self._truncate_text(
+        context_after, after_warning = truncate_text(
             (vision_meta.get("context_after") or figure_meta.get("context_after") or "").strip() or None,
             MAX_CONTEXT_CHARS,
             "context_after_truncated",
@@ -210,10 +230,13 @@ class Stage4VisionSpectraExtractor:
         if after_warning:
             warnings.append(after_warning)
 
-        evidence_context, evidence_warning = self._build_evidence_object_context(evidence_group)
+        evidence_context, evidence_warning = build_evidence_object_context(
+            evidence_group,
+            max_chars=MAX_EVIDENCE_CONTEXT_CHARS,
+        )
         if evidence_warning:
             warnings.append(evidence_warning)
-        related_parameters = self._find_related_stage3_parameters(
+        related_parameters = find_related_stage3_parameters(
             figure_id=figure_id,
             evidence_group=evidence_group,
             parameter_records=stage3_parameter_records,
@@ -238,7 +261,7 @@ class Stage4VisionSpectraExtractor:
         if related_parameters:
             context_source["related_stage3_parameters"] = "stage3_parameter"
 
-        estimated_context_chars = self._estimate_context_chars(
+        estimated_context_chars = estimate_context_chars(
             alt_text=alt_text,
             reference_sentences=reference_sentences,
             context_before=context_before,
@@ -269,7 +292,7 @@ class Stage4VisionSpectraExtractor:
         raw_outputs: list[dict[str, Any]] = []
         failed_records: list[dict[str, Any]] = []
         config_warnings = list(getattr(client, "config_warnings", []) or [])
-        previous_success_by_figure_id = self._index_previous_successes(previous_extractions or [])
+        previous_success_by_figure_id = index_previous_successes(previous_extractions or [])
         for candidate in candidates:
             if not candidate.get("send_to_vlm"):
                 continue
@@ -312,7 +335,7 @@ class Stage4VisionSpectraExtractor:
                 parsed.setdefault("caption", candidate.get("caption"))
                 parsed.setdefault("extraction_mode", "live")
                 parsed.setdefault("extraction_model", response.get("model"))
-                parsed.setdefault("input_context_summary", self._build_input_context_summary(candidate))
+                parsed.setdefault("input_context_summary", build_input_context_summary(candidate))
                 parsed.setdefault("used_context_sources", list(candidate.get("context_source", {}).values()))
                 schema_cls = get_schema_for_figure_type(candidate.get("figure_type"))
                 parsed, normalization_warnings = self._normalize_live_payload(
@@ -329,15 +352,15 @@ class Stage4VisionSpectraExtractor:
             except VLMRequestError as exc:
                 fallback_record = None
                 if exc.is_transient:
-                    fallback_record = self._reuse_previous_success(
+                    fallback_record = reuse_previous_success(
                         candidate=candidate,
                         previous_success=previous_success_by_figure_id.get(str(candidate.get("figure_id") or "")),
                         error_type=exc.error_type,
                     )
-                failed_record = self._build_failed_record(candidate, exc, fallback_used=fallback_record is not None)
+                failed_record = build_failed_record(candidate, exc, fallback_used=fallback_record is not None)
                 failed_records.append(failed_record)
                 raw_outputs.append(
-                    self._build_error_raw_output(
+                    build_error_raw_output(
                         candidate,
                         error_message=str(exc),
                         error_type=exc.error_type,
@@ -348,104 +371,9 @@ class Stage4VisionSpectraExtractor:
                 if fallback_record is not None:
                     extractions.append(fallback_record)
             except Exception as exc:  # noqa: BLE001
-                raw_outputs.append(self._build_error_raw_output(candidate, error_message=str(exc), error_type="processing_error"))
-                failed_records.append(self._build_failed_record(candidate, exc, fallback_used=False))
+                raw_outputs.append(build_error_raw_output(candidate, error_message=str(exc), error_type="processing_error"))
+                failed_records.append(build_failed_record(candidate, exc, fallback_used=False))
         return extractions, raw_outputs, failed_records, config_warnings
-
-    @staticmethod
-    def _index_previous_successes(previous_extractions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        indexed: dict[str, dict[str, Any]] = {}
-        for record in previous_extractions:
-            figure_id = str(record.get("figure_id") or "")
-            if not figure_id:
-                continue
-            indexed.setdefault(figure_id, record)
-        return indexed
-
-    def _reuse_previous_success(
-        self,
-        *,
-        candidate: dict[str, Any],
-        previous_success: dict[str, Any] | None,
-        error_type: str,
-    ) -> dict[str, Any] | None:
-        if not previous_success:
-            return None
-        reused = json.loads(json.dumps(previous_success, ensure_ascii=False))
-        reused["reused_previous_success"] = True
-        reused["fallback_reason"] = error_type
-        reused["previous_extraction_source"] = "stage4_vision_spectra/spectra_extractions.jsonl"
-        reused["extraction_mode"] = "reused_previous_success"
-        reused.setdefault("warnings", [])
-        reused["warnings"] = [
-            *reused.get("warnings", []),
-            f"reused_previous_success_due_to_{error_type}",
-        ]
-        reused.setdefault("validation_errors", validate_stage4_extraction(reused))
-        reused.setdefault("figure_id", candidate.get("figure_id"))
-        reused.setdefault("figure_type", candidate.get("figure_type"))
-        return reused
-
-    @staticmethod
-    def _build_failed_record(
-        candidate: dict[str, Any],
-        exc: Exception,
-        *,
-        fallback_used: bool,
-    ) -> dict[str, Any]:
-        if isinstance(exc, VLMRequestError):
-            error_type = exc.error_type
-            is_transient = exc.is_transient
-            retry_attempts = exc.retry_attempts
-            max_retries = exc.max_retries
-            timeout_seconds = exc.timeout_seconds
-            attempt_errors = exc.attempt_errors
-        else:
-            error_type = exc.__class__.__name__
-            is_transient = False
-            retry_attempts = 1
-            max_retries = 1
-            timeout_seconds = None
-            attempt_errors = []
-        final_status = "reused_previous_success" if fallback_used else "failed"
-        return {
-            "figure_id": candidate.get("figure_id"),
-            "figure_type": candidate.get("figure_type"),
-            "error": str(exc),
-            "error_type": error_type,
-            "error_message": str(exc),
-            "is_transient": is_transient,
-            "retry_attempts": retry_attempts,
-            "max_retries": max_retries,
-            "timeout_seconds": timeout_seconds,
-            "attempt_errors": attempt_errors,
-            "fallback_used": fallback_used,
-            "fallback_source": "previous_spectra_extractions" if fallback_used else None,
-            "final_status": final_status,
-        }
-
-    @staticmethod
-    def _build_error_raw_output(
-        candidate: dict[str, Any],
-        *,
-        error_message: str,
-        error_type: str,
-        retry_attempts: int | None = None,
-        timeout_seconds: int | None = None,
-    ) -> dict[str, Any]:
-        payload = {
-            "figure_id": candidate.get("figure_id"),
-            "figure_type": candidate.get("figure_type"),
-            "raw_response": None,
-            "dry_run": False,
-            "error": error_message,
-            "error_type": error_type,
-        }
-        if retry_attempts is not None:
-            payload["retry_attempts"] = retry_attempts
-        if timeout_seconds is not None:
-            payload["timeout_seconds"] = timeout_seconds
-        return payload
 
     @staticmethod
     def _normalize_live_payload(
@@ -600,7 +528,7 @@ class Stage4VisionSpectraExtractor:
         prompt_text = template.text
         composed_prompt = (
             f"{prompt_text}\n"
-            f"Figure metadata JSON:\n{json.dumps(self._figure_metadata_for_prompt(candidate), ensure_ascii=False, indent=2)}\n"
+            f"Figure metadata JSON:\n{json.dumps(figure_metadata_for_prompt(candidate), ensure_ascii=False, indent=2)}\n"
             f"Attached text context JSON:\n{json.dumps(attached_context, ensure_ascii=False, indent=2)}"
         )
         return {
@@ -632,7 +560,7 @@ class Stage4VisionSpectraExtractor:
             confidence=None,
             warnings=["dry_run_no_vlm_called", *candidate.get("context_warnings", [])],
             raw_notes="Prompt generated only; no VLM request was sent.",
-            input_context_summary=self._build_input_context_summary(candidate),
+            input_context_summary=build_input_context_summary(candidate),
             used_context_sources=list(candidate.get("context_source", {}).values()),
             image_readability=None,
             text_context_quality="available" if candidate.get("estimated_context_chars") else "minimal",
@@ -640,240 +568,3 @@ class Stage4VisionSpectraExtractor:
         ).model_dump()
         extraction["schema_name"] = schema_cls.__name__
         return extraction
-
-    @staticmethod
-    def _index_by_figure_id(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        index: dict[str, dict[str, Any]] = {}
-        for record in records:
-            figure_id = record.get("figure_id")
-            if figure_id and figure_id not in index:
-                index[figure_id] = record
-        return index
-
-    @staticmethod
-    def _group_evidence_by_figure_id(records: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for record in records:
-            figure_id = record.get("figure_id")
-            if not figure_id:
-                continue
-            grouped.setdefault(figure_id, []).append(record)
-        return grouped
-
-    @staticmethod
-    def _collect_reference_sentences(*records: Any) -> list[str]:
-        collected: list[str] = []
-        for record in records:
-            if isinstance(record, list):
-                for nested in record:
-                    for item in (nested.get("reference_sentences", []) or []):
-                        if item and item not in collected:
-                            collected.append(item)
-                continue
-            if not isinstance(record, dict):
-                continue
-            for item in record.get("reference_sentences", []) or []:
-                if item and item not in collected:
-                    collected.append(item)
-        return collected
-
-    @staticmethod
-    def _prioritize_sendable_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        prioritized: list[dict[str, Any]] = []
-        seen_types: set[str] = set()
-        for candidate in candidates:
-            figure_type = str(candidate.get("figure_type") or "unknown")
-            if figure_type in seen_types:
-                continue
-            prioritized.append(candidate)
-            seen_types.add(figure_type)
-        prioritized_ids = {item["figure_id"] for item in prioritized}
-        prioritized.extend(item for item in candidates if item["figure_id"] not in prioritized_ids)
-        return prioritized
-
-    @staticmethod
-    def _truncate_text(text: str | None, limit: int, warning_name: str) -> tuple[str | None, str | None]:
-        if not text:
-            return None, None
-        if len(text) <= limit:
-            return text, None
-        return text[:limit].rstrip(), warning_name
-
-    @staticmethod
-    def _truncate_text_list(items: list[str], limit: int, warning_name: str) -> tuple[list[str], str | None]:
-        kept: list[str] = []
-        total = 0
-        for item in items:
-            if not item:
-                continue
-            proposed = total + len(item)
-            if proposed > limit and kept:
-                return kept, warning_name
-            if proposed > limit:
-                kept.append(item[:limit].rstrip())
-                return kept, warning_name
-            kept.append(item)
-            total = proposed
-        return kept, None
-
-    def _build_evidence_object_context(self, evidence_group: list[dict[str, Any]]) -> tuple[dict[str, Any], str | None]:
-        fact_summaries: list[str] = []
-        detailed_observations: list[str] = []
-        linked_facts: list[str] = []
-        evidence_refs: list[str] = []
-        evidence_ids: list[str] = []
-        for record in evidence_group:
-            evidence_id = record.get("evidence_id")
-            if evidence_id and evidence_id not in evidence_ids:
-                evidence_ids.append(evidence_id)
-            refs = record.get("evidence_refs", []) or []
-            for ref in refs:
-                if ref and ref not in evidence_refs:
-                    evidence_refs.append(ref)
-            key_facts = record.get("fact_summary") or record.get("key_facts") or []
-            if isinstance(key_facts, str):
-                key_facts = [key_facts]
-            for fact in key_facts:
-                if fact and fact not in fact_summaries:
-                    fact_summaries.append(fact)
-            detailed = record.get("detailed_observation") or record.get("note")
-            if detailed and detailed not in detailed_observations:
-                detailed_observations.append(detailed)
-            linked = record.get("linked_facts", []) or []
-            if isinstance(linked, str):
-                linked = [linked]
-            for fact in linked:
-                if fact and fact not in linked_facts:
-                    linked_facts.append(fact)
-
-        warning = None
-        fact_summaries, fact_warning = self._truncate_text_list(fact_summaries, MAX_EVIDENCE_CONTEXT_CHARS, "stage3_evidence_context_truncated")
-        if fact_warning:
-            warning = fact_warning
-        remaining = max(MAX_EVIDENCE_CONTEXT_CHARS - sum(len(item) for item in fact_summaries), 0)
-        detailed_observations, detail_warning = self._truncate_text_list(
-            detailed_observations,
-            remaining if remaining > 0 else MAX_EVIDENCE_CONTEXT_CHARS,
-            "stage3_evidence_context_truncated",
-        )
-        if detail_warning:
-            warning = detail_warning
-        remaining = max(
-            MAX_EVIDENCE_CONTEXT_CHARS - sum(len(item) for item in fact_summaries) - sum(len(item) for item in detailed_observations),
-            0,
-        )
-        linked_facts, linked_warning = self._truncate_text_list(
-            linked_facts,
-            remaining if remaining > 0 else MAX_EVIDENCE_CONTEXT_CHARS,
-            "stage3_evidence_context_truncated",
-        )
-        if linked_warning:
-            warning = linked_warning
-        return {
-            "fact_summary": fact_summaries,
-            "detailed_observation": detailed_observations,
-            "linked_facts": linked_facts,
-            "evidence_refs": evidence_refs,
-            "evidence_ids": evidence_ids,
-        }, warning
-
-    @staticmethod
-    def _collect_stage3_parameter_records(payload: Any) -> list[dict[str, Any]]:
-        records: list[dict[str, Any]] = []
-
-        def visit(node: Any) -> None:
-            if isinstance(node, dict):
-                if "canonical_key" in node and ("value" in node or "raw_text" in node):
-                    records.append(node)
-                for value in node.values():
-                    visit(value)
-            elif isinstance(node, list):
-                for item in node:
-                    visit(item)
-
-        visit(payload)
-        return records
-
-    def _find_related_stage3_parameters(
-        self,
-        *,
-        figure_id: str,
-        evidence_group: list[dict[str, Any]],
-        parameter_records: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        evidence_ids = [item.get("evidence_id") for item in evidence_group if item.get("evidence_id")]
-        related: list[dict[str, Any]] = []
-        for record in parameter_records:
-            refs = record.get("evidence_refs", []) or []
-            if not isinstance(refs, list):
-                continue
-            if not self._parameter_refs_match_figure(refs, figure_id, evidence_ids):
-                continue
-            related.append(
-                {
-                    "canonical_key": record.get("canonical_key"),
-                    "value": record.get("value"),
-                    "unit": record.get("unit"),
-                    "raw_name": record.get("raw_name"),
-                    "raw_text": record.get("raw_text"),
-                    "evidence_refs": refs,
-                    "normalization_note": record.get("normalization_note"),
-                }
-            )
-        return related
-
-    @staticmethod
-    def _parameter_refs_match_figure(refs: list[Any], figure_id: str, evidence_ids: list[str]) -> bool:
-        for ref in refs:
-            text = str(ref or "")
-            if not text:
-                continue
-            if text == figure_id or figure_id in text:
-                return True
-            if any(evidence_id and (text == evidence_id or evidence_id in text or text in evidence_id) for evidence_id in evidence_ids):
-                return True
-        return False
-
-    @staticmethod
-    def _estimate_context_chars(
-        *,
-        alt_text: str | None,
-        reference_sentences: list[str],
-        context_before: str | None,
-        context_after: str | None,
-        evidence_context: dict[str, Any],
-        related_parameters: list[dict[str, Any]],
-    ) -> int:
-        total = len(alt_text or "") + len(context_before or "") + len(context_after or "")
-        total += sum(len(item) for item in reference_sentences)
-        total += sum(len(item) for item in evidence_context.get("fact_summary", []))
-        total += sum(len(item) for item in evidence_context.get("detailed_observation", []))
-        total += sum(len(item) for item in evidence_context.get("linked_facts", []))
-        total += sum(len(json.dumps(item, ensure_ascii=False)) for item in related_parameters)
-        return total
-
-    @staticmethod
-    def _figure_metadata_for_prompt(candidate: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "paper_id": candidate.get("paper_id"),
-            "figure_id": candidate.get("figure_id"),
-            "figure_type": candidate.get("figure_type"),
-            "technique": candidate.get("technique"),
-            "source_image_path": candidate.get("source_image_path"),
-            "stage3_figure_type": candidate.get("stage3_figure_type"),
-            "stage2_figure_class": candidate.get("stage2_figure_class"),
-        }
-
-    @staticmethod
-    def _build_input_context_summary(candidate: dict[str, Any]) -> str:
-        parts: list[str] = []
-        if candidate.get("caption"):
-            parts.append(f"caption={candidate['caption']}")
-        reference_sentences = candidate.get("reference_sentences", []) or []
-        if reference_sentences:
-            parts.append(f"reference_sentences={len(reference_sentences)}")
-        if candidate.get("evidence_object_context", {}).get("fact_summary"):
-            parts.append("stage3_evidence=fact_summary")
-        if candidate.get("related_stage3_parameters"):
-            parts.append(f"related_parameters={len(candidate['related_stage3_parameters'])}")
-        return "; ".join(parts)

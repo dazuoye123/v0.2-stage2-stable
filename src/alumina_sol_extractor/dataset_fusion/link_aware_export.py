@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import re
 from collections import defaultdict
@@ -10,185 +9,30 @@ from pathlib import Path
 from typing import Any
 
 from alumina_sol_extractor.dataset_fusion.exporters import write_json, write_markdown
+from alumina_sol_extractor.dataset_fusion.link_aware_fields import (
+    CORE_SAMPLE_MATRIX_KEYS,
+    EVIDENCE_PARAMETER_LINK_FIELDS,
+    FINAL_PARAMETERS_LINKED_FIELDS,
+    FINAL_SHOWCASE_FIELDS,
+    PROCESS_STEPS_TABLE_FIELDS,
+    SAMPLE_PARAMETER_MATRIX_FIELDS,
+    SPECTRA_PARAMETER_LINK_FIELDS,
+)
+from alumina_sol_extractor.dataset_fusion.link_aware_io import (
+    build_link_aware_readme,
+    build_link_aware_summary,
+    safe_write,
+    write_csv_with_fields,
+    write_parquet_with_fields,
+)
 from alumina_sol_extractor.dataset_fusion.loaders import read_json, read_jsonl
 from alumina_sol_extractor.ontology.ontology_loader import get_ontology_entry_map
 
-CORE_SAMPLE_MATRIX_KEYS = [
-    "aluminum_source",
-    "peptizing_agent",
-    "pH",
-    "hydrolysis_temperature_C",
-    "hydrolysis_time_h",
-    "peptization_temperature_C",
-    "peptization_time_h",
-    "concentration_temperature_C",
-    "concentration_time_h",
-    "spinning_channel_temperature_C",
-    "spinneret_hole_diameter_mm",
-    "take_up_speed_m_min",
-    "drying_temperature_C",
-    "calcination_temperature_C",
-    "sintering_temperature_C",
-    "holding_time_h",
-    "average_fiber_diameter_um",
-    "tensile_strength_MPa",
-    "Al13_fraction_percent",
-    "nmr_27Al_peak_position_ppm",
-    "ftir_peak_position_cm_1",
-    "xrd_peak_position_2theta_deg",
-]
-
-FINAL_PARAMETERS_LINKED_FIELDS = [
-    "paper_id",
-    "title",
-    "parameter_id",
-    "canonical_key",
-    "zh_name",
-    "en_name",
-    "category",
-    "sample_id_original",
-    "linked_sample_ids",
-    "resolved_sample_id",
-    "sample_resolution_source",
-    "value_raw",
-    "value_num",
-    "value_text",
-    "unit",
-    "value_type",
-    "source_scope",
-    "evidence_refs_original",
-    "linked_evidence_ids",
-    "linked_figure_ids",
-    "linked_spectra_ids",
-    "linked_peak_positions",
-    "link_types",
-    "link_confidences",
-    "link_reasoning_preview",
-    "evidence_text_preview",
-    "link_count",
-    "strong_link_count",
-    "weak_link_count",
-    "evidence_status",
-    "quality_flags",
-    "normalization_note",
-]
-
-SAMPLE_PARAMETER_MATRIX_FIELDS = [
-    "paper_id",
-    "title",
-    "sample_id",
-    "sample_name",
-    "material_system",
-    "process_route",
-    "parameter_count",
-    "linked_parameter_count",
-    "evidence_count",
-    "spectra_count",
-    "evidence_linked_parameter_count",
-    "process_step_linked_parameter_count",
-    "spectra_linked_parameter_count",
-    "linked_spectra_count",
-    "linked_spectra_ids",
-    "linked_spectra_figure_ids",
-    "linked_spectra_techniques",
-    "linked_figure_ids",
-    *CORE_SAMPLE_MATRIX_KEYS,
-    "multi_value_flags",
-]
-
-EVIDENCE_PARAMETER_LINK_FIELDS = [
-    "paper_id",
-    "source_type",
-    "source_id",
-    "evidence_text_preview",
-    "evidence_id",
-    "evidence_type",
-    "figure_id",
-    "table_id",
-    "figure_type",
-    "caption",
-    "parameter_id",
-    "canonical_key",
-    "parameter_value",
-    "unit",
-    "sample_id",
-    "link_type",
-    "confidence",
-    "reasoning",
-    "created_by",
-    "validation_status",
-]
-
-SPECTRA_PARAMETER_LINK_FIELDS = [
-    "paper_id",
-    "spectra_id",
-    "figure_id",
-    "figure_type",
-    "technique",
-    "peak_position",
-    "peak_unit",
-    "assignment",
-    "source",
-    "observed_value",
-    "observed_unit",
-    "parameter_id",
-    "canonical_key",
-    "parameter_value",
-    "unit",
-    "sample_id",
-    "link_type",
-    "confidence",
-    "reasoning",
-    "created_by",
-]
-
-FINAL_SHOWCASE_FIELDS = [
-    "paper_short",
-    "sample",
-    "parameter_zh",
-    "canonical_key",
-    "value_display",
-    "evidence_display",
-    "spectra_display",
-    "link_status",
-    "confidence",
-    "note",
-]
-
-PROCESS_STEPS_TABLE_FIELDS = [
-    "paper_id",
-    "title",
-    "step_id",
-    "step_order",
-    "section",
-    "action",
-    "action_zh",
-    "reagent_name",
-    "reagent_formula",
-    "reagent_amount",
-    "reagent_unit",
-    "reagent_role",
-    "condition_key",
-    "condition_value",
-    "condition_unit",
-    "equipment",
-    "duration_value",
-    "duration_unit",
-    "temperature_value",
-    "temperature_unit",
-    "heating_rate_value",
-    "heating_rate_unit",
-    "product_or_outcome",
-    "linked_parameter_keys",
-    "linked_parameter_ids",
-    "linked_canonical_keys",
-    "linked_values",
-    "linked_units",
-    "link_confidences",
-    "evidence_text",
-    "confidence",
-    "needs_manual_review",
-]
+_build_link_aware_summary = build_link_aware_summary
+_build_link_aware_readme = build_link_aware_readme
+_safe_write = safe_write
+_write_csv_with_fields = write_csv_with_fields
+_write_parquet_with_fields = write_parquet_with_fields
 
 
 def load_link_aware_inputs(final_dataset_dir: Path | str) -> dict[str, Any]:
@@ -285,7 +129,7 @@ def generate_link_aware_exports(
     write_warnings: list[str] = []
     locked_files: list[str] = []
     fallback_outputs: list[str] = []
-    summary = _build_link_aware_summary(
+    summary = build_link_aware_summary(
         final_parameters_linked=final_parameters_linked,
         evidence_parameter_links=evidence_parameter_links,
         spectra_parameter_links=spectra_parameter_links,
@@ -295,51 +139,51 @@ def generate_link_aware_exports(
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    _safe_write(
+    safe_write(
         output_dir / "final_parameters_linked.csv",
-        lambda path: _write_csv_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
+        lambda path: write_csv_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
     )
-    _safe_write(
+    safe_write(
         output_dir / "final_parameters_linked.parquet",
-        lambda path: _write_parquet_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
+        lambda path: write_parquet_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
     )
-    _safe_write(
+    safe_write(
         output_dir / "sample_parameter_matrix.csv",
-        lambda path: _write_csv_with_fields(path, sample_parameter_matrix, SAMPLE_PARAMETER_MATRIX_FIELDS),
+        lambda path: write_csv_with_fields(path, sample_parameter_matrix, SAMPLE_PARAMETER_MATRIX_FIELDS),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
     )
-    _safe_write(
+    safe_write(
         output_dir / "evidence_parameter_links.csv",
-        lambda path: _write_csv_with_fields(path, evidence_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
+        lambda path: write_csv_with_fields(path, evidence_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
     )
-    _safe_write(
+    safe_write(
         output_dir / "spectra_parameter_links.csv",
-        lambda path: _write_csv_with_fields(path, spectra_parameter_links, SPECTRA_PARAMETER_LINK_FIELDS),
+        lambda path: write_csv_with_fields(path, spectra_parameter_links, SPECTRA_PARAMETER_LINK_FIELDS),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
     )
-    _safe_write(
+    safe_write(
         output_dir / "process_steps_table.csv",
-        lambda path: _write_csv_with_fields(path, process_steps_table, PROCESS_STEPS_TABLE_FIELDS),
+        lambda path: write_csv_with_fields(path, process_steps_table, PROCESS_STEPS_TABLE_FIELDS),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
     )
-    _safe_write(
+    safe_write(
         output_dir / "final_showcase_table.csv",
-        lambda path: _write_csv_with_fields(path, final_showcase_table, FINAL_SHOWCASE_FIELDS),
+        lambda path: write_csv_with_fields(path, final_showcase_table, FINAL_SHOWCASE_FIELDS),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
@@ -348,7 +192,7 @@ def generate_link_aware_exports(
     summary["locked_files"] = locked_files
     summary["fallback_outputs"] = fallback_outputs
     summary["process_steps_table_current_is_stale"] = "process_steps_table.csv" in locked_files
-    readme = _build_link_aware_readme(include_showcase=include_showcase, output_warnings=write_warnings)
+    readme = build_link_aware_readme(include_showcase=include_showcase, output_warnings=write_warnings)
     write_json(output_dir / "link_aware_export_summary.json", summary)
     write_markdown(output_dir / "link_aware_export_readme.md", readme)
 
@@ -1143,77 +987,6 @@ def _build_final_showcase_table(
     return rows
 
 
-def _build_link_aware_summary(
-    *,
-    final_parameters_linked: list[dict[str, Any]],
-    evidence_parameter_links: list[dict[str, Any]],
-    spectra_parameter_links: list[dict[str, Any]],
-    samples: list[dict[str, Any]],
-    showcase_rows: list[dict[str, Any]],
-    include_showcase: bool,
-) -> dict[str, Any]:
-    showcase_complete = include_showcase and bool(showcase_rows) and any(
-        row.get("evidence_status") in {"strong_evidence", "process_step_evidence", "linked_evidence", "linked_spectra"}
-        for row in final_parameters_linked
-    )
-    return {
-        "total_parameters": len(final_parameters_linked),
-        "parameters_with_any_link": sum(
-            1
-            for row in final_parameters_linked
-            if row.get("linked_sample_ids") or row.get("linked_evidence_ids") or row.get("linked_spectra_ids")
-        ),
-        "parameters_with_sample_link": sum(1 for row in final_parameters_linked if row.get("linked_sample_ids")),
-        "parameters_with_evidence_link": sum(1 for row in final_parameters_linked if row.get("linked_evidence_ids")),
-        "parameters_with_spectra_link": sum(1 for row in final_parameters_linked if row.get("linked_spectra_ids")),
-        "parameters_missing_all_links": sum(
-            1
-            for row in final_parameters_linked
-            if not row.get("linked_sample_ids") and not row.get("linked_evidence_ids") and not row.get("linked_spectra_ids")
-        ),
-        "total_evidence_parameter_links": len(evidence_parameter_links),
-        "total_spectra_parameter_links": len(spectra_parameter_links),
-        "total_samples": len(samples),
-        "sample_matrix_rows": len(samples),
-        "showcase_rows": len(showcase_rows),
-        "showcase_is_complete": showcase_complete,
-        "showcase_warning": None
-        if showcase_complete
-        else "Preview/showcase table is incomplete or disabled; use the linked parameter, process step, evidence, spectra, and sample matrix tables as the primary outputs.",
-        "recommended_primary_tables": [
-            "final_parameters_linked.csv",
-            "process_steps_table.csv",
-            "evidence_parameter_links.csv",
-            "spectra_parameter_links.csv",
-            "sample_parameter_matrix.csv",
-        ],
-        "warning_count": sum(
-            1
-            for row in final_parameters_linked
-            if row.get("evidence_status") == "missing" or "multi" in str(row.get("quality_flags") or "")
-        ),
-    }
-
-
-def _build_link_aware_readme() -> str:
-    return """# Link-aware Final Dataset Exports
-
-## Files
-- `final_parameters_linked.csv`: parameter-long table enriched with sample/evidence/spectra links.
-- `final_parameters_linked.parquet`: parquet version of the linked parameter table.
-- `sample_parameter_matrix.csv`: sample-centric matrix for comparison and presentation.
-- `evidence_parameter_links.csv`: evidence-to-parameter relationships.
-- `spectra_parameter_links.csv`: spectra/peak-to-parameter relationships, including indirect spectra→evidence→parameter paths.
-- `process_steps_table.csv`: ordered experimental procedure steps for process-centric review and presentation.
-- `final_showcase_table.csv`: compact display table for meetings and quick review.
-- `link_aware_export_summary.json`: export statistics.
-
-## Notes
-- Original `parameters.jsonl`, `evidence.jsonl`, `spectra.jsonl`, and `samples.jsonl` are not modified.
-- Missing links are preserved as missing rather than fabricated.
-- Sample resolution prefers direct `sample_id`, then accepted parameter→sample links.
-"""
-
 
 def _normalize_parameter_value(value: Any, unit: Any, canonical_key: Any = None) -> dict[str, Any]:
     unit_text = _normalize_unit_text(unit) or _infer_unit_from_canonical_key(canonical_key)
@@ -1274,22 +1047,6 @@ def _resolve_sample_id(sample_id_original: Any, sample_links: list[dict[str, Any
                 return str(sample_id), "parameter_sample_link"
     return None, "unresolved"
 
-
-def _resolve_evidence_status(
-    explicit_evidence_ids: list[str],
-    evidence_rows: list[dict[str, Any]],
-    spectra_rows: list[dict[str, Any]],
-    linked_sample_ids: list[str],
-) -> str:
-    if explicit_evidence_ids:
-        return "strong_evidence"
-    if evidence_rows:
-        return "linked_evidence"
-    if spectra_rows:
-        return "linked_spectra"
-    if linked_sample_ids:
-        return "sample_link_only"
-    return "missing"
 
 
 def _extract_explicit_evidence_ids(
@@ -1556,63 +1313,6 @@ def _showcase_confidence(link_confidences: Any) -> str:
     return ""
 
 
-def _write_csv_with_fields(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: _csv_value(row.get(field)) for field in fieldnames})
-
-
-def _write_parquet_with_fields(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
-    import pandas as pd
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    frame = pd.DataFrame(rows, columns=fieldnames)
-    for column in frame.columns:
-        if str(frame[column].dtype) == "object":
-            frame[column] = frame[column].apply(_parquet_value).astype("string")
-    frame.to_parquet(path, index=False)
-
-
-def _safe_write(
-    path: Path,
-    writer: Any,
-    warnings: list[str],
-    *,
-    locked_files: list[str] | None = None,
-    fallback_outputs: list[str] | None = None,
-) -> None:
-    try:
-        writer(path)
-    except PermissionError:
-        warnings.append(f"could_not_overwrite_locked_file:{path.name}")
-        if locked_files is not None:
-            locked_files.append(path.name)
-        fallback_path = path.with_name(f"{path.stem}.generated{path.suffix}")
-        try:
-            writer(fallback_path)
-            warnings.append(f"wrote_fallback_output:{fallback_path.name}")
-            if fallback_outputs is not None:
-                fallback_outputs.append(fallback_path.name)
-        except PermissionError:
-            warnings.append(f"could_not_write_fallback_output:{fallback_path.name}")
-
-
-def _csv_value(value: Any) -> Any:
-    if isinstance(value, (list, dict)):
-        return json.dumps(value, ensure_ascii=False)
-    return value
-
-
-def _parquet_value(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, (list, dict)):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value)
-
 
 def _display_value_from_parameter(row: dict[str, Any]) -> str:
     value_meta = _normalize_parameter_value(row.get("value"), row.get("unit"), row.get("canonical_key"))
@@ -1646,114 +1346,3 @@ def _resolve_evidence_status(
         return "sample_link_only"
     return "missing"
 
-
-def _build_link_aware_summary(
-    *,
-    final_parameters_linked: list[dict[str, Any]],
-    evidence_parameter_links: list[dict[str, Any]],
-    spectra_parameter_links: list[dict[str, Any]],
-    samples: list[dict[str, Any]],
-    showcase_rows: list[dict[str, Any]],
-    include_showcase: bool,
-) -> dict[str, Any]:
-    primary_statuses = {"strong_evidence", "process_step_evidence", "linked_evidence", "linked_spectra"}
-    showcase_complete = include_showcase and bool(showcase_rows) and any(
-        row.get("evidence_status") in primary_statuses for row in final_parameters_linked
-    )
-    process_step_parameter_links = sum(1 for row in evidence_parameter_links if row.get("source_type") == "process_step")
-    evidence_object_parameter_links = sum(
-        1
-        for row in evidence_parameter_links
-        if row.get("source_type") == "evidence_object" or row.get("created_by") == "direct_evidence_refs"
-    )
-    spectra_parameter_links_count = sum(
-        1
-        for row in spectra_parameter_links
-        if row.get("created_by") not in {"deterministic_visual_value_match", "indirect"}
-    )
-    visual_parameter_links = sum(
-        1
-        for row in spectra_parameter_links
-        if row.get("created_by") == "deterministic_visual_value_match"
-    )
-    return {
-        "total_parameters": len(final_parameters_linked),
-        "parameters_with_any_link": sum(
-            1
-            for row in final_parameters_linked
-            if row.get("linked_sample_ids") or row.get("linked_evidence_ids") or row.get("linked_spectra_ids")
-        ),
-        "parameters_with_sample_link": sum(1 for row in final_parameters_linked if row.get("linked_sample_ids")),
-        "parameters_with_evidence_link": sum(
-            1 for row in final_parameters_linked if row.get("evidence_status") in {"strong_evidence", "process_step_evidence", "linked_evidence"}
-        ),
-        "parameters_with_spectra_link": sum(1 for row in final_parameters_linked if row.get("linked_spectra_ids")),
-        "parameters_missing_all_links": sum(
-            1
-            for row in final_parameters_linked
-            if not row.get("linked_sample_ids") and not row.get("linked_evidence_ids") and not row.get("linked_spectra_ids")
-        ),
-        "total_evidence_parameter_links": len(evidence_parameter_links),
-        "total_spectra_parameter_links": len(spectra_parameter_links),
-        "process_step_parameter_links": process_step_parameter_links,
-        "evidence_object_parameter_links": evidence_object_parameter_links,
-        "spectra_parameter_links": spectra_parameter_links_count,
-        "visual_parameter_links": visual_parameter_links,
-        "total_samples": len(samples),
-        "sample_matrix_rows": len(samples),
-        "showcase_rows": len(showcase_rows),
-        "showcase_is_complete": showcase_complete,
-        "showcase_warning": None
-        if showcase_complete
-        else "Preview/showcase table is incomplete or disabled; use the linked parameter, process step, evidence, spectra, and sample matrix tables as the primary outputs.",
-        "recommended_primary_tables": [
-            "final_parameters_linked.csv",
-            "process_steps_table.csv",
-            "evidence_parameter_links.csv",
-            "spectra_parameter_links.csv",
-            "sample_parameter_matrix.csv",
-        ],
-        "warning_count": sum(
-            1
-            for row in final_parameters_linked
-            if row.get("evidence_status") == "missing" or "multi" in str(row.get("quality_flags") or "")
-        ),
-    }
-
-
-def _build_link_aware_readme(*, include_showcase: bool, output_warnings: list[str] | None = None) -> str:
-    showcase_note = (
-        "- `final_showcase_table.csv`: quick preview only; it is not the authoritative table for downstream statistics or database ingestion."
-        if include_showcase
-        else "- `final_showcase_table.csv`: preview generation was skipped; rely on the primary linked tables below."
-    )
-    warning_lines = (
-        ["", "## Output Warnings", *[f"- `{item}`" for item in output_warnings]]
-        if output_warnings
-        else []
-    )
-    return "\n".join(
-        [
-            "# Link-aware Final Dataset Exports",
-            "",
-            "## Primary Tables",
-            "- `final_parameters_linked.csv`: the main parameter-level table with resolved sample, evidence, process-step, and spectra links.",
-            "- `process_steps_table.csv`: ordered experimental procedure steps with linked parameters and evidence text.",
-            "- `evidence_parameter_links.csv`: direct process-step and evidence-object links to parameters.",
-            "- `spectra_parameter_links.csv`: direct spectra peak links and indirect spectra-evidence-parameter links.",
-            "- `sample_parameter_matrix.csv`: sample-centric comparison matrix for meetings and sample-level review.",
-            "",
-            "## Additional Files",
-            "- `final_parameters_linked.parquet`: parquet version of the linked parameter table.",
-            showcase_note,
-            "- `link_aware_export_summary.json`: export statistics and guidance on which tables to treat as primary.",
-            "",
-            "## Notes",
-            "- Original `parameters.jsonl`, `process_steps.jsonl`, `evidence.jsonl`, `spectra.jsonl`, and `samples.jsonl` are not modified.",
-            "- Missing links remain explicit; the exporter does not invent unsupported evidence or spectra relationships.",
-            "- Prefer the primary tables above for final analysis, database loading, and group-meeting reporting.",
-            "- If a CSV is locked by Excel, WPS, VS Code preview, or Explorer preview pane, the exporter keeps the warning and writes a `*.generated.csv` fallback when possible.",
-            "- If `process_steps_table.csv` could not be overwritten, check `process_steps_table.generated.csv` first, then close the locking application and rerun the Stage 5+ export command.",
-            *warning_lines,
-        ]
-    )

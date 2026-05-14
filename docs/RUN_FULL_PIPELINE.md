@@ -156,6 +156,11 @@ python .\scripts\export_batch_link_aware_dataset.py `
   --output-dir ".\data\outputs\_batch_final_exports"
 ```
 
+## Script layout
+
+- `scripts/` root is kept for user-facing entrypoints such as pipeline runners, export commands, and recovery utilities.
+- `scripts/dev/` contains manual inspection or review helpers that are useful during debugging, but are not part of the normal pipeline entry surface.
+
 ## Where results go
 
 - Per-paper final dataset:

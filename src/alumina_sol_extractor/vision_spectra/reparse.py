@@ -9,6 +9,7 @@ from .extractor import Stage4VisionSpectraExtractor
 from .io import parse_json_payload, read_jsonl, write_json, write_jsonl
 from .quality_review import load_stage4_outputs, review_stage4_extractions, write_stage4_quality_review
 from .routing import get_schema_for_figure_type
+from .stage4_context import build_input_context_summary
 from .validators import build_stage4_summary, validate_stage4_extraction
 
 
@@ -53,7 +54,7 @@ def reparse_stage4_vlm_outputs(stage4_dir: Path) -> dict[str, Any]:
             parsed["extraction_mode"] = "live"
             response_payload = raw_record.get("response_payload") or {}
             parsed["extraction_model"] = response_payload.get("model")
-            parsed.setdefault("input_context_summary", Stage4VisionSpectraExtractor._build_input_context_summary(candidate))
+            parsed.setdefault("input_context_summary", build_input_context_summary(candidate))
             parsed.setdefault("used_context_sources", list(candidate.get("context_source", {}).values()))
 
             schema_cls = get_schema_for_figure_type(candidate.get("figure_type"))

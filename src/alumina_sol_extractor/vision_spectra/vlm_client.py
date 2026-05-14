@@ -1,4 +1,4 @@
-"""OpenAI-compatible VLM client skeleton for Stage 4."""
+"""OpenAI-compatible VLM client for Stage 4 vision extraction."""
 
 from __future__ import annotations
 
