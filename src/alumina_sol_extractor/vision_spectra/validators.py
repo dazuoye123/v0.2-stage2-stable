@@ -48,12 +48,17 @@ def build_stage4_summary(
     candidates: list[dict[str, Any]],
     extractions: list[dict[str, Any]],
     failed_records: list[dict[str, Any]],
+    config_warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     by_type = Counter(str(item.get("figure_type") or "unknown") for item in candidates)
     processed_count = sum(1 for item in candidates if item.get("send_to_vlm"))
     skipped_count = sum(1 for item in candidates if not item.get("send_to_vlm"))
     dry_run_count = sum(1 for item in extractions if item.get("extraction_mode") == "dry_run")
     live_count = sum(1 for item in extractions if item.get("extraction_mode") == "live")
+    retry_attempt_count = sum(max(int(item.get("retry_attempts") or 0) - 1, 0) for item in failed_records)
+    transient_failures = [item for item in failed_records if item.get("is_transient")]
+    fallback_reused = [item for item in failed_records if item.get("fallback_used")]
+    hard_failed = [item for item in failed_records if item.get("final_status") != "reused_previous_success"]
     validation_error_count = sum(len(item.get("validation_errors", [])) for item in extractions)
     return {
         "total_candidates": len(candidates),
@@ -63,7 +68,14 @@ def build_stage4_summary(
         "live_count": live_count,
         "by_figure_type": dict(by_type),
         "validation_error_count": validation_error_count,
-        "failed_record_count": len(failed_records),
+        "retry_attempt_count": retry_attempt_count,
+        "transient_failure_count": len(transient_failures),
+        "fallback_reused_count": len(fallback_reused),
+        "hard_failed_record_count": len(hard_failed),
+        "failed_record_count": len(hard_failed),
+        "reused_figure_ids": [str(item.get("figure_id")) for item in fallback_reused if item.get("figure_id")],
+        "hard_failed_figure_ids": [str(item.get("figure_id")) for item in hard_failed if item.get("figure_id")],
         "live_figure_ids": [str(item.get("figure_id")) for item in extractions if item.get("extraction_mode") == "live" and item.get("figure_id")],
-        "failed_figure_ids": [str(item.get("figure_id")) for item in failed_records if item.get("figure_id")],
+        "failed_figure_ids": [str(item.get("figure_id")) for item in hard_failed if item.get("figure_id")],
+        "output_warnings": list(config_warnings or []),
     }

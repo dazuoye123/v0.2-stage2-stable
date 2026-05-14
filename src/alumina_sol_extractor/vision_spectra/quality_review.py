@@ -33,6 +33,8 @@ def review_stage4_extractions(
     extractions = list(outputs.get("spectra_extractions") or [])
     summary = dict(outputs.get("stage4_summary") or {})
     failed_records = list(outputs.get("failed_records") or [])
+    hard_failed_records = [item for item in failed_records if item.get("final_status") != "reused_previous_success"]
+    fallback_reused_records = [item for item in failed_records if item.get("final_status") == "reused_previous_success"]
 
     by_figure_reviews: list[dict[str, Any]] = []
     source_distribution = Counter()
@@ -51,26 +53,30 @@ def review_stage4_extractions(
 
     if failed_records:
         for item in failed_records:
+            warning_name = "reused_previous_success" if item.get("final_status") == "reused_previous_success" else "failed_record"
             global_warnings.append(
                 {
                     "figure_id": item.get("figure_id"),
-                    "warning": "failed_record",
-                    "detail": item.get("error"),
+                    "warning": warning_name,
+                    "detail": item.get("error") or item.get("error_message"),
                 }
             )
 
     total_validation_errors = int(summary.get("validation_error_count", 0))
     overall_status = _determine_overall_status(
-        failed_record_count=len(failed_records),
+        failed_record_count=len(hard_failed_records),
         validation_error_count=total_validation_errors,
         figure_reviews=by_figure_reviews,
     )
+    if overall_status == "pass" and fallback_reused_records:
+        overall_status = "warning"
 
     review_payload = {
         "summary": {
             "total_records": len(extractions),
             "live_count": sum(1 for item in extractions if item.get("extraction_mode") == "live"),
-            "failed_record_count": len(failed_records),
+            "failed_record_count": len(hard_failed_records),
+            "fallback_reused_count": len(fallback_reused_records),
             "validation_error_count": total_validation_errors,
             "by_figure_type": dict(Counter(str(item.get("figure_type") or "unknown") for item in extractions)),
             "source_distribution": dict(source_distribution),

@@ -14,6 +14,9 @@ Live stages need these environment variables:
 - `OPENAI_BASE_URL`
 - `LLM_MODEL_NAME`
 - `VLM_MODEL_NAME`
+- `VLM_TIMEOUT_SECONDS` (optional, default `300`)
+- `VLM_MAX_RETRIES` (optional, default `3`)
+- `VLM_RETRY_BACKOFF_SECONDS` (optional, default `5`)
 
 Example DashScope-compatible setup:
 
@@ -23,6 +26,9 @@ $env:OPENAI_API_KEY=$env:DASHSCOPE_API_KEY
 $env:OPENAI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 $env:LLM_MODEL_NAME="qwen3.6-max-preview"
 $env:VLM_MODEL_NAME="qwen-vl-max"
+$env:VLM_TIMEOUT_SECONDS="300"
+$env:VLM_MAX_RETRIES="3"
+$env:VLM_RETRY_BACKOFF_SECONDS="5"
 ```
 
 ## Safe mode
@@ -76,6 +82,41 @@ python .\scripts\run_full_pipeline.py `
   --export-link-aware `
   --no-showcase
 ```
+
+## Stage 4A retry and previous-success fallback
+
+When a Stage 4A live request hits a transient VLM failure such as timeout, 429, or 5xx:
+
+- the failing figure is retried automatically
+- only that figure is retried
+- if all retries still fail and an earlier successful extraction exists for the same `figure_id`, the previous extraction is reused
+- Stage 5 / Stage 5.5 / link-aware export can continue with the reused result
+
+Example:
+
+```powershell
+$env:VLM_TIMEOUT_SECONDS="300"
+$env:VLM_MAX_RETRIES="3"
+$env:VLM_RETRY_BACKOFF_SECONDS="5"
+
+python .\scripts\run_full_pipeline.py `
+  --markdown-dir ".\data\markdown" `
+  --outputs-dir ".\data\outputs" `
+  --paper-ids "多晶型氧化铝连续纤维的研制及性能" `
+  --auto-complete `
+  --live-stage4a `
+  --force-stage4a `
+  --force-stage5 `
+  --force-linking `
+  --export-link-aware `
+  --no-showcase `
+  --max-stage3-papers 0 `
+  --max-stage4a-papers 1 `
+  --max-stage4a-figures-per-paper 4 `
+  --max-total-model-calls 4
+```
+
+This path does not call the text LLM and does not rerun Stage 3.
 
 ## Current four-paper controlled batch
 
@@ -183,8 +224,18 @@ Useful files:
 - `final_dataset/linking/linking_summary.json`
 - `final_dataset/linking/link_candidates.jsonl`
 - `final_dataset/linking/links.jsonl`
+- `stage4_vision_spectra/stage4_summary.json`
+- `stage4_vision_spectra/failed_records.jsonl`
 - `final_dataset/link_aware_exports/evidence_parameter_links.csv`
 - `final_dataset/link_aware_exports/spectra_parameter_links.csv`
+
+For Stage 4A timeout diagnosis, check:
+
+- `retry_attempt_count`
+- `transient_failure_count`
+- `fallback_reused_count`
+- `reused_figure_ids`
+- `hard_failed_figure_ids`
 
 ### Windows `PermissionError` / file lock
 
@@ -214,6 +265,16 @@ Check `link_aware_export_summary.json` for:
 - `process_steps_table_current_is_stale`
 
 If `process_steps_table_current_is_stale` is `true`, the canonical CSV was not refreshed and the fallback file is the newest output.
+
+Stage 4A can also record transient VLM failures in `failed_records.jsonl` with:
+
+- `error_type`
+- `retry_attempts`
+- `timeout_seconds`
+- `fallback_used`
+- `final_status`
+
+If `final_status` is `reused_previous_success`, the previous successful extraction was kept so later stages do not regress because of a transient API failure.
 
 ### How to confirm skip / run / pending
 

@@ -65,10 +65,13 @@ def test_run_writes_failed_records_without_crashing(tmp_path: Path) -> None:
 
     assert summary["live_count"] == 1
     assert summary["failed_record_count"] == 1
+    assert summary["hard_failed_record_count"] == 1
+    assert summary["fallback_reused_count"] == 0
     failed_path = output_dir / "stage4_vision_spectra" / "failed_records.jsonl"
     assert failed_path.exists()
     failed_text = failed_path.read_text(encoding="utf-8")
     assert "图2.19" in failed_text
+    assert "final_status" in failed_text
     raw_text = (output_dir / "stage4_vision_spectra" / "raw_vlm_outputs.jsonl").read_text(encoding="utf-8")
     assert "not json at all" in raw_text
 

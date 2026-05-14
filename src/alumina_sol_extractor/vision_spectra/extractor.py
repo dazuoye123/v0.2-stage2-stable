@@ -12,7 +12,7 @@ from .normalization import normalize_vlm_payload_for_schema
 from .prompt_templates import get_prompt_for_figure_type
 from .routing import get_schema_for_figure_type, normalize_figure_type, should_process_figure
 from .validators import build_stage4_summary, validate_stage4_extraction
-from .vlm_client import VLMRequest, VisionLanguageModelClient
+from .vlm_client import VLMRequest, VLMRequestError, VisionLanguageModelClient
 
 
 DEFAULT_ALLOWED_FIGURE_TYPES = {
@@ -49,6 +49,7 @@ class Stage4VisionSpectraExtractor:
     def run(self) -> dict[str, Any]:
         stage4_dir = Path(self.output_dir) / "stage4_vision_spectra"
         stage4_dir.mkdir(parents=True, exist_ok=True)
+        previous_extractions = read_jsonl(stage4_dir / "spectra_extractions.jsonl")
 
         figures = read_jsonl(Path(self.output_dir) / "figures.jsonl")
         vision_inputs = read_jsonl(Path(self.output_dir) / "vision_inputs.jsonl")
@@ -62,11 +63,15 @@ class Stage4VisionSpectraExtractor:
             stage3_schema=stage3_schema,
         )
         prompts = [self._build_prompt_record(candidate) for candidate in candidates if candidate.get("send_to_vlm")]
-        extractions, raw_outputs, failed_records = self._run_extractions(candidates)
+        extractions, raw_outputs, failed_records, config_warnings = self._run_extractions(
+            candidates,
+            previous_extractions=previous_extractions,
+        )
         summary = build_stage4_summary(
             candidates=candidates,
             extractions=extractions,
             failed_records=failed_records,
+            config_warnings=config_warnings,
         )
 
         write_jsonl(candidates, stage4_dir / "stage4_candidates.jsonl")
@@ -253,11 +258,18 @@ class Stage4VisionSpectraExtractor:
             "estimated_context_chars": estimated_context_chars,
         }
 
-    def _run_extractions(self, candidates: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    def _run_extractions(
+        self,
+        candidates: list[dict[str, Any]],
+        *,
+        previous_extractions: list[dict[str, Any]] | None = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[str]]:
         client = self.client or VisionLanguageModelClient(dry_run=self.dry_run)
         extractions: list[dict[str, Any]] = []
         raw_outputs: list[dict[str, Any]] = []
         failed_records: list[dict[str, Any]] = []
+        config_warnings = list(getattr(client, "config_warnings", []) or [])
+        previous_success_by_figure_id = self._index_previous_successes(previous_extractions or [])
         for candidate in candidates:
             if not candidate.get("send_to_vlm"):
                 continue
@@ -314,24 +326,126 @@ class Stage4VisionSpectraExtractor:
                     validated["warnings"] = [*validated.get("warnings", []), *normalization_warnings]
                 validated["validation_errors"] = validate_stage4_extraction(validated)
                 extractions.append(validated)
-            except Exception as exc:  # noqa: BLE001
+            except VLMRequestError as exc:
+                fallback_record = None
+                if exc.is_transient:
+                    fallback_record = self._reuse_previous_success(
+                        candidate=candidate,
+                        previous_success=previous_success_by_figure_id.get(str(candidate.get("figure_id") or "")),
+                        error_type=exc.error_type,
+                    )
+                failed_record = self._build_failed_record(candidate, exc, fallback_used=fallback_record is not None)
+                failed_records.append(failed_record)
                 raw_outputs.append(
-                    {
-                        "figure_id": candidate.get("figure_id"),
-                        "figure_type": candidate.get("figure_type"),
-                        "raw_response": None,
-                        "dry_run": False,
-                        "error": str(exc),
-                    }
+                    self._build_error_raw_output(
+                        candidate,
+                        error_message=str(exc),
+                        error_type=exc.error_type,
+                        retry_attempts=exc.retry_attempts,
+                        timeout_seconds=exc.timeout_seconds,
+                    )
                 )
-                failed_records.append(
-                    {
-                        "figure_id": candidate.get("figure_id"),
-                        "figure_type": candidate.get("figure_type"),
-                        "error": str(exc),
-                    }
-                )
-        return extractions, raw_outputs, failed_records
+                if fallback_record is not None:
+                    extractions.append(fallback_record)
+            except Exception as exc:  # noqa: BLE001
+                raw_outputs.append(self._build_error_raw_output(candidate, error_message=str(exc), error_type="processing_error"))
+                failed_records.append(self._build_failed_record(candidate, exc, fallback_used=False))
+        return extractions, raw_outputs, failed_records, config_warnings
+
+    @staticmethod
+    def _index_previous_successes(previous_extractions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        indexed: dict[str, dict[str, Any]] = {}
+        for record in previous_extractions:
+            figure_id = str(record.get("figure_id") or "")
+            if not figure_id:
+                continue
+            indexed.setdefault(figure_id, record)
+        return indexed
+
+    def _reuse_previous_success(
+        self,
+        *,
+        candidate: dict[str, Any],
+        previous_success: dict[str, Any] | None,
+        error_type: str,
+    ) -> dict[str, Any] | None:
+        if not previous_success:
+            return None
+        reused = json.loads(json.dumps(previous_success, ensure_ascii=False))
+        reused["reused_previous_success"] = True
+        reused["fallback_reason"] = error_type
+        reused["previous_extraction_source"] = "stage4_vision_spectra/spectra_extractions.jsonl"
+        reused["extraction_mode"] = "reused_previous_success"
+        reused.setdefault("warnings", [])
+        reused["warnings"] = [
+            *reused.get("warnings", []),
+            f"reused_previous_success_due_to_{error_type}",
+        ]
+        reused.setdefault("validation_errors", validate_stage4_extraction(reused))
+        reused.setdefault("figure_id", candidate.get("figure_id"))
+        reused.setdefault("figure_type", candidate.get("figure_type"))
+        return reused
+
+    @staticmethod
+    def _build_failed_record(
+        candidate: dict[str, Any],
+        exc: Exception,
+        *,
+        fallback_used: bool,
+    ) -> dict[str, Any]:
+        if isinstance(exc, VLMRequestError):
+            error_type = exc.error_type
+            is_transient = exc.is_transient
+            retry_attempts = exc.retry_attempts
+            max_retries = exc.max_retries
+            timeout_seconds = exc.timeout_seconds
+            attempt_errors = exc.attempt_errors
+        else:
+            error_type = exc.__class__.__name__
+            is_transient = False
+            retry_attempts = 1
+            max_retries = 1
+            timeout_seconds = None
+            attempt_errors = []
+        final_status = "reused_previous_success" if fallback_used else "failed"
+        return {
+            "figure_id": candidate.get("figure_id"),
+            "figure_type": candidate.get("figure_type"),
+            "error": str(exc),
+            "error_type": error_type,
+            "error_message": str(exc),
+            "is_transient": is_transient,
+            "retry_attempts": retry_attempts,
+            "max_retries": max_retries,
+            "timeout_seconds": timeout_seconds,
+            "attempt_errors": attempt_errors,
+            "fallback_used": fallback_used,
+            "fallback_source": "previous_spectra_extractions" if fallback_used else None,
+            "final_status": final_status,
+        }
+
+    @staticmethod
+    def _build_error_raw_output(
+        candidate: dict[str, Any],
+        *,
+        error_message: str,
+        error_type: str,
+        retry_attempts: int | None = None,
+        timeout_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        payload = {
+            "figure_id": candidate.get("figure_id"),
+            "figure_type": candidate.get("figure_type"),
+            "raw_response": None,
+            "dry_run": False,
+            "error": error_message,
+            "error_type": error_type,
+        }
+        if retry_attempts is not None:
+            payload["retry_attempts"] = retry_attempts
+        if timeout_seconds is not None:
+            payload["timeout_seconds"] = timeout_seconds
+        return payload
 
     @staticmethod
     def _normalize_live_payload(
