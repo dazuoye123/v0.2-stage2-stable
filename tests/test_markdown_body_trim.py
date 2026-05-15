@@ -3,6 +3,10 @@
 import json
 from pathlib import Path
 
+from alumina_sol_extractor.markdown_processing.body_trim import (
+    generate_cleaned_body_markdown as generate_cleaned_body_markdown_new,
+)
+from alumina_sol_extractor.markdown_processing.pipeline import ensure_cleaned_body_markdown
 from alumina_sol_extractor.stage3.document_trim import generate_cleaned_body_markdown, trim_markdown_body
 
 
@@ -97,3 +101,53 @@ def test_trim_markdown_body_removes_numbered_toc_residue_but_keeps_real_heading(
     assert "2.2.2 初始铝溶胶的制备 20" not in result.cleaned_text
     assert "3.2.2 铝溶胶的分类比较 45" not in result.cleaned_text
     assert "# 2.2.2 初始铝溶胶的制备" in result.cleaned_text
+
+
+def test_new_body_trim_module_writes_cleaned_body_without_overwriting_source_markdown(tmp_path: Path) -> None:
+    markdown_path = tmp_path / "data" / "markdown" / "paper.md"
+    output_dir = tmp_path / "data" / "outputs" / "paper"
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    original_text = (
+        "# 山东大学\n"
+        "# 目录\n"
+        "2.2.2 初始铝溶胶的制备 ........ 20\n"
+        "# 2.2.2 初始铝溶胶的制备\n"
+        "称取一定量九水合硝酸铝和铝粉，加入去离子水。\n"
+        "# 参考文献\n"
+        "[1] demo\n"
+    )
+    markdown_path.write_text(original_text, encoding="utf-8")
+
+    result = generate_cleaned_body_markdown_new(markdown_path=markdown_path, paper_output_dir=output_dir)
+
+    cleaned_body_path = output_dir / "stage3_text" / "cleaned_body.md"
+    assert cleaned_body_path.exists()
+    assert cleaned_body_path == output_dir / "stage3_text" / "cleaned_body.md"
+    assert "# 2.2.2 初始铝溶胶的制备" in result.cleaned_text
+    assert markdown_path.read_text(encoding="utf-8") == original_text
+
+
+def test_stage3_document_trim_old_import_remains_compatible() -> None:
+    assert generate_cleaned_body_markdown is generate_cleaned_body_markdown_new
+
+
+def test_ensure_cleaned_body_markdown_preserves_output_location_and_supports_force(tmp_path: Path) -> None:
+    markdown_path = tmp_path / "data" / "markdown" / "paper.md"
+    output_dir = tmp_path / "data" / "outputs" / "paper"
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.write_text(
+        "# 山东大学\n# 2.2 实验部分\n# 2.2.2 初始铝溶胶的制备\n称取九水合硝酸铝。\n# 参考文献\n[1] demo",
+        encoding="utf-8",
+    )
+
+    cleaned_body_path, report_path = ensure_cleaned_body_markdown(markdown_path, output_dir)
+    assert cleaned_body_path == output_dir / "stage3_text" / "cleaned_body.md"
+    assert report_path == output_dir / "stage3_text" / "markdown_trim_report.json"
+    assert cleaned_body_path.exists()
+    assert report_path.exists()
+
+    cleaned_body_path.write_text("stale", encoding="utf-8")
+    cleaned_body_path, report_path = ensure_cleaned_body_markdown(markdown_path, output_dir, force=True)
+    assert cleaned_body_path.read_text(encoding="utf-8").startswith("# 2.2 实验部分")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["output_cleaned_body_path"] == str(cleaned_body_path)
