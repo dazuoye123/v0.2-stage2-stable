@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -6,26 +6,43 @@ from pathlib import Path
 from alumina_sol_extractor.stage3.document_trim import generate_cleaned_body_markdown, trim_markdown_body
 
 
-def test_trim_markdown_body_removes_toc_abstract_and_references_but_keeps_methods() -> None:
-    markdown = """# 目录
+def test_trim_markdown_body_removes_cover_toc_and_references_but_keeps_methods() -> None:
+    markdown = """![](cover.jpg)
+# 山东大学
+# SHANDONG UNIVERSITY
+# Thesis for Master Degree
+作者姓名 牛延强
+培养单位 化学与化工学院
+
+# 目录
 2.2.2 初始铝溶胶的制备 ........ 20
 1.5 参考文献 ........ 12
 
 # 摘要
 摘要正文
+
 # 2.2 实验部分
-实验材料及仪器。
+实验材料及仪器
 # 2.2.2 初始铝溶胶的制备
 称取一定量九水合硝酸铝和铝粉，加入去离子水。
 # 参考文献
 [1] demo
 """
     result = trim_markdown_body(markdown)
+
+    lines = [line for line in result.cleaned_text.splitlines() if line.strip()]
+    assert lines[0] == "# 2.2 实验部分"
+    assert "# 山东大学" not in result.cleaned_text
+    assert "# SHANDONG UNIVERSITY" not in result.cleaned_text
+    assert "# Thesis for Master Degree" not in result.cleaned_text
+    assert "作者姓名 牛延强" not in result.cleaned_text
+    assert "培养单位 化学与化工学院" not in result.cleaned_text
+    assert "2.2.2 初始铝溶胶的制备 ........ 20" not in result.cleaned_text
     assert "# 目录" not in result.cleaned_text
     assert "# 摘要" not in result.cleaned_text
     assert "[1] demo" not in result.cleaned_text
-    assert "2.2.2 初始铝溶胶的制备" in result.cleaned_text
-    assert "称取一定量九水合硝酸铝和铝粉" in result.cleaned_text
+    assert "# 2.2.2 初始铝溶胶的制备" in result.cleaned_text
+    assert "称取一定量九水合硝酸铝和铝粉，加入去离子水。" in result.cleaned_text
 
 
 def test_trim_markdown_body_does_not_cut_document_at_chapter_level_references() -> None:
@@ -42,7 +59,7 @@ def test_trim_markdown_body_does_not_cut_document_at_chapter_level_references() 
 """
     result = trim_markdown_body(markdown)
     assert "# 第二章 实验" in result.cleaned_text
-    assert "2.2.2 初始铝溶胶的制备" in result.cleaned_text
+    assert "# 2.2.2 初始铝溶胶的制备" in result.cleaned_text
     assert "[2] global refs" not in result.cleaned_text
 
 
@@ -50,7 +67,7 @@ def test_generate_cleaned_body_markdown_writes_report_and_body(tmp_path: Path) -
     markdown_path = tmp_path / "paper.md"
     output_dir = tmp_path / "paper_output"
     markdown_path.write_text(
-        "# 2.2.2 初始铝溶胶的制备\n称取九水合硝酸铝和铝粉，加入去离子水。\n# 参考文献\n[1] demo",
+        "# 山东大学\n# SHANDONG UNIVERSITY\n# 2.2.2 初始铝溶胶的制备\n称取九水合硝酸铝和铝粉，加入去离子水。\n# 参考文献\n[1] demo",
         encoding="utf-8",
     )
 
@@ -63,4 +80,20 @@ def test_generate_cleaned_body_markdown_writes_report_and_body(tmp_path: Path) -
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["input_markdown_path"] == str(markdown_path)
     assert report["output_cleaned_body_path"] == str(cleaned_body_path)
-    assert "初始铝溶胶的制备" in result.cleaned_text
+    assert report["cleaned_body_char_count"] == len(result.cleaned_text)
+    assert result.cleaned_text.startswith("# 2.2.2 初始铝溶胶的制备")
+    assert "山东大学" not in result.cleaned_text
+
+
+def test_trim_markdown_body_removes_numbered_toc_residue_but_keeps_real_heading() -> None:
+    markdown = """# 第一章 绪论
+2.2.2 初始铝溶胶的制备 20
+3.2.2 铝溶胶的分类比较 45
+
+# 2.2.2 初始铝溶胶的制备
+称取一定量九水合硝酸铝和铝粉，加入去离子水。
+"""
+    result = trim_markdown_body(markdown)
+    assert "2.2.2 初始铝溶胶的制备 20" not in result.cleaned_text
+    assert "3.2.2 铝溶胶的分类比较 45" not in result.cleaned_text
+    assert "# 2.2.2 初始铝溶胶的制备" in result.cleaned_text

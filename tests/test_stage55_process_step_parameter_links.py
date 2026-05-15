@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from alumina_sol_extractor.linking.candidate_builder import build_deterministic_links, build_link_candidates
 
@@ -20,6 +20,15 @@ def test_process_steps_link_thesis_method_parameters() -> None:
             "canonical_key": "nitrate_source",
             "raw_name": "硝酸盐来源",
             "value": "九水合硝酸铝",
+            "unit": None,
+            "sample_id": None,
+            "evidence_refs": [],
+        },
+        {
+            "parameter_id": "param-solvent",
+            "canonical_key": "solvent_type",
+            "raw_name": "溶剂类型",
+            "value": "去离子水",
             "unit": None,
             "sample_id": None,
             "evidence_refs": [],
@@ -102,6 +111,7 @@ def test_process_steps_link_thesis_method_parameters() -> None:
 
     assert "param-aluminum" in target_ids
     assert "param-nitrate" in target_ids
+    assert "param-solvent" in target_ids
     assert "param-temp" in target_ids
     assert "param-time" in target_ids
     assert "param-feed" in target_ids

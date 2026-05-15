@@ -1,6 +1,4 @@
-"""Stage 3 body-text trimming for thesis-like markdown documents."""
-
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import re
@@ -8,13 +6,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .sections import parse_markdown_sections
-
+from alumina_sol_extractor.stage3.sections import parse_markdown_sections
 
 FRONT_MATTER_PATTERNS = (
     "\u76ee\u5f55",
     "\u6458\u8981",
     "abstract",
+    "shandong university",
+    "thesis for master degree",
+    "thesis for doctoral degree",
+    "\u5c71\u4e1c\u5927\u5b66",
+    "\u7855\u58eb\u5b66\u4f4d\u8bba\u6587",
+    "\u535a\u58eb\u5b66\u4f4d\u8bba\u6587",
+    "\u4f5c\u8005\u59d3\u540d",
+    "\u57f9\u517b\u5355\u4f4d",
+    "\u6307\u5bfc\u6559\u5e08",
+    "\u5408\u4f5c\u5bfc\u5e08",
+    "\u4e13\u4e1a\u5b66\u4f4d",
+    "\u4e13\u4e1a\u540d\u79f0",
     "\u539f\u521b\u6027\u58f0\u660e",
     "\u6388\u6743\u58f0\u660e",
     "\u7248\u6743\u58f0\u660e",
@@ -24,17 +33,6 @@ FRONT_MATTER_PATTERNS = (
     "\u4f5c\u8005\u7b80\u4ecb",
     "\u653b\u8bfb\u5b66\u4f4d\u671f\u95f4",
     "\u5b66\u4f4d\u8bba\u6587",
-    "鐩綍",
-    "鎽樿",
-    "鍘熷垱鎬у０鏄?",
-    "鎺堟潈澹版槑",
-    "鐗堟潈澹版槑",
-    "绗﹀彿璇存槑",
-    "鍥剧洰褰?",
-    "琛ㄧ洰褰?",
-    "浣滆€呯畝浠?",
-    "鏀昏瀛︿綅鏈熼棿",
-    "瀛︿綅璁烘枃",
 )
 
 BACK_MATTER_PATTERNS = (
@@ -45,11 +43,6 @@ BACK_MATTER_PATTERNS = (
     "\u81f4\u8c22",
     "\u4f5c\u8005\u7b80\u4ecb",
     "\u653b\u8bfb\u5b66\u4f4d\u671f\u95f4",
-    "鍙傝€冩枃鐚?",
-    "闄勫綍",
-    "鑷磋阿",
-    "浣滆€呯畝浠?",
-    "鏀昏瀛︿綅鏈熼棿",
 )
 
 BODY_SECTION_HINTS = (
@@ -70,20 +63,17 @@ BODY_SECTION_HINTS = (
     "ferron",
     "raman",
     "\u7ed3\u8bba",
-    "瀹為獙",
-    "鍒跺",
-    "琛ㄥ緛",
-    "缁撴灉涓庤璁?",
-    "缁撴灉鍒嗘瀽",
-    "娴嬭瘯",
-    "绾轰笣",
-    "鐓呯儳",
-    "鐑鐞?",
-    "缁撹",
 )
 
-TOC_DOT_PATTERN = re.compile(r"(?:\.{3,}|·{3,}|…{2,}|\. ?\. ?\.)")
-TOC_PAGE_PATTERN = re.compile(r"(?:\.{3,}|·{3,}|…{2,}|\s)\d+\s*$")
+TOC_DOT_PATTERN = re.compile(r"(?:\.{3,}|\u2026{2,}|\. ?\. ?\.)")
+TOC_PAGE_PATTERN = re.compile(r"(?:\.{3,}|\u2026{2,}|\s)\d+\s*$")
+NUMBERED_TOC_LINE_PATTERN = re.compile(
+    r"^\s*(?:#\s*)?(?:\d+(?:\.\d+)*|[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+(?:\u7ae0|\u8282)?)\s*.*?\s+\d+\s*$"
+)
+TITLE_PAGE_LINE_PATTERN = re.compile(
+    r"(?:shandong\s+university|thesis\s+for\s+(?:master|doctoral)\s+degree|\u5c71\u4e1c\u5927\u5b66|\u4f5c\u8005\u59d3\u540d|\u57f9\u517b\u5355\u4f4d|\u6307\u5bfc\u6559\u5e08|\u5408\u4f5c\u5bfc\u5e08|\u4e13\u4e1a\u5b66\u4f4d|\u4e13\u4e1a\u540d\u79f0)",
+    flags=re.IGNORECASE,
+)
 
 
 @dataclass
@@ -92,11 +82,7 @@ class TrimResult:
     report: dict[str, Any]
 
 
-def generate_cleaned_body_markdown(
-    *,
-    markdown_path: Path | str,
-    paper_output_dir: Path | str,
-) -> TrimResult:
+def generate_cleaned_body_markdown(*, markdown_path: Path | str, paper_output_dir: Path | str) -> TrimResult:
     markdown_path = Path(markdown_path)
     paper_output_dir = Path(paper_output_dir)
     stage3_text_dir = paper_output_dir / "stage3_text"
@@ -117,7 +103,7 @@ def trim_markdown_body(markdown_text: str, *, input_markdown_path: Path | str | 
     sections = parse_markdown_sections(markdown_text)
     total_line_count = len(markdown_text.splitlines())
     if not sections:
-        cleaned_text = markdown_text.strip()
+        cleaned_text = _cleanup_residual_lines(markdown_text)
         report = {
             "input_markdown_path": str(input_markdown_path) if input_markdown_path else None,
             "output_cleaned_body_path": None,
@@ -141,12 +127,7 @@ def trim_markdown_body(markdown_text: str, *, input_markdown_path: Path | str | 
         title = str(section.get("title") or "").strip()
         text = str(section.get("text") or "")
         start_line = int(section.get("start_line") or 1)
-        decision, reason = _classify_section(
-            title,
-            text,
-            start_line=start_line,
-            total_line_count=total_line_count,
-        )
+        decision, reason = _classify_section(title, text, start_line=start_line, total_line_count=total_line_count)
         record = {
             "section_id": section.get("section_id"),
             "title": title,
@@ -167,15 +148,17 @@ def trim_markdown_body(markdown_text: str, *, input_markdown_path: Path | str | 
             continue
         kept_sections.append(section)
 
+    kept_sections = _drop_leading_non_body_sections(kept_sections)
+
     if not kept_sections:
         warnings.append("no_trimmed_body_sections_kept_fallback_to_original")
-        cleaned_text = markdown_text.strip()
+        cleaned_text = _cleanup_residual_lines(markdown_text)
         kept_titles: list[str] = []
         cut_start_line = 1
         cut_end_line = total_line_count
     else:
         cleaned_parts = [str(section.get("text") or "").strip() for section in kept_sections]
-        cleaned_text = "\n\n".join(part for part in cleaned_parts if part).strip()
+        cleaned_text = _cleanup_residual_lines("\n\n".join(part for part in cleaned_parts if part))
         kept_titles = [str(section.get("title") or "") for section in kept_sections if section.get("title")]
         cut_start_line = int(kept_sections[0].get("start_line") or 1)
         cut_end_line = int(kept_sections[-1].get("end_line") or total_line_count)
@@ -195,15 +178,11 @@ def trim_markdown_body(markdown_text: str, *, input_markdown_path: Path | str | 
     return TrimResult(cleaned_text=cleaned_text, report=report)
 
 
-def _classify_section(
-    title: str,
-    text: str,
-    *,
-    start_line: int,
-    total_line_count: int,
-) -> tuple[str, str]:
+def _classify_section(title: str, text: str, *, start_line: int, total_line_count: int) -> tuple[str, str]:
     normalized_title = _normalize_title(title)
     if not normalized_title:
+        if _looks_like_cover_page_block(text):
+            return "remove", "cover_page_front_matter"
         if _looks_like_toc_block(text):
             return "remove", "toc_like_front_matter"
         return "keep", "untitled_body_text"
@@ -222,21 +201,7 @@ def _classify_section(
         return "back_matter", "back_matter_boundary"
     if _matches_any(normalized_title, BODY_SECTION_HINTS):
         return "keep", "body_section_keyword"
-    if any(
-        token in normalized_title
-        for token in (
-            "\u7eea\u8bba",
-            "\u524d\u8a00",
-            "\u7efc\u8ff0",
-            "\u5f15\u8a00",
-            "\u7406\u8bba\u57fa\u7840",
-            "缁",
-            "鍓嶈█",
-            "缁艰堪",
-            "寮曡█",
-            "鐞嗚鍩虹",
-        )
-    ):
+    if any(token in normalized_title for token in ("\u7eea\u8bba", "\u524d\u8a00", "\u7efc\u8ff0", "\u5f15\u8a00", "\u7406\u8bba\u57fa\u7840")):
         return "keep", "introductory_body_section"
     return "keep", "default_keep"
 
@@ -256,7 +221,9 @@ def _looks_like_toc_title(title: str) -> bool:
     stripped = title.strip()
     if not stripped:
         return False
-    if _matches_any(_normalize_title(stripped), ("\u76ee\u5f55", "contents", "鐩綍")):
+    if _matches_any(_normalize_title(stripped), ("\u76ee\u5f55", "contents")):
+        return True
+    if NUMBERED_TOC_LINE_PATTERN.match(stripped) and not stripped.startswith("# 2.2.2 "):
         return True
     return bool(TOC_DOT_PATTERN.search(stripped) and TOC_PAGE_PATTERN.search(stripped))
 
@@ -265,7 +232,11 @@ def _looks_like_toc_block(text: str) -> bool:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
         return False
-    toc_like = sum(1 for line in lines[:30] if _looks_like_toc_title(line) or TOC_PAGE_PATTERN.search(line))
+    toc_like = sum(
+        1
+        for line in lines[:30]
+        if _looks_like_toc_title(line) or TOC_PAGE_PATTERN.search(line) or _looks_like_toc_residue_line(line)
+    )
     return toc_like >= 3
 
 
@@ -280,12 +251,7 @@ def _looks_like_toc_back_matter_heading(title: str, normalized_title: str) -> bo
     return bool(re.search(r"(?:[.\s]\s*)(?:\d+|[ivxlcdm]+)\s*$", stripped, flags=re.IGNORECASE))
 
 
-def _is_numbered_internal_reference_heading(
-    title: str,
-    normalized_title: str,
-    start_line: int,
-    total_line_count: int,
-) -> bool:
+def _is_numbered_internal_reference_heading(title: str, normalized_title: str, start_line: int, total_line_count: int) -> bool:
     stripped = title.strip()
     if not stripped:
         return False
@@ -298,12 +264,7 @@ def _is_numbered_internal_reference_heading(
     return (start_line / total_line_count) < 0.7
 
 
-def _looks_like_early_back_matter_heading(
-    title: str,
-    normalized_title: str,
-    start_line: int,
-    total_line_count: int,
-) -> bool:
+def _looks_like_early_back_matter_heading(title: str, normalized_title: str, start_line: int, total_line_count: int) -> bool:
     stripped = title.strip()
     if not stripped or total_line_count <= 0:
         return False
@@ -314,3 +275,89 @@ def _looks_like_early_back_matter_heading(
     if re.match(r"^\d+(?:\.\d+)*", stripped):
         return False
     return True
+
+
+def _looks_like_cover_page_block(text: str) -> bool:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return False
+    cover_hits = sum(1 for line in lines[:25] if TITLE_PAGE_LINE_PATTERN.search(line))
+    return cover_hits >= 2
+
+
+def _drop_leading_non_body_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not sections:
+        return sections
+    for index, section in enumerate(sections):
+        title = str(section.get("title") or "").strip()
+        text = str(section.get("text") or "")
+        if _is_probable_body_section(title, text):
+            return sections[index:]
+    return sections
+
+
+def _is_probable_body_section(title: str, text: str) -> bool:
+    normalized_title = _normalize_title(title)
+    if not normalized_title:
+        return False
+    if _matches_any(normalized_title, FRONT_MATTER_PATTERNS):
+        return False
+    if _looks_like_cover_page_block(text) or _looks_like_toc_block(text):
+        return False
+    if _matches_any(normalized_title, BODY_SECTION_HINTS):
+        return True
+    if any(token in normalized_title for token in ("绪论", "前言", "引言", "综述", "结果", "讨论", "结论")):
+        return True
+    if re.match(r"^(第[一二三四五六七八九十百]+章|\d+(?:\.\d+)*)", title.strip()):
+        return True
+    return False
+
+
+def _looks_like_toc_residue_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    if TOC_DOT_PATTERN.search(stripped) and TOC_PAGE_PATTERN.search(stripped):
+        return True
+    if NUMBERED_TOC_LINE_PATTERN.match(stripped):
+        return True
+    return False
+
+
+def _cleanup_residual_lines(text: str) -> str:
+    lines = text.splitlines()
+    cleaned_lines: list[str] = []
+    body_started = False
+
+    for raw_line in lines:
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            if cleaned_lines and cleaned_lines[-1] != "":
+                cleaned_lines.append("")
+            continue
+
+        if not body_started:
+            if stripped.startswith("![]("):
+                continue
+            if TITLE_PAGE_LINE_PATTERN.search(stripped):
+                continue
+            if _looks_like_toc_residue_line(stripped):
+                continue
+            if stripped.startswith("#"):
+                body_started = True
+
+        if _looks_like_toc_residue_line(stripped):
+            continue
+        if not body_started and TITLE_PAGE_LINE_PATTERN.search(stripped):
+            continue
+
+        cleaned_lines.append(line)
+        if stripped.startswith("#"):
+            body_started = True
+
+    while cleaned_lines and cleaned_lines[0] == "":
+        cleaned_lines.pop(0)
+    while cleaned_lines and cleaned_lines[-1] == "":
+        cleaned_lines.pop()
+    return "\n".join(cleaned_lines).strip()
