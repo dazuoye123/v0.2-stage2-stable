@@ -62,6 +62,16 @@ SEMANTIC_KEYWORDS: dict[str, tuple[str, ...]] = {
     "particle_size_nm": ("particle size", "\u7c92\u5f84", "\u80f6\u7c92"),
     "mass_loss_wt_percent": ("mass loss", "\u603b\u5931\u91cd", "\u8d28\u91cf\u635f\u5931", "\u5931\u91cd"),
     "pvp_content_wt_percent": ("pvp", "\u8d28\u91cf\u5206\u6570", "wt_percent"),
+    "aluminum_source": ("铝粉", "异丙醇铝", "aluminum powder", "aluminum source"),
+    "nitrate_source": ("硝酸铝", "九水合硝酸铝", "nitrate", "aluminum nitrate"),
+    "feeding_method": ("分批加入", "一次性加入", "滴加", "加入方式", "feeding method"),
+    "start_temperature_c": ("加热至", "起始温度", "start temperature", "70"),
+    "reaction_temperature_c": ("反应温度", "加热至", "升温至", "90"),
+    "reaction_time_h": ("反应时间", "保温", "持续", "继续反应"),
+    "hydrolysis_temperature_c": ("水解温度", "hydrolysis temperature"),
+    "hydrolysis_time_h": ("水解时间", "hydrolysis time"),
+    "stirring_speed_rpm": ("搅拌速度", "转速", "rpm"),
+    "al_to_nitrate_molar_ratio": ("铝硝比", "al/no3", "摩尔比"),
     "ambient_temperature_c": ("ambient temperature", "operation box", "spinning chamber", "\u6052\u6e29", "\u73af\u5883\u6e29\u5ea6", "\u64cd\u4f5c\u7bb1"),
     "ph": ("ph", "\u9178\u5ea6"),
     "applied_voltage_kv": ("voltage", "\u7535\u573a", "\u7535\u538b"),
@@ -815,7 +825,116 @@ def _match_process_step_to_parameters(
                     "needs_llm": False,
                 }
             )
+    for parameter in parameters:
+        if any(item["parameter"].get("parameter_id") == parameter.get("parameter_id") for item in matches):
+            continue
+        semantic_match = _match_process_step_semantics(process_step, parameter)
+        if semantic_match is None:
+            continue
+        matches.append(semantic_match)
     return _dedupe_match_specs(matches)
+
+
+def _match_process_step_semantics(
+    process_step: dict[str, Any],
+    parameter: dict[str, Any],
+) -> dict[str, Any] | None:
+    canonical_key = str(parameter.get("canonical_key") or "")
+    if not canonical_key:
+        return None
+    text = _normalize_match_text(_process_step_summary_text(process_step) or "")
+    if not text:
+        return None
+    value = parameter.get("value")
+    unit = None if parameter.get("unit") == "text" else parameter.get("unit")
+
+    reagent_name = str(process_step.get("reagent_name") or "").strip().lower()
+    formula = str(process_step.get("reagent_formula") or "").strip().lower()
+    action_zh = str(process_step.get("action_zh") or "")
+    condition_key = str(process_step.get("condition_key") or "").lower()
+
+    if canonical_key in {"aluminum_source", "nitrate_source"}:
+        reagent_blob = " ".join(part for part in [reagent_name, formula, text] if part)
+        if canonical_key == "aluminum_source" and any(token in reagent_blob for token in ("铝粉", "aluminum powder", "异丙醇铝", "aluminium isopropanol", "aluminum isopropanol")):
+            return _build_process_step_match(parameter, value, unit, 0.82, "process_step_reagent_semantic_match")
+        if canonical_key == "nitrate_source" and any(token in reagent_blob for token in ("硝酸铝", "九水合硝酸铝", "aluminum nitrate", "nitrate")):
+            return _build_process_step_match(parameter, value, unit, 0.82, "process_step_reagent_semantic_match")
+
+    if canonical_key in {"start_temperature_C", "reaction_temperature_C", "hydrolysis_temperature_C"}:
+        temperature_value = process_step.get("temperature_value")
+        if temperature_value is not None:
+            if _parameter_value_matches(parameter, temperature_value, process_step.get("temperature_unit")):
+                return _build_process_step_match(parameter, temperature_value, process_step.get("temperature_unit"), 0.86, "process_step_temperature_semantic_match")
+            if value is None and (
+                _process_step_semantic_keyword_match(canonical_key, text)
+                or any(token in text for token in ("加热", "升温", "反应", "水解", "温度"))
+            ):
+                return _build_process_step_match(
+                    parameter,
+                    temperature_value,
+                    process_step.get("temperature_unit"),
+                    0.72,
+                    "process_step_temperature_observed_value_semantic_match",
+                )
+
+    if canonical_key in {"reaction_time_h", "hydrolysis_time_h"}:
+        duration_value = process_step.get("duration_value")
+        if duration_value is not None:
+            if _parameter_value_matches(parameter, duration_value, process_step.get("duration_unit")):
+                return _build_process_step_match(parameter, duration_value, process_step.get("duration_unit"), 0.84, "process_step_duration_semantic_match")
+            if value is None and (
+                _process_step_semantic_keyword_match(canonical_key, text)
+                or any(token in text for token in ("反应", "保持", "保温", "持续", "水解"))
+            ):
+                return _build_process_step_match(
+                    parameter,
+                    duration_value,
+                    process_step.get("duration_unit"),
+                    0.74,
+                    "process_step_duration_observed_value_semantic_match",
+                )
+
+    if canonical_key == "feeding_method":
+        if any(token in text for token in ("分批加入", "一次性加入", "滴加")):
+            if value is None or _text_contains_value(text, value, unit):
+                return _build_process_step_match(parameter, value, unit, 0.76, "process_step_feeding_method_match")
+
+    if canonical_key in {"stirring_speed_rpm", "Al_to_nitrate_molar_ratio", "ph"}:
+        if value is not None and _text_contains_value(text, value, unit, tolerance=0.05):
+            return _build_process_step_match(parameter, value, unit, 0.8, "process_step_text_value_match")
+
+    if canonical_key == "ph" and ("ph" in text or "酸度" in text):
+        if value is not None and _text_contains_value(text, value, unit, tolerance=0.05):
+            return _build_process_step_match(parameter, value, unit, 0.82, "process_step_ph_match")
+
+    if canonical_key == "feeding_method" and ("加入" in action_zh or "add" in condition_key):
+        if value and str(value) in text:
+            return _build_process_step_match(parameter, value, unit, 0.74, "process_step_feeding_method_text_match")
+
+    return None
+
+
+def _process_step_semantic_keyword_match(canonical_key: str, text: str) -> bool:
+    keyword_tokens = SEMANTIC_KEYWORDS.get(canonical_key.lower()) or ()
+    normalized_tokens = [_normalize_match_text(token) for token in keyword_tokens if token]
+    return any(token in text for token in normalized_tokens)
+
+
+def _build_process_step_match(
+    parameter: dict[str, Any],
+    matched_value: Any,
+    matched_unit: Any,
+    score: float,
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "parameter": parameter,
+        "matched_value": matched_value,
+        "matched_unit": matched_unit,
+        "score": min(score, 1.0),
+        "reason": reason,
+        "needs_llm": False,
+    }
 
 
 def _evidence_semantic_match(parameter: dict[str, Any], evidence_text: str) -> bool:

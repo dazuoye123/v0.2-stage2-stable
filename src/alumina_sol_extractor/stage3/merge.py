@@ -194,6 +194,17 @@ def _build_parameter_records_for_global_constant(
                 normalization_note=f"{base_note}; raw_list_value_preserved_unmaterialized",
             ).model_dump()
         ]
+    if isinstance(value, dict):
+        return [
+            ParameterRecord(
+                canonical_key=canonical_key,
+                raw_name=raw_name,
+                value=None,
+                unit=unit,
+                raw_text=str(value),
+                normalization_note=f"{base_note}; raw_dict_value_preserved_unmaterialized",
+            ).model_dump()
+        ]
     return [
         ParameterRecord(
             canonical_key=canonical_key,

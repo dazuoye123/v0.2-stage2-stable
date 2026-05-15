@@ -50,3 +50,32 @@ def test_flat_datapoint_fields_are_structured_into_sections() -> None:
     assert record["results"]["mechanical_properties"]["tensile_strength_MPa"] == 2100
     assert record["results"]["formability"]["spinnability"] == "good"
     assert record["extended_data"]["unclassified_results"]["unknown_result_flag"] == "keep"
+
+
+def test_flat_datapoint_dict_value_is_preserved_without_breaking_parameter_records() -> None:
+    payload = {
+        "sample_id": "dp-2",
+        "Alb_species_distribution": {
+            "monomeric_Al": 0.04,
+            "Al13^7+": 0.36,
+            "Al30_18+": 1.49,
+        },
+    }
+    ontology = {
+        "Alb_species_distribution": {"standard_unit": None, "category": "structure"},
+    }
+
+    records, parse_issue = _coerce_data_points_payload(
+        payload=payload,
+        series={"series_id": "ES-02"},
+        ontology=ontology,
+        series_index=0,
+    )
+
+    assert parse_issue is None
+    assert len(records) == 1
+    additional = records[0]["additional_parameter_records"]
+    assert len(additional) == 1
+    assert additional[0]["value"] is None
+    assert "Al13^7+" in str(additional[0]["raw_text"] or "")
+    assert "raw_dict_value_preserved_unmaterialized" in str(additional[0]["normalization_note"] or "")

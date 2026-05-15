@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,8 @@ from alumina_sol_extractor.stage3.normalization import (
     reject_noncanonical_records,
     validate_canonical_keys,
 )
+from alumina_sol_extractor.stage3.document_trim import generate_cleaned_body_markdown
+from alumina_sol_extractor.stage3.procedure_sections import select_procedure_sections
 from alumina_sol_extractor.stage3.report import build_stage3_validation_report
 from alumina_sol_extractor.stage3.sections import (
     build_selected_sections_markdown,
@@ -121,7 +124,7 @@ def run_stage3_dspy_smoke_test(
     cleaned_markdown_path: Path,
     output_dir: Path,
     *,
-    paper_text_limit_chars: int | None = 4000,
+    paper_text_limit_chars: int | None = None,
     max_experiment_series: int = 1,
     section_aware: bool = False,
     section_method: str = "rule",
@@ -168,7 +171,6 @@ def _run_live_stage3_extraction(
 ) -> dict[str, Any]:
     configure_dspy_lm(dspy_settings)
 
-    full_paper_text = _read_text_best_effort(cleaned_markdown_path)
     stage2_output_dir = output_dir
     figures_jsonl_path = stage2_output_dir / "figures.jsonl"
     vision_inputs_path = stage2_output_dir / "vision_inputs.jsonl"
@@ -176,6 +178,20 @@ def _run_live_stage3_extraction(
     stage3_dir = stage2_output_dir / stage3_dir_name
     stage3_dir.mkdir(parents=True, exist_ok=True)
     raw_outputs: list[dict[str, Any]] = []
+    stage3_warnings: list[str] = []
+
+    original_markdown_text = _read_text_best_effort(cleaned_markdown_path)
+    cleaned_body_path = stage2_output_dir / "stage3_text" / "cleaned_body.md"
+    try:
+        trimmed = generate_cleaned_body_markdown(
+            markdown_path=cleaned_markdown_path,
+            paper_output_dir=stage2_output_dir,
+        )
+        full_paper_text = trimmed.cleaned_text or original_markdown_text
+    except Exception as exc:  # noqa: BLE001
+        full_paper_text = original_markdown_text
+        stage3_warnings.append(f"cleaned_body_generation_failed:{type(exc).__name__}")
+    effective_markdown_path = cleaned_body_path if cleaned_body_path.exists() else cleaned_markdown_path
 
     figures = _read_jsonl(figures_jsonl_path)
     vision_inputs = _read_jsonl(vision_inputs_path)
@@ -190,12 +206,16 @@ def _run_live_stage3_extraction(
     selected_section_titles: list[str] = []
     selected_chapter_numbers: set[str] = set()
     selected_section_map: list[dict[str, Any]] = []
-    if section_aware:
+    full_text_max_chars = _read_int_env("STAGE3_FULL_TEXT_MAX_CHARS", 30000, stage3_warnings)
+    max_input_chars = _read_int_env("STAGE3_MAX_INPUT_CHARS", 60000, stage3_warnings)
+    actual_section_aware = bool(section_aware or (paper_text_limit_chars is None and len(full_paper_text) > full_text_max_chars))
+    if actual_section_aware:
         if section_method != "rule":
             raise RuntimeError(f"Unsupported section-aware method: {section_method}")
         parsed_sections = parse_markdown_sections(full_paper_text)
         scored_sections = score_sections(parsed_sections, custom_keywords=section_keywords)
         selected_section_map = select_sections(scored_sections, max_sections=max_sections)
+        selected_section_map = _limit_selected_sections_by_chars(selected_section_map, max_chars=max_input_chars)
         selected_sections_text = build_selected_sections_markdown(selected_section_map)
         if selected_sections_text.strip():
             paper_text = selected_sections_text
@@ -221,7 +241,7 @@ def _run_live_stage3_extraction(
         figures=figures,
         vision_inputs=vision_inputs,
         tables_summary=tables_summary,
-        selected_sections_text=selected_sections_text if section_aware else None,
+        selected_sections_text=selected_sections_text if actual_section_aware else None,
         selected_section_titles=selected_section_titles,
         selected_chapter_numbers=selected_chapter_numbers,
         section_keywords=section_keywords,
@@ -232,7 +252,7 @@ def _run_live_stage3_extraction(
     figure_metadata_map = _build_figure_metadata_map(figures, vision_inputs)
     figure_summaries = _summarize_figures(figures)
     captions_and_references = _build_captions_and_references(figures)
-    if section_aware:
+    if actual_section_aware:
         (stage3_dir / "stage3_evidence_scope.json").write_text(
             json.dumps(scoped_inputs["scope"], ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -244,7 +264,7 @@ def _run_live_stage3_extraction(
 
     paper_basic_info_result = ExtractPaperBasicInfoModule().run(
         paper_text_head=paper_text[: max(2000, int(dspy_settings.get("chunk_size", 4000)))],
-        source_file=str(cleaned_markdown_path),
+        source_file=str(effective_markdown_path),
     )
     _append_raw_output(
         raw_outputs,
@@ -277,7 +297,11 @@ def _run_live_stage3_extraction(
         module_name="ExtractExperimentSeriesModule",
         result=experiment_series_result,
     )
-    procedure_text = _extract_procedure_text(full_paper_text)
+    procedure_sections, procedure_text = select_procedure_sections(full_paper_text)
+    (stage3_dir / "stage3_procedure_sections.json").write_text(
+        json.dumps(procedure_sections, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     process_steps_payload: list[dict[str, Any]] = []
     if procedure_text.strip():
         process_steps_result = ExtractProcessStepsModule().run(
@@ -293,7 +317,21 @@ def _run_live_stage3_extraction(
         process_steps_payload = _normalize_process_steps_payload(
             _coerce_list_payload(process_steps_result.payload, "process_steps")
         )
+        if not process_steps_payload:
+            process_steps_payload = _build_rule_based_process_steps(procedure_text)
+            if process_steps_payload:
+                raw_outputs.append(
+                    {
+                        "step_name": "process_steps",
+                        "module_name": "rule_based_procedure_fallback",
+                        "json_parse_ok": True,
+                        "json_parse_error": None,
+                        "raw_output": json.dumps(process_steps_payload, ensure_ascii=False),
+                        "warning": "llm_process_steps_empty_used_rule_based_fallback",
+                    }
+                )
     else:
+        stage3_warnings.append("procedure_text_not_found")
         raw_outputs.append(
             {
                 "step_name": "process_steps",
@@ -352,7 +390,7 @@ def _run_live_stage3_extraction(
     cleaned_paper_basic_info = _postprocess_paper_basic_info(
         payload=paper_basic_info_result.payload,
         paper_text=paper_text,
-        source_file=cleaned_markdown_path,
+        source_file=effective_markdown_path,
     )
     ontology_map = get_ontology_entry_map(project_root)
     cleaned_global_constants, moved_top_level_logs = move_top_level_core_keys_from_global_constants(
@@ -462,6 +500,11 @@ def _run_live_stage3_extraction(
         "raw_dspy_outputs_path": str(stage3_dir / raw_outputs_filename) if raw_outputs_filename else None,
         "paper_text_limit_chars": paper_text_limit_chars,
         "max_experiment_series": max_experiment_series,
+        "stage3_input_mode": "section_aware" if actual_section_aware else "full_cleaned_body",
+        "cleaned_body_char_count": len(full_paper_text),
+        "paper_text_char_count": len(paper_text),
+        "cleaned_body_path": str(cleaned_body_path) if cleaned_body_path.exists() else None,
+        "warnings": stage3_warnings,
     }
     summary.update(validation_summary)
     _write_json(stage3_dir / summary_filename, summary)
@@ -1198,7 +1241,7 @@ def _normalize_datapoint_item(
             process_parameters[key] = value
         else:
             results[key] = value
-        additional_parameter_records.append(parameter_record)
+        additional_parameter_records.extend(_split_parameter_record_dict(parameter_record, ontology))
 
     normalized = {
         "sample_id": sample_id,
@@ -1388,6 +1431,90 @@ def _extract_procedure_text(markdown_text: str) -> str:
     if marker_index >= 0:
         return markdown_text[marker_index : marker_index + 6000].strip()
     return ""
+
+
+def _read_int_env(name: str, default: int, warnings: list[str]) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value in (None, ""):
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError:
+        warnings.append(f"invalid_env_{name}_using_default")
+        return default
+    if value <= 0:
+        warnings.append(f"non_positive_env_{name}_using_default")
+        return default
+    return value
+
+
+def _limit_selected_sections_by_chars(
+    selected_sections: list[dict[str, Any]],
+    *,
+    max_chars: int,
+) -> list[dict[str, Any]]:
+    if max_chars <= 0:
+        return selected_sections
+    limited: list[dict[str, Any]] = []
+    total_chars = 0
+    for section in selected_sections:
+        text = str(section.get("text") or "")
+        if not text:
+            continue
+        if limited and total_chars + len(text) > max_chars:
+            continue
+        limited.append(section)
+        total_chars += len(text)
+        if total_chars >= max_chars:
+            break
+    return limited or selected_sections[:1]
+
+
+def _build_rule_based_process_steps(procedure_text: str) -> list[dict[str, Any]]:
+    action_verbs = (
+        "称取",
+        "加入",
+        "滴加",
+        "搅拌",
+        "加热",
+        "升温",
+        "保温",
+        "冷却",
+        "过滤",
+        "洗涤",
+        "干燥",
+        "煅烧",
+        "研磨",
+        "溶解",
+        "配制",
+        "注入",
+        "纺丝",
+        "收集",
+    )
+    fragments = re.split(r"[。\n；;]+", procedure_text)
+    steps: list[dict[str, Any]] = []
+    for fragment in fragments:
+        sentence = fragment.strip()
+        if not sentence:
+            continue
+        action_zh = next((verb for verb in action_verbs if verb in sentence), None)
+        if not action_zh:
+            continue
+        steps.append(
+            {
+                "step_id": f"fallback-step-{len(steps) + 1:02d}",
+                "step_order": len(steps) + 1,
+                "action": "other",
+                "action_zh": action_zh,
+                "evidence_text": sentence,
+                "confidence": "low",
+                "needs_manual_review": True,
+                "linked_parameter_keys": [],
+                "created_by": "rule_based_procedure_fallback",
+                "normalization_note": "rule_based_procedure_fallback",
+            }
+        )
+    return _normalize_process_steps_payload(steps) if steps else []
 
 
 def _normalize_process_steps_payload(payload: list[Any]) -> list[dict[str, Any]]:
@@ -1846,6 +1973,15 @@ def _split_parameter_record_dict(
         fallback["normalization_note"] = _append_normalization_note(
             fallback.get("normalization_note"),
             "raw_list_value_preserved_unmaterialized",
+        )
+        return [fallback]
+    if isinstance(value, dict):
+        fallback = dict(record)
+        fallback["value"] = None
+        fallback["raw_text"] = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        fallback["normalization_note"] = _append_normalization_note(
+            fallback.get("normalization_note"),
+            "raw_dict_value_preserved_unmaterialized",
         )
         return [fallback]
     if canonical_key == "peptization_time_h" and _looks_like_reaction_time_context(record):

@@ -37,3 +37,30 @@ def test_validator_warns_when_top_level_core_key_remains() -> None:
     issues = validate_no_top_level_core_keys_in_global_constants(record, ontology)
     assert len(issues) == 1
     assert issues[0]["canonical_key"] == "viscosity_Pa_s"
+
+
+def test_top_level_core_key_dict_value_is_preserved_without_invalid_parameter_value() -> None:
+    ontology = {
+        "Alb_species_distribution": {
+            "standard_unit": None,
+            "is_core_statistical_field": True,
+            "zh_name": "Alb 物种分布",
+        }
+    }
+    payload, logs = move_top_level_core_keys_from_global_constants(
+        {
+            "Alb_species_distribution": {
+                "monomeric_Al": 0.04,
+                "Al13^7+": 0.36,
+                "Al30_18+": 1.49,
+            }
+        },
+        ontology,
+    )
+
+    assert "Alb_species_distribution" not in payload
+    record = payload["additional_parameter_records"][0]
+    assert record["value"] is None
+    assert "Al13^7+" in str(record["raw_text"])
+    assert "raw_dict_value_preserved_unmaterialized" in str(record["normalization_note"])
+    assert logs[0]["canonical_key"] == "Alb_species_distribution"

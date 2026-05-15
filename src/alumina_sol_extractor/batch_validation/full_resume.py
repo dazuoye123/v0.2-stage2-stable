@@ -512,18 +512,15 @@ def _run_stage3_live(*, project_root: Path, paper_id: str, markdown_path: Path, 
     settings["dspy"]["enabled"] = True
     settings.setdefault("stage3", {})
     settings["stage3"]["dry_run_validator"] = False
-    text = markdown_path.read_text(encoding="utf-8", errors="ignore")
-    section_aware = len(text) > 30000
-    paper_text_limit_chars = None if section_aware else 5000
     run_stage3_dspy_smoke_test(
         project_root=project_root,
         settings=settings,
         paper_id=paper_id,
         cleaned_markdown_path=markdown_path,
         output_dir=output_dir,
-        paper_text_limit_chars=paper_text_limit_chars,
+        paper_text_limit_chars=None,
         max_experiment_series=1,
-        section_aware=section_aware,
+        section_aware=False,
         section_method="rule",
         max_sections=6,
         section_keywords=DEFAULT_STAGE3_SECTION_KEYWORDS,

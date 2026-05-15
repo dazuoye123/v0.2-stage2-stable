@@ -54,3 +54,24 @@ def test_move_top_level_core_keys_splits_list_valued_spectral_fields() -> None:
     assert [item["value"] for item in payload["additional_parameter_records"]] == [0, 10, 12, 62.5]
     assert all(not isinstance(item["value"], list) for item in payload["additional_parameter_records"])
     assert any(log["canonical_key"] == "nmr_27Al_peak_position_ppm" for log in logs)
+
+
+def test_dict_valued_parameter_is_preserved_in_raw_text_without_breaking_schema() -> None:
+    ontology = get_ontology_entry_map(PROJECT_ROOT)
+
+    records = _coerce_parameter_record_list(
+        {
+            "Alb_species_distribution": {
+                "monomeric_Al": 0.04,
+                "Al13^7+": 0.36,
+                "Al30_18+": 1.49,
+            }
+        },
+        ontology,
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record["value"] is None
+    assert "Al13^7+" in str(record.get("raw_text") or "")
+    assert "raw_dict_value_preserved_unmaterialized" in str(record.get("normalization_note") or "")

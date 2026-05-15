@@ -1,16 +1,14 @@
-"""Lazy DSPy signature definitions for stage 3 extraction."""
+"""Lazy DSPy signature definitions for Stage 3 extraction."""
 
 from __future__ import annotations
 
 
 def get_signatures():
-    """Create DSPy Signature classes lazily so Stage 1/2 don't require dspy."""
+    """Create DSPy Signature classes lazily so Stage 1/2 do not require dspy."""
     try:
         import dspy  # type: ignore
     except ImportError as exc:  # pragma: no cover - only triggered in enabled stage3
-        raise RuntimeError(
-            "DSPy signatures requested but dspy-ai is not installed."
-        ) from exc
+        raise RuntimeError("DSPy signatures requested but dspy-ai is not installed.") from exc
 
     class ExtractPaperBasicInfoSignature(dspy.Signature):
         """Extract document metadata from the paper head. Output JSON only."""
@@ -51,10 +49,13 @@ def get_signatures():
         paper_basic_info_json = dspy.InputField()
         process_steps_json = dspy.OutputField(
             desc=(
-                "Return JSON only as a JSON list. Each item must be an object describing one ordered process step. "
-                "Keep the original sequence, include step_order and evidence_text, and do not invent missing quantities. "
-                "If a quantity is vague like '一定量', keep that text and set needs_manual_review=true. "
-                "Split heat-treatment into separate steps when temperatures/rates/holding times differ. "
+                "Return JSON only as a JSON list. The input is a methods or procedure section, not the whole paper. "
+                "Each item must describe one ordered experimental operation with step_order and evidence_text. "
+                "Extract only experimental actions such as weighing, adding, stirring, heating, holding, cooling, filtering, drying, calcining, spinning, or collecting. "
+                "Do not output background discussion, spectrum interpretation, or references as steps. "
+                "If a quantity is vague like '一定量' or '适量', keep that original text and set needs_manual_review=true. "
+                "Split heating, holding, cooling, and reagent-addition operations into separate steps when temperatures, rates, or holding times differ. "
+                "Preserve reagent_name, reagent_formula, reagent_amount, reagent_unit, reagent_role, equipment, condition_key, condition_value, condition_unit, duration_value, duration_unit, temperature_value, temperature_unit, heating_rate_value, heating_rate_unit, and product_or_outcome whenever supported by the text. "
                 "If no procedure steps are found, return []. Never return null."
             )
         )

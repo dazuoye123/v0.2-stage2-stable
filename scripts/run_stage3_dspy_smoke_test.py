@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
         "--paper-text-limit-chars",
         type=int,
         default=None,
-        help="Truncate cleaned markdown to this many characters for a fast smoke test. Defaults to 4000 in full-text mode and unlimited in section-aware mode.",
+        help="Optional explicit character limit for Stage 3 input. By default, short and medium cleaned-body texts are not truncated.",
     )
     parser.add_argument(
         "--max-experiment-series",
@@ -84,10 +84,6 @@ def main() -> None:
     settings.setdefault("stage3", {})
     settings["stage3"]["dry_run_validator"] = False
     section_keywords = [item.strip() for item in str(args.section_keywords or "").split(",") if item.strip()]
-    paper_text_limit_chars = args.paper_text_limit_chars
-    if paper_text_limit_chars is None and not args.section_aware:
-        paper_text_limit_chars = 4000
-
     try:
         summary = run_stage3_dspy_smoke_test(
             project_root=PROJECT_ROOT,
@@ -95,7 +91,7 @@ def main() -> None:
             paper_id=args.paper_id,
             cleaned_markdown_path=cleaned_markdown_path,
             output_dir=output_dir,
-            paper_text_limit_chars=paper_text_limit_chars,
+            paper_text_limit_chars=args.paper_text_limit_chars,
             max_experiment_series=args.max_experiment_series,
             section_aware=args.section_aware,
             section_method=args.section_method,
