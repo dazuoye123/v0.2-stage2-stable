@@ -17,6 +17,7 @@ from alumina_sol_extractor.dataset_fusion.link_aware_fields import (
     PROCESS_STEPS_TABLE_FIELDS,
     SAMPLE_PARAMETER_MATRIX_FIELDS,
     SPECTRA_PARAMETER_LINK_FIELDS,
+    build_sample_parameter_matrix_fields,
 )
 from alumina_sol_extractor.dataset_fusion.link_aware_io import (
     build_link_aware_diagnosis,
@@ -121,6 +122,9 @@ def generate_link_aware_exports(
         spectra_parameter_links=spectra_parameter_links,
         spectra=spectra,
     )
+    sample_parameter_matrix_fields = build_sample_parameter_matrix_fields(
+        _collect_sample_matrix_dynamic_keys(sample_parameter_matrix)
+    )
     process_steps_table = _build_process_steps_table(
         paper_id=paper_id,
         title=title,
@@ -163,7 +167,7 @@ def generate_link_aware_exports(
     )
     safe_write(
         output_dir / "sample_parameter_matrix.csv",
-        lambda path: write_csv_with_fields(path, sample_parameter_matrix, SAMPLE_PARAMETER_MATRIX_FIELDS),
+        lambda path: write_csv_with_fields(path, sample_parameter_matrix, sample_parameter_matrix_fields),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
@@ -458,6 +462,16 @@ def _build_sample_parameter_matrix(
             or row.get("linked_spectra_ids")
         ):
             parameters_by_sample[sole_sample_id].append(row)
+    sample_matrix_parameter_keys: list[str] = list(CORE_SAMPLE_MATRIX_KEYS)
+    seen_matrix_parameter_keys = set(sample_matrix_parameter_keys)
+    for sample in samples:
+        sample_id = sample.get("sample_id")
+        for item in parameters_by_sample.get(sample_id, []):
+            canonical_key = _string_or_none(item.get("canonical_key"))
+            if not canonical_key or canonical_key in seen_matrix_parameter_keys:
+                continue
+            seen_matrix_parameter_keys.add(canonical_key)
+            sample_matrix_parameter_keys.append(canonical_key)
     spectra_by_id = {_spectra_id_for_figure(item.get("figure_id")): item for item in spectra if item.get("figure_id")}
     for sample in samples:
         sample_id = sample.get("sample_id")
@@ -547,16 +561,29 @@ def _build_sample_parameter_matrix(
             "linked_figure_ids": "; ".join(linked_figure_ids),
         }
         multi_value_keys: list[str] = []
-        for canonical_key in CORE_SAMPLE_MATRIX_KEYS:
+        for canonical_key in sample_matrix_parameter_keys:
             values = [_display_value(item) for item in sample_parameters if item.get("canonical_key") == canonical_key and _display_value(item)]
             unique_values = _sorted_unique(values)
             if len(unique_values) > 1:
                 multi_value_keys.append(canonical_key)
             row[canonical_key] = "; ".join(unique_values)
-        row["matrix_parameter_field_count"] = sum(1 for canonical_key in CORE_SAMPLE_MATRIX_KEYS if row.get(canonical_key))
+        row["matrix_parameter_field_count"] = sum(1 for canonical_key in sample_matrix_parameter_keys if row.get(canonical_key))
         row["multi_value_flags"] = "; ".join(multi_value_keys)
         rows.append(row)
     return rows
+
+
+def _collect_sample_matrix_dynamic_keys(rows: list[dict[str, Any]]) -> list[str]:
+    reserved_fields = set(SAMPLE_PARAMETER_MATRIX_FIELDS)
+    dynamic_keys: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        for key in row:
+            if key in reserved_fields or key in seen:
+                continue
+            seen.add(key)
+            dynamic_keys.append(key)
+    return dynamic_keys
 
 
 def _build_process_steps_table(
@@ -1394,6 +1421,9 @@ def _infer_unit_from_canonical_key(canonical_key: Any) -> str | None:
         ("_wt_percent", "wt%"),
         ("_ppm", "ppm"),
         ("_kV", "kV"),
+        ("_MPa", "MPa"),
+        ("_kg", "kg"),
+        ("_m3", "m3"),
         ("_cm", "cm"),
         ("_mm", "mm"),
         ("_mL", "mL"),

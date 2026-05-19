@@ -819,7 +819,15 @@ def _match_process_step_to_parameters(
                     }
                 )
     for parameter in parameters:
-        if parameter.get("canonical_key") not in {"applied_voltage_kV", "collector_distance_cm", "feed_rate_ml_h"}:
+        if parameter.get("canonical_key") not in {
+            "applied_voltage_kV",
+            "collector_distance_cm",
+            "feed_rate_ml_h",
+            "viscosity_Pa_s",
+            "spinning_channel_temperature_C",
+            "feed_pressure_MPa",
+            "relative_humidity_percent",
+        }:
             continue
         if any(item["parameter"].get("parameter_id") == parameter.get("parameter_id") for item in matches):
             continue
@@ -888,6 +896,16 @@ def _match_process_step_semantics(
     take_up_context = _contains_any(
         normalized_text,
         ["收丝", "牵引", "take-up", "take up", "winding", "wind-up", "line speed", "线速度", "draw"],
+    )
+    viscosity_context = _contains_any(normalized_text, ["粘度", "出胶粘度", "viscosity", "pa_s"]) or "viscosity" in condition_key
+    spinning_channel_context = (
+        _contains_any(normalized_text, ["甬道温度", "spinning channel temperature", "spinning channel", "channel temperature"])
+        or "spinning_channel" in condition_key
+    )
+    feed_pressure_context = _contains_any(normalized_text, ["进料压力", "feed pressure"]) or "feed_pressure" in condition_key
+    relative_humidity_context = (
+        _contains_any(normalized_text, ["环境湿度", "relative humidity", "humidity"])
+        or "humidity" in condition_key
     )
     heat_treatment_context = (
         action in {"heat", "calcine", "sinter"}
@@ -997,6 +1015,22 @@ def _match_process_step_semantics(
     if canonical_key == "take_up_speed_m_min" and take_up_context:
         if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
             return _build_process_step_match(parameter, value, unit, 0.84, "process_step_take_up_speed_text_match")
+
+    if canonical_key == "viscosity_Pa_s" and viscosity_context:
+        if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
+            return _build_process_step_match(parameter, value, unit, 0.86, "process_step_viscosity_text_match")
+
+    if canonical_key == "spinning_channel_temperature_C" and spinning_channel_context:
+        if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
+            return _build_process_step_match(parameter, value, unit, 0.86, "process_step_spinning_channel_temperature_text_match")
+
+    if canonical_key == "feed_pressure_MPa" and feed_pressure_context:
+        if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
+            return _build_process_step_match(parameter, value, unit, 0.86, "process_step_feed_pressure_text_match")
+
+    if canonical_key == "relative_humidity_percent" and relative_humidity_context:
+        if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
+            return _build_process_step_match(parameter, value, unit, 0.84, "process_step_relative_humidity_text_match")
 
     if canonical_key == "heating_rate_C_min" and heat_treatment_context:
         heating_rate_value = process_step.get("heating_rate_value")
@@ -1169,6 +1203,17 @@ def _process_step_text_value_context_allowed(
             or _contains_any(normalized_action, ["electrospin", "spinning", "静电纺丝", "纺丝"])
             or "feed_rate" in condition_key
         )
+    if canonical_key == "viscosity_Pa_s":
+        return _contains_any(normalized_text, ["粘度", "出胶粘度", "viscosity", "pa_s"]) or "viscosity" in condition_key
+    if canonical_key == "spinning_channel_temperature_C":
+        return (
+            _contains_any(normalized_text, ["甬道温度", "spinning channel temperature", "spinning channel", "channel temperature"])
+            or "spinning_channel" in condition_key
+        )
+    if canonical_key == "feed_pressure_MPa":
+        return _contains_any(normalized_text, ["进料压力", "feed pressure", "mpa"]) or "feed_pressure" in condition_key
+    if canonical_key == "relative_humidity_percent":
+        return _contains_any(normalized_text, ["环境湿度", "relative humidity", "humidity"]) or "humidity" in condition_key
     return True
 
 

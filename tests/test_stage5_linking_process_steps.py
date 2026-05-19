@@ -510,3 +510,88 @@ def test_process_step_ph_requires_explicit_ph_context() -> None:
     assert "step-range" not in step_ids
     assert "step-ph" in step_ids
     assert unresolved == []
+
+
+def test_process_step_links_viscosity_and_spinning_conditions_from_context() -> None:
+    paper = {"paper_id": "paper-1", "title": "Spinning Conditions Test"}
+    parameters = [
+        {
+            "parameter_id": "param-viscosity",
+            "canonical_key": "viscosity_Pa_s",
+            "raw_name": "viscosity",
+            "value": 400,
+            "unit": "Pa·s",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+        {
+            "parameter_id": "param-channel-temp",
+            "canonical_key": "spinning_channel_temperature_C",
+            "raw_name": "spinning channel temperature",
+            "value": 25,
+            "unit": "C",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+        {
+            "parameter_id": "param-feed-pressure",
+            "canonical_key": "feed_pressure_MPa",
+            "raw_name": "feed pressure",
+            "value": 8.8,
+            "unit": "MPa",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+        {
+            "parameter_id": "param-humidity",
+            "canonical_key": "relative_humidity_percent",
+            "raw_name": "relative humidity",
+            "value": 30.8,
+            "unit": "%",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+    ]
+    process_steps = [
+        {
+            "step_id": "step-viscosity",
+            "action": "control",
+            "action_zh": "控制",
+            "condition_key": "viscosity_control",
+            "evidence_text": "出胶粘度控制在400Pa·s",
+        },
+        {
+            "step_id": "step-spinning-conditions",
+            "action": "spin",
+            "action_zh": "纺丝",
+            "condition_key": "spinning_channel_conditions",
+            "evidence_text": "甬道温度控制在25°C，进料压力为8.8MPa，环境湿度保持在30.8%左右",
+        },
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+    linked_pairs = {(link["source_id"], link["target_id"]) for link in links}
+
+    assert ("step-viscosity", "param-viscosity") in linked_pairs
+    assert ("step-spinning-conditions", "param-channel-temp") in linked_pairs
+    assert ("step-spinning-conditions", "param-feed-pressure") in linked_pairs
+    assert ("step-spinning-conditions", "param-humidity") in linked_pairs
+    assert unresolved == []

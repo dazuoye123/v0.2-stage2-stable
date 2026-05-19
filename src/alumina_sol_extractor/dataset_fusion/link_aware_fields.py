@@ -62,7 +62,7 @@ FINAL_PARAMETERS_LINKED_FIELDS = [
     "normalization_note",
 ]
 
-SAMPLE_PARAMETER_MATRIX_FIELDS = [
+SAMPLE_PARAMETER_MATRIX_BASE_FIELDS = [
     "paper_id",
     "title",
     "sample_id",
@@ -88,9 +88,29 @@ SAMPLE_PARAMETER_MATRIX_FIELDS = [
     "linked_spectra_figure_ids",
     "linked_spectra_techniques",
     "linked_figure_ids",
-    *CORE_SAMPLE_MATRIX_KEYS,
-    "multi_value_flags",
 ]
+
+SAMPLE_PARAMETER_MATRIX_TRAILING_FIELDS = ["multi_value_flags"]
+
+
+def build_sample_parameter_matrix_fields(additional_keys: list[str] | tuple[str, ...] | set[str] | None = None) -> list[str]:
+    reserved = set(SAMPLE_PARAMETER_MATRIX_BASE_FIELDS) | set(SAMPLE_PARAMETER_MATRIX_TRAILING_FIELDS)
+    dynamic_keys: list[str] = []
+    seen_dynamic: set[str] = set()
+    for key in additional_keys or []:
+        if not key or key in CORE_SAMPLE_MATRIX_KEYS or key in reserved or key in seen_dynamic:
+            continue
+        seen_dynamic.add(key)
+        dynamic_keys.append(key)
+    return [
+        *SAMPLE_PARAMETER_MATRIX_BASE_FIELDS,
+        *CORE_SAMPLE_MATRIX_KEYS,
+        *dynamic_keys,
+        *SAMPLE_PARAMETER_MATRIX_TRAILING_FIELDS,
+    ]
+
+
+SAMPLE_PARAMETER_MATRIX_FIELDS = build_sample_parameter_matrix_fields()
 
 EVIDENCE_PARAMETER_LINK_FIELDS = [
     "paper_id",
