@@ -675,12 +675,15 @@ def _text_contains_value(text: str | None, value: Any, unit: Any = None, toleran
     numeric = _to_float(value)
     if numeric is not None:
         value_tokens = {f"{numeric:g}", f"{numeric:.1f}", f"{numeric:.2f}"}
+        unit_text = _normalize_unit_text(unit)
         for token in value_tokens:
-            if token in haystack:
-                if unit:
-                    unit_text = _normalize_unit_text(unit)
-                    if unit_text and unit_text not in haystack:
-                        continue
+            token_pattern = rf"(?<![\d.]){re.escape(token)}(?![\d.])"
+            if unit_text:
+                unit_pattern = rf"{token_pattern}\s*{re.escape(unit_text)}(?![a-z])"
+                if re.search(unit_pattern, haystack):
+                    return True
+                continue
+            if re.search(token_pattern, haystack):
                 return True
         if tolerance > 0:
             for range_match in re.finditer(r"(\d+(?:\.\d+)?)\s*[-~]\s*(\d+(?:\.\d+)?)", haystack):
@@ -776,6 +779,10 @@ def _match_process_step_to_parameters(
 ) -> list[dict[str, Any]]:
     text = _process_step_summary_text(process_step) or ""
     action = str(process_step.get("action") or "").lower()
+    action_zh = str(process_step.get("action_zh") or "")
+    condition_key = str(process_step.get("condition_key") or "").lower()
+    normalized_text = _normalize_match_text(text)
+    normalized_action = _normalize_match_text(action_zh)
     matches: list[dict[str, Any]] = []
     candidate_specs = [
         (
@@ -815,6 +822,13 @@ def _match_process_step_to_parameters(
         if parameter.get("canonical_key") not in {"applied_voltage_kV", "collector_distance_cm", "feed_rate_ml_h"}:
             continue
         if any(item["parameter"].get("parameter_id") == parameter.get("parameter_id") for item in matches):
+            continue
+        if not _process_step_text_value_context_allowed(
+            str(parameter.get("canonical_key") or ""),
+            normalized_text,
+            normalized_action,
+            condition_key,
+        ):
             continue
         if _parameter_value_matches(parameter, parameter.get("value"), parameter.get("unit")) and _text_contains_value(text, parameter.get("value"), parameter.get("unit")):
             matches.append(
@@ -1097,6 +1111,39 @@ def _process_step_semantic_keyword_match(canonical_key: str, text: str) -> bool:
     keyword_tokens = SEMANTIC_KEYWORDS.get(canonical_key.lower()) or ()
     normalized_tokens = [_normalize_match_text(token) for token in keyword_tokens if token]
     return any(token in text for token in normalized_tokens)
+
+
+def _process_step_text_value_context_allowed(
+    canonical_key: str,
+    normalized_text: str,
+    normalized_action: str,
+    condition_key: str,
+) -> bool:
+    def _contains_any(text: str, tokens: tuple[str, ...] | list[str]) -> bool:
+        return any(_normalize_match_text(token) in text for token in tokens if token)
+
+    if canonical_key == "collector_distance_cm":
+        return (
+            _contains_any(
+                normalized_text,
+                ["distance", "collector distance", "距离", "间距", "接收板", "喷丝头", "collector", "needle"],
+            )
+            or _contains_any(normalized_action, ["electrospin", "静电纺丝"])
+            or "collector_distance" in condition_key
+        )
+    if canonical_key == "applied_voltage_kV":
+        return (
+            _contains_any(normalized_text, ["voltage", "electric field", "电压", "电场", "kv"])
+            or _contains_any(normalized_action, ["electrospin", "静电纺丝"])
+            or "voltage" in condition_key
+        )
+    if canonical_key == "feed_rate_ml_h":
+        return (
+            _contains_any(normalized_text, ["feed rate", "进料", "送料", "送液", "feeding rate", "ml_h"])
+            or _contains_any(normalized_action, ["electrospin", "spinning", "静电纺丝", "纺丝"])
+            or "feed_rate" in condition_key
+        )
+    return True
 
 
 def _build_process_step_match(

@@ -365,3 +365,100 @@ def test_process_step_links_heating_rate_from_heat_treatment_context() -> None:
 
     assert any(link["target_id"] == "param-rate" for link in links)
     assert unresolved == []
+
+
+def test_process_step_does_not_numeric_substring_match_collector_distance() -> None:
+    paper = {"paper_id": "paper-1", "title": "Substring Guard Test"}
+    parameters = [
+        {
+            "parameter_id": "param-distance",
+            "canonical_key": "collector_distance_cm",
+            "raw_name": "collector distance",
+            "value": 20,
+            "unit": "cm",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+        {
+            "parameter_id": "param-hold",
+            "canonical_key": "holding_time_h",
+            "raw_name": "holding time",
+            "value": 2,
+            "unit": "h",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+    ]
+    process_steps = [
+        {
+            "step_id": "step-calcine",
+            "action": "calcine",
+            "action_zh": "煅烧",
+            "temperature_value": 1200,
+            "temperature_unit": "C",
+            "duration_value": 2,
+            "duration_unit": "h",
+            "evidence_text": "再于 1200°C 煅烧 2 h",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+    target_ids = {link["target_id"] for link in links}
+
+    assert "param-distance" not in target_ids
+    assert "param-hold" in target_ids
+    assert unresolved == []
+
+
+def test_process_step_links_collector_distance_in_distance_context() -> None:
+    paper = {"paper_id": "paper-1", "title": "Collector Distance Test"}
+    parameters = [
+        {
+            "parameter_id": "param-distance",
+            "canonical_key": "collector_distance_cm",
+            "raw_name": "collector distance",
+            "value": 20,
+            "unit": "cm",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        }
+    ]
+    process_steps = [
+        {
+            "step_id": "step-electrospin-distance",
+            "action": "electrospin",
+            "action_zh": "静电纺丝",
+            "evidence_text": "喷丝头与接收板距离为 20 cm",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+
+    assert any(link["target_id"] == "param-distance" for link in links)
+    assert unresolved == []
