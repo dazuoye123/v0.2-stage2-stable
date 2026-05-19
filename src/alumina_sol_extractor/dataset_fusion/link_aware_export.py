@@ -26,6 +26,11 @@ from alumina_sol_extractor.dataset_fusion.link_aware_io import (
     write_parquet_with_fields,
 )
 from alumina_sol_extractor.dataset_fusion.loaders import read_json, read_jsonl
+from alumina_sol_extractor.dataset_fusion.spectra_units import (
+    coerce_peak_unit,
+    normalize_parameter_unit,
+    normalize_unit_text as normalize_shared_unit_text,
+)
 from alumina_sol_extractor.ontology.ontology_loader import get_ontology_entry_map
 
 _build_link_aware_summary = build_link_aware_summary
@@ -326,6 +331,12 @@ def _build_final_parameters_linked(
         evidence_rows = evidence_link_rows_by_parameter.get(parameter_id, [])
         process_step_rows = [row for row in evidence_rows if row.get("source_type") == "process_step"]
         evidence_object_rows = [row for row in evidence_rows if row.get("source_type") == "evidence_object" or row.get("created_by") == "direct_evidence_refs"]
+        text_reference_rows = [
+            row
+            for row in evidence_rows
+            if row.get("source_type") == "text_reference" or row.get("created_by") == "direct_text_evidence_refs"
+        ]
+        linked_evidence_rows = [*evidence_object_rows, *text_reference_rows]
         spectra_rows = spectra_link_rows_by_parameter.get(parameter_id, [])
         linked_evidence_ids = _sorted_unique(
             explicit_evidence_ids
@@ -349,13 +360,13 @@ def _build_final_parameters_linked(
         )
         evidence_text_preview = _sorted_unique(
             [row.get("evidence_text_preview") for row in process_step_rows if row.get("evidence_text_preview")]
-            + [row.get("evidence_text_preview") for row in evidence_object_rows if row.get("evidence_text_preview")]
+            + [row.get("evidence_text_preview") for row in linked_evidence_rows if row.get("evidence_text_preview")]
         )
 
         value_meta = _normalize_parameter_value(parameter.get("value"), parameter.get("unit"), parameter.get("canonical_key"))
         evidence_status = _resolve_evidence_status(
             explicit_evidence_ids,
-            evidence_object_rows,
+            linked_evidence_rows,
             spectra_rows,
             linked_sample_ids,
             process_step_rows,
@@ -364,11 +375,16 @@ def _build_final_parameters_linked(
         if len(linked_sample_ids) > 1:
             quality_flags.append("multiple_sample_links")
 
+        direct_strong_evidence_rows = [
+            row
+            for row in text_reference_rows
+            if row.get("confidence") == "high"
+        ]
         strong_link_count = sum(
             1
             for link in parameter_links
             if (link.get("confidence") in {"high", "medium"} and link.get("link_type") != "weak_supports")
-        ) + len([row for row in evidence_rows if row.get("created_by") in {"direct_evidence_refs", "deterministic_process_step_value_match"}])
+        ) + len([row for row in evidence_rows if row.get("created_by") in {"direct_evidence_refs", "deterministic_process_step_value_match"}]) + len(direct_strong_evidence_rows)
         weak_link_count = sum(
             1
             for link in parameter_links
@@ -403,7 +419,7 @@ def _build_final_parameters_linked(
                 "link_confidences": "; ".join(link_confidences),
                 "link_reasoning_preview": " | ".join(link_reasoning_preview),
                 "evidence_text_preview": " | ".join(evidence_text_preview),
-                "link_count": len(parameter_links) + len(explicit_evidence_ids),
+                "link_count": len(parameter_links) + len(explicit_evidence_ids) + len(text_reference_rows),
                 "strong_link_count": strong_link_count,
                 "weak_link_count": weak_link_count,
                 "evidence_status": evidence_status,
@@ -621,7 +637,9 @@ def _build_evidence_parameter_links(
                 "parameter_id": parameter_row.get("parameter_id"),
                 "canonical_key": parameter_row.get("canonical_key"),
                 "parameter_value": parameter_row.get("value"),
-                "unit": None if parameter_row.get("unit") == "text" else parameter_row.get("unit"),
+                "unit": None
+                if parameter_row.get("unit") == "text"
+                else normalize_parameter_unit(parameter_row.get("unit"), parameter_row.get("canonical_key")),
                 "sample_id": parameter_row.get("sample_id"),
                 "link_type": link_type,
                 "confidence": confidence,
@@ -689,6 +707,18 @@ def _build_evidence_parameter_links(
                     reasoning="parameter.evidence_refs contains evidence reference",
                     created_by="direct_evidence_refs",
                 )
+        for text_ref in _extract_direct_text_evidence_refs(parameter_row):
+            add_row(
+                "text_reference",
+                text_ref["source_id"],
+                text_ref["evidence_text_preview"],
+                None,
+                parameter_row,
+                link_type="supports",
+                confidence=text_ref["confidence"],
+                reasoning=text_ref["reasoning"],
+                created_by="direct_text_evidence_refs",
+            )
 
     return rows
 
@@ -749,7 +779,7 @@ def _build_spectra_parameter_links(
                 "parameter_id": parameter_id,
                 "canonical_key": canonical_key,
                 "parameter_value": parameter_value,
-                "unit": None if unit == "text" else unit,
+                "unit": None if unit == "text" else normalize_parameter_unit(unit, canonical_key),
                 "sample_id": sample_id,
                 "link_type": link_type,
                 "confidence": confidence,
@@ -777,11 +807,21 @@ def _build_spectra_parameter_links(
             figure_type=spectra_row.get("figure_type"),
             technique=spectra_row.get("technique"),
             peak_position=peak.get("position"),
-            peak_unit=peak.get("unit"),
+            peak_unit=coerce_peak_unit(
+                peak.get("unit"),
+                figure_type=spectra_row.get("figure_type"),
+                canonical_key=parameter_row.get("canonical_key"),
+                technique=spectra_row.get("technique"),
+            ),
             assignment=peak.get("assignment"),
             source=peak.get("source"),
             observed_value=peak.get("position"),
-            observed_unit=peak.get("unit"),
+            observed_unit=coerce_peak_unit(
+                peak.get("unit"),
+                figure_type=spectra_row.get("figure_type"),
+                canonical_key=parameter_row.get("canonical_key"),
+                technique=spectra_row.get("technique"),
+            ),
             parameter_id=parameter_id,
             canonical_key=parameter_row.get("canonical_key"),
             parameter_value=parameter_row.get("value"),
@@ -881,13 +921,26 @@ def _build_spectra_parameter_links(
         if not spectra_row:
             continue
         all_positions = "; ".join(_sorted_unique([_stringify(peak.get("position")) for peak in spectra_row.get("peaks", []) if peak.get("position") is not None]))
-        all_units = "; ".join(_sorted_unique([peak.get("unit") for peak in spectra_row.get("peaks", []) if peak.get("unit")]))
-        all_assignments = "; ".join(_sorted_unique([peak.get("assignment") for peak in spectra_row.get("peaks", []) if peak.get("assignment")]))
-        all_sources = "; ".join(_sorted_unique([peak.get("source") for peak in spectra_row.get("peaks", []) if peak.get("source")]))
         for row in evidence_links:
             parameter_row = parameter_by_id.get(row.get("parameter_id"))
             if not parameter_row:
                 continue
+            all_units = "; ".join(
+                _sorted_unique(
+                    [
+                        coerce_peak_unit(
+                            peak.get("unit"),
+                            figure_type=spectra_row.get("figure_type"),
+                            canonical_key=parameter_row.get("canonical_key"),
+                            technique=spectra_row.get("technique"),
+                        )
+                        for peak in spectra_row.get("peaks", [])
+                        if peak.get("unit")
+                    ]
+                )
+            )
+            all_assignments = "; ".join(_sorted_unique([peak.get("assignment") for peak in spectra_row.get("peaks", []) if peak.get("assignment")]))
+            all_sources = "; ".join(_sorted_unique([peak.get("source") for peak in spectra_row.get("peaks", []) if peak.get("source")]))
             add_row(
                 spectra_id=spectra_id,
                 figure_id=spectra_row.get("figure_id"),
@@ -989,7 +1042,7 @@ def _build_final_showcase_table(
 
 
 def _normalize_parameter_value(value: Any, unit: Any, canonical_key: Any = None) -> dict[str, Any]:
-    unit_text = _normalize_unit_text(unit) or _infer_unit_from_canonical_key(canonical_key)
+    unit_text = normalize_parameter_unit(unit, canonical_key) or _infer_unit_from_canonical_key(canonical_key)
     value_raw = value
     value_num = None
     value_text = None
@@ -1070,6 +1123,91 @@ def _extract_explicit_evidence_ids(
         if figure_id and figure_id in evidence_by_figure:
             resolved.extend(item.get("evidence_id") for item in evidence_by_figure[figure_id] if item.get("evidence_id"))
     return _sorted_unique(resolved)
+
+
+def _extract_direct_text_evidence_refs(parameter_row: dict[str, Any]) -> list[dict[str, str]]:
+    rows_by_source_id: dict[str, dict[str, str]] = {}
+    fallback_preview = next(
+        (
+            candidate
+            for candidate in (
+                _string_or_none(parameter_row.get("quote_or_context")),
+                _string_or_none(parameter_row.get("source_text")),
+                _string_or_none(parameter_row.get("text")),
+                _string_or_none(parameter_row.get("raw_name")),
+            )
+            if candidate
+        ),
+        None,
+    )
+
+    def add_row(
+        source_id: str,
+        *,
+        evidence_text_preview: str | None,
+        confidence: str,
+        reasoning: str,
+    ) -> None:
+        existing = rows_by_source_id.get(source_id)
+        if existing is None:
+            rows_by_source_id[source_id] = {
+                "source_id": source_id,
+                "evidence_text_preview": _truncate(evidence_text_preview or source_id, 120),
+                "confidence": confidence,
+                "reasoning": reasoning,
+            }
+            return
+        if _confidence_rank(confidence) > _confidence_rank(existing.get("confidence")):
+            existing["confidence"] = confidence
+        if evidence_text_preview and existing.get("evidence_text_preview") == source_id:
+            existing["evidence_text_preview"] = _truncate(evidence_text_preview, 120)
+
+    for ref in parameter_row.get("evidence_refs") or []:
+        source_id = None
+        quote_or_context = None
+        section = None
+        confidence = "medium"
+        if isinstance(ref, dict):
+            source_id = _string_or_none(ref.get("source_id"))
+            quote_or_context = _string_or_none(ref.get("quote_or_context"))
+            section = _string_or_none(ref.get("section"))
+            confidence = _normalize_confidence_label(ref.get("confidence"))
+        elif isinstance(ref, str):
+            source_id = _string_or_none(ref)
+        if not source_id or not source_id.startswith("text:"):
+            continue
+        preview_source = quote_or_context or section or fallback_preview or source_id
+        reasoning = "parameter already carries text reference in evidence_refs"
+        if section:
+            reasoning = f"{reasoning} ({section})"
+        add_row(
+            source_id,
+            evidence_text_preview=preview_source,
+            confidence=confidence,
+            reasoning=reasoning,
+        )
+
+    for source_id in _extract_matched_full_text_refs(parameter_row.get("normalization_note")):
+        add_row(
+            source_id,
+            evidence_text_preview=fallback_preview or source_id,
+            confidence="medium",
+            reasoning="derived from normalization_note matched_full_text text reference",
+        )
+
+    return list(rows_by_source_id.values())
+
+
+def _extract_matched_full_text_refs(normalization_note: Any) -> list[str]:
+    note = _string_or_none(normalization_note)
+    if not note:
+        return []
+    return _sorted_unique(re.findall(r"matched_full_text:(text:[^;,\s]+)", note))
+
+
+def _confidence_rank(label: Any) -> int:
+    normalized = _normalize_confidence_label(label)
+    return {"low": 0, "medium": 1, "high": 2}.get(normalized, 1)
 
 
 def _parse_peak_source_id(source_id: str | None) -> dict[str, Any] | None:
@@ -1187,23 +1325,7 @@ def _string_or_none(value: Any) -> str | None:
 
 
 def _normalize_unit_text(unit: Any) -> str | None:
-    unit_text = _string_or_none(unit)
-    if unit_text in {None, "None", "null", "dimensionless", "nan"}:
-        return None
-    normalized = {
-        "ml/h": "mL/h",
-        "ml / h": "mL/h",
-        "c/min": "C/min",
-        "?c/min": "C/min",
-        "?/min": "C/min",
-        "c": "C",
-        "?c": "C",
-        "?": "C",
-        "cm^-1": "cm-1",
-        "wt%": "wt%",
-    }
-    lookup = normalized.get(unit_text.lower())
-    return lookup or unit_text
+    return normalize_shared_unit_text(unit)
 
 
 def _infer_unit_from_canonical_key(canonical_key: Any) -> str | None:
@@ -1263,6 +1385,19 @@ def _coerce_str_list(value: Any) -> list[str]:
         stripped = value.strip()
         return [stripped] if stripped else []
     return [str(value)]
+
+
+def _normalize_confidence_label(value: Any) -> str:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if value >= 0.75:
+            return "high"
+        if value >= 0.4:
+            return "medium"
+        return "low"
+    text = (_string_or_none(value) or "").casefold()
+    if text in {"high", "medium", "low"}:
+        return text
+    return "medium"
 
 
 def _sorted_unique(values: list[Any]) -> list[str]:

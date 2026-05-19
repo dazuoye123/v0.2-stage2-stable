@@ -118,3 +118,250 @@ def test_process_step_reagent_amount_without_parameter_does_not_fabricate_match(
         max_candidates_per_type=20,
     )
     assert all("ice acetic acid" not in str(item.get("candidate_reason", "")).lower() for item in candidates)
+
+
+def test_process_step_links_drying_temperature_without_hydrolysis_false_positive() -> None:
+    paper = {"paper_id": "paper-1", "title": "Drying Test"}
+    parameters = [
+        {
+            "parameter_id": "param-drying",
+            "canonical_key": "drying_temperature_C",
+            "raw_name": "drying temperature",
+            "value": 90,
+            "unit": "C",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+        {
+            "parameter_id": "param-hydrolysis",
+            "canonical_key": "hydrolysis_temperature_C",
+            "raw_name": "hydrolysis temperature",
+            "value": 90,
+            "unit": "C",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+    ]
+    process_steps = [
+        {
+            "step_id": "step-dry",
+            "action": "dry",
+            "action_zh": "干燥",
+            "temperature_value": 90,
+            "temperature_unit": "C",
+            "evidence_text": "The gel fibers were dried at 90 C before the next step.",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+    target_ids = {link["target_id"] for link in links}
+
+    assert "param-drying" in target_ids
+    assert "param-hydrolysis" not in target_ids
+    assert unresolved == []
+
+
+def test_process_step_links_concentration_temperature_and_time() -> None:
+    paper = {"paper_id": "paper-1", "title": "Concentration Test"}
+    parameters = [
+        {
+            "parameter_id": "param-temp",
+            "canonical_key": "concentration_temperature_C",
+            "raw_name": "concentration temperature",
+            "value": 45,
+            "unit": "C",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+        {
+            "parameter_id": "param-time",
+            "canonical_key": "concentration_time_h",
+            "raw_name": "concentration time",
+            "value": "18-24",
+            "unit": "h",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+    ]
+    process_steps = [
+        {
+            "step_id": "step-concentrate",
+            "action": "concentrate",
+            "action_zh": "减压浓缩",
+            "temperature_value": 45,
+            "temperature_unit": "C",
+            "duration_value": "18–24",
+            "duration_unit": "h",
+            "evidence_text": "The spinning dope was concentrated in a 45 C water bath under reduced pressure for 18–24 h.",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+    target_ids = {link["target_id"] for link in links}
+
+    assert "param-temp" in target_ids
+    assert "param-time" in target_ids
+    assert unresolved == []
+
+
+def test_process_step_links_peptization_time_without_hydrolysis_false_positive() -> None:
+    paper = {"paper_id": "paper-1", "title": "Peptization Test"}
+    parameters = [
+        {
+            "parameter_id": "param-peptization",
+            "canonical_key": "peptization_time_h",
+            "raw_name": "peptization time",
+            "value": 4,
+            "unit": "h",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+        {
+            "parameter_id": "param-hydrolysis",
+            "canonical_key": "hydrolysis_time_h",
+            "raw_name": "hydrolysis time",
+            "value": 4,
+            "unit": "h",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        },
+    ]
+    process_steps = [
+        {
+            "step_id": "step-peptize",
+            "action": "stir",
+            "action_zh": "调节pH并搅拌",
+            "duration_value": 4,
+            "duration_unit": "h",
+            "evidence_text": "After adding concentrated nitric acid to adjust pH, the sol was stirred for 4 h.",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+    target_ids = {link["target_id"] for link in links}
+
+    assert "param-peptization" in target_ids
+    assert "param-hydrolysis" not in target_ids
+    assert unresolved == []
+
+
+def test_process_step_links_take_up_speed_from_take_up_context() -> None:
+    paper = {"paper_id": "paper-1", "title": "Take-Up Test"}
+    parameters = [
+        {
+            "parameter_id": "param-takeup",
+            "canonical_key": "take_up_speed_m_min",
+            "raw_name": "take-up speed",
+            "value": 160,
+            "unit": "m/min",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        }
+    ]
+    process_steps = [
+        {
+            "step_id": "step-takeup",
+            "action": "take_up",
+            "action_zh": "收丝牵引",
+            "evidence_text": "The green fibers were collected by take-up winding at a line speed of 160 m/min.",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+
+    assert any(link["target_id"] == "param-takeup" for link in links)
+    assert unresolved == []
+
+
+def test_process_step_links_heating_rate_from_heat_treatment_context() -> None:
+    paper = {"paper_id": "paper-1", "title": "Heating Rate Test"}
+    parameters = [
+        {
+            "parameter_id": "param-rate",
+            "canonical_key": "heating_rate_C_min",
+            "raw_name": "heating rate",
+            "value": "1-5",
+            "unit": "C/min",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        }
+    ]
+    process_steps = [
+        {
+            "step_id": "step-sinter",
+            "action": "sinter",
+            "action_zh": "升温烧结",
+            "evidence_text": "The fibers were heated for sintering at 1-5 C/min before reaching the target temperature.",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+
+    assert any(link["target_id"] == "param-rate" for link in links)
+    assert unresolved == []

@@ -18,6 +18,7 @@ def build_link_aware_summary(
     include_showcase: bool,
 ) -> dict[str, Any]:
     primary_statuses = {"strong_evidence", "process_step_evidence", "linked_evidence", "linked_spectra"}
+    evidence_link_statuses = {"strong_evidence", "process_step_evidence", "linked_evidence"}
     showcase_complete = include_showcase and bool(showcase_rows) and any(
         row.get("evidence_status") in primary_statuses for row in final_parameters_linked
     )
@@ -42,17 +43,21 @@ def build_link_aware_summary(
         "parameters_with_any_link": sum(
             1
             for row in final_parameters_linked
-            if row.get("linked_sample_ids") or row.get("linked_evidence_ids") or row.get("linked_spectra_ids")
+            if row.get("linked_sample_ids")
+            or row.get("linked_spectra_ids")
+            or row.get("evidence_status") in primary_statuses
         ),
         "parameters_with_sample_link": sum(1 for row in final_parameters_linked if row.get("linked_sample_ids")),
         "parameters_with_evidence_link": sum(
-            1 for row in final_parameters_linked if row.get("evidence_status") in {"strong_evidence", "process_step_evidence", "linked_evidence"}
+            1 for row in final_parameters_linked if row.get("evidence_status") in evidence_link_statuses
         ),
         "parameters_with_spectra_link": sum(1 for row in final_parameters_linked if row.get("linked_spectra_ids")),
         "parameters_missing_all_links": sum(
             1
             for row in final_parameters_linked
-            if not row.get("linked_sample_ids") and not row.get("linked_evidence_ids") and not row.get("linked_spectra_ids")
+            if not row.get("linked_sample_ids")
+            and not row.get("linked_spectra_ids")
+            and row.get("evidence_status") not in primary_statuses
         ),
         "total_evidence_parameter_links": len(evidence_parameter_links),
         "total_spectra_parameter_links": len(spectra_parameter_links),

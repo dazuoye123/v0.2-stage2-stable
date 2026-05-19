@@ -854,11 +854,34 @@ def _match_process_step_semantics(
     reagent_name = str(process_step.get("reagent_name") or "").strip()
     formula = str(process_step.get("reagent_formula") or "").strip()
     action_zh = str(process_step.get("action_zh") or "")
+    action = str(process_step.get("action") or "").lower()
     condition_key = str(process_step.get("condition_key") or "").lower()
+    normalized_action = _normalize_match_text(action_zh)
     normalized_reagent_blob = _normalize_match_text(" ".join(part for part in [reagent_name, formula, summary_text] if part))
 
     def _contains_any(text: str, tokens: tuple[str, ...] | list[str]) -> bool:
         return any(_normalize_match_text(token) in text for token in tokens if token)
+
+    drying_context = _contains_any(normalized_text, ["干燥", "drying", "dry"]) or _contains_any(normalized_action, ["干燥", "dry"])
+    concentration_context = (
+        _contains_any(normalized_text, ["减压浓缩", "浓缩", "真空浓缩", "vacuum concentration", "concentrat", "water bath", "水浴"])
+        or "concentration" in condition_key
+    )
+    peptization_context = (
+        _contains_any(normalized_text, ["胶溶", "peptization", "硝酸", "nitric acid", "调节ph", "ph", "继续搅拌"])
+        and _contains_any(normalized_text, ["胶溶", "peptization", "硝酸", "nitric acid", "调节ph", "ph"])
+    )
+    take_up_context = _contains_any(
+        normalized_text,
+        ["收丝", "牵引", "take-up", "take up", "winding", "wind-up", "line speed", "线速度", "draw"],
+    )
+    heat_treatment_context = (
+        action in {"heat", "calcine", "sinter"}
+        or _contains_any(normalized_action, ["升温", "烧结", "煅烧", "热处理"])
+        or _contains_any(normalized_text, ["升温", "烧结", "煅烧", "热处理", "sinter", "calcination", "calcine"])
+    )
+    hydrolysis_context = _contains_any(normalized_text, ["水解", "hydrolysis"])
+    reaction_context = _contains_any(normalized_text, ["反应", "reaction"])
 
     if canonical_key in {"aluminum_source", "nitrate_source", "solvent_type", "water_source"}:
         if canonical_key == "aluminum_source" and _contains_any(
@@ -877,14 +900,138 @@ def _match_process_step_semantics(
         ):
             return _build_process_step_match(parameter, value, unit, 0.72, "process_step_solvent_semantic_match")
 
+    if canonical_key == "drying_temperature_C":
+        temperature_value = process_step.get("temperature_value")
+        if temperature_value is not None and drying_context:
+            if _parameter_value_matches(parameter, temperature_value, process_step.get("temperature_unit")):
+                return _build_process_step_match(
+                    parameter,
+                    temperature_value,
+                    process_step.get("temperature_unit"),
+                    0.9,
+                    "process_step_drying_temperature_semantic_match",
+                )
+            if value is None:
+                return _build_process_step_match(
+                    parameter,
+                    temperature_value,
+                    process_step.get("temperature_unit"),
+                    0.76,
+                    "process_step_drying_temperature_observed_value_semantic_match",
+                )
+
+    if canonical_key == "concentration_temperature_C":
+        temperature_value = process_step.get("temperature_value")
+        if temperature_value is not None and concentration_context:
+            if _parameter_value_matches(parameter, temperature_value, process_step.get("temperature_unit")):
+                return _build_process_step_match(
+                    parameter,
+                    temperature_value,
+                    process_step.get("temperature_unit"),
+                    0.9,
+                    "process_step_concentration_temperature_semantic_match",
+                )
+            if value is None:
+                return _build_process_step_match(
+                    parameter,
+                    temperature_value,
+                    process_step.get("temperature_unit"),
+                    0.76,
+                    "process_step_concentration_temperature_observed_value_semantic_match",
+                )
+
+    if canonical_key == "concentration_time_h":
+        duration_value = process_step.get("duration_value")
+        if duration_value is not None and concentration_context:
+            if _parameter_value_matches(parameter, duration_value, process_step.get("duration_unit")):
+                return _build_process_step_match(
+                    parameter,
+                    duration_value,
+                    process_step.get("duration_unit"),
+                    0.88,
+                    "process_step_concentration_duration_semantic_match",
+                )
+            if value is None:
+                return _build_process_step_match(
+                    parameter,
+                    duration_value,
+                    process_step.get("duration_unit"),
+                    0.74,
+                    "process_step_concentration_duration_observed_value_semantic_match",
+                )
+
+    if canonical_key == "peptization_time_h":
+        duration_value = process_step.get("duration_value")
+        if duration_value is not None and peptization_context:
+            if _parameter_value_matches(parameter, duration_value, process_step.get("duration_unit")):
+                return _build_process_step_match(
+                    parameter,
+                    duration_value,
+                    process_step.get("duration_unit"),
+                    0.88,
+                    "process_step_peptization_duration_semantic_match",
+                )
+            if value is None:
+                return _build_process_step_match(
+                    parameter,
+                    duration_value,
+                    process_step.get("duration_unit"),
+                    0.74,
+                    "process_step_peptization_duration_observed_value_semantic_match",
+                )
+
+    if canonical_key == "take_up_speed_m_min" and take_up_context:
+        if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
+            return _build_process_step_match(parameter, value, unit, 0.84, "process_step_take_up_speed_text_match")
+
+    if canonical_key == "heating_rate_C_min" and heat_treatment_context:
+        heating_rate_value = process_step.get("heating_rate_value")
+        heating_rate_unit = process_step.get("heating_rate_unit")
+        if heating_rate_value is not None:
+            if _parameter_value_matches(parameter, heating_rate_value, heating_rate_unit):
+                return _build_process_step_match(
+                    parameter,
+                    heating_rate_value,
+                    heating_rate_unit,
+                    0.88,
+                    "process_step_heating_rate_semantic_match",
+                )
+            if value is None:
+                return _build_process_step_match(
+                    parameter,
+                    heating_rate_value,
+                    heating_rate_unit,
+                    0.74,
+                    "process_step_heating_rate_observed_value_semantic_match",
+                )
+        if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
+            return _build_process_step_match(parameter, value, unit, 0.82, "process_step_heating_rate_text_match")
+
     if canonical_key in {"start_temperature_C", "reaction_temperature_C", "hydrolysis_temperature_C"}:
         temperature_value = process_step.get("temperature_value")
         if temperature_value is not None:
+            blocked_hydrolysis_match = canonical_key == "hydrolysis_temperature_C" and (
+                drying_context or concentration_context or peptization_context
+            )
+            blocked_reaction_match = canonical_key == "reaction_temperature_C" and (drying_context or concentration_context)
+            if blocked_hydrolysis_match or blocked_reaction_match:
+                return None
             if _parameter_value_matches(parameter, temperature_value, process_step.get("temperature_unit")):
                 return _build_process_step_match(parameter, temperature_value, process_step.get("temperature_unit"), 0.86, "process_step_temperature_semantic_match")
             if value is None and (
                 _process_step_semantic_keyword_match(canonical_key, normalized_text)
-                or _contains_any(normalized_text, ["加热", "升温", "反应", "水解", "温度"])
+                or (
+                    canonical_key == "hydrolysis_temperature_C"
+                    and hydrolysis_context
+                )
+                or (
+                    canonical_key == "reaction_temperature_C"
+                    and reaction_context
+                )
+                or (
+                    canonical_key == "start_temperature_C"
+                    and _contains_any(normalized_text, ["起始温度", "初始温度", "start temperature"])
+                )
             ):
                 return _build_process_step_match(
                     parameter,
@@ -897,11 +1044,24 @@ def _match_process_step_semantics(
     if canonical_key in {"reaction_time_h", "hydrolysis_time_h"}:
         duration_value = process_step.get("duration_value")
         if duration_value is not None:
+            blocked_hydrolysis_match = canonical_key == "hydrolysis_time_h" and (
+                drying_context or concentration_context or peptization_context
+            )
+            blocked_reaction_match = canonical_key == "reaction_time_h" and (drying_context or concentration_context)
+            if blocked_hydrolysis_match or blocked_reaction_match:
+                return None
             if _parameter_value_matches(parameter, duration_value, process_step.get("duration_unit")):
                 return _build_process_step_match(parameter, duration_value, process_step.get("duration_unit"), 0.84, "process_step_duration_semantic_match")
             if value is None and (
                 _process_step_semantic_keyword_match(canonical_key, normalized_text)
-                or _contains_any(normalized_text, ["反应", "保持", "保温", "持续", "水解"])
+                or (
+                    canonical_key == "hydrolysis_time_h"
+                    and hydrolysis_context
+                )
+                or (
+                    canonical_key == "reaction_time_h"
+                    and reaction_context
+                )
             ):
                 return _build_process_step_match(
                     parameter,
@@ -1018,7 +1178,33 @@ def _parameter_value_matches(parameter: dict[str, Any], value: Any, unit: Any) -
     if target_numeric is not None and source_numeric is not None:
         tolerance = 0.05 if normalized_parameter_unit in {"ml_h", "ppm", "pa_s"} else 0.5
         return abs(target_numeric - source_numeric) <= tolerance
+    target_range = _parse_numeric_range(target_value)
+    source_range = _parse_numeric_range(value)
+    if target_range and source_range:
+        return target_range == source_range
     return str(target_value).strip().lower() == str(value).strip().lower()
+
+
+def _parse_numeric_range(value: Any) -> tuple[float, float] | None:
+    if value is None:
+        return None
+    text = (
+        str(value)
+        .strip()
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace("~", "-")
+        .replace("−", "-")
+        .replace(" ", "")
+    )
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)", text)
+    if not match:
+        return None
+    low = float(match.group(1))
+    high = float(match.group(2))
+    if low > high:
+        low, high = high, low
+    return (low, high)
 
 
 

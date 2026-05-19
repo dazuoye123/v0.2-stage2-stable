@@ -179,3 +179,62 @@ def test_invalid_numeric_canonical_keys_are_rejected(tmp_path: Path) -> None:
     assert all(str(item["canonical_key"]) != "0" for item in bundle["parameters"])
     assert bundle["quality_summary"]["invalid_canonical_key_count"] == 1
     assert bundle["rejected_parameters"][0]["reason"] == "invalid_canonical_key"
+
+
+def test_fusion_normalizes_ftir_peak_units_and_keeps_range_peaks_non_numeric(tmp_path: Path) -> None:
+    output_dir = tmp_path / "paper-output"
+    _build_fixture(output_dir)
+    stage4_dir = output_dir / "stage4_vision_spectra"
+    _write_jsonl(
+        stage4_dir / "spectra_extractions.jsonl",
+        [
+            {
+                "figure_id": "Fig.4",
+                "figure_type": "ftir_spectrum",
+                "schema_name": "XRDExtraction",
+                "technique": "FTIR",
+                "extraction_mode": "live",
+                "confidence": 0.9,
+                "peaks": [
+                    {"position": 468, "unit": "2theta_deg", "source": "image_and_text"},
+                    {
+                        "position": None,
+                        "unit": "2theta_deg",
+                        "source_text": "2800–3000 cm^-1",
+                        "warnings": ["range_peak_position_not_numeric"],
+                    },
+                ],
+                "quantitative_values": {},
+            }
+        ],
+    )
+    (stage4_dir / "stage4_quality_review.json").write_text(
+        json.dumps(
+            {
+                "summary": {"overall_status": "warning"},
+                "figures": [
+                    {
+                        "figure_id": "Fig.4",
+                        "source_distribution": {"image_and_text": 1},
+                        "warning_codes": [],
+                        "assessment": "usable",
+                        "conflict_warnings": [],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    bundle = run_stage5_dataset_fusion(paper_id="paper-1", output_dir=output_dir)
+
+    derived_ftir_parameters = [
+        item
+        for item in bundle["parameters"]
+        if item["canonical_key"] == "ftir_peak_position_cm_1"
+    ]
+    assert len(derived_ftir_parameters) == 1
+    assert derived_ftir_parameters[0]["value"] == 468
+    assert derived_ftir_parameters[0]["unit"] == "cm-1"
+    assert bundle["spectra"][0]["peaks"][1]["position"] is None

@@ -12,6 +12,7 @@ from alumina_sol_extractor.ontology import get_canonical_keys, normalize_key
 from .loaders import load_paper_inputs
 from .models import EvidenceRecord, PaperRecord, ParameterRow, SampleRecord, SpectraRecord
 from .report import render_fusion_report
+from .spectra_units import coerce_peak_unit, normalize_parameter_unit
 from .validators import build_quality_summary
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -488,7 +489,7 @@ def _build_spectra_parameter_rows(
         (
             _string_or_none(row.get("canonical_key")),
             _string_or_none(row.get("value")),
-            _string_or_none(row.get("unit")),
+            normalize_parameter_unit(row.get("unit"), row.get("canonical_key")),
             _string_or_none(next(iter(_extract_reference_tokens(row.get("evidence_refs") or [])), None)),
         )
         for row in existing_records
@@ -505,12 +506,17 @@ def _build_spectra_parameter_rows(
             position = peak.get("position")
             if position is None:
                 continue
-            unit = peak.get("unit")
+            unit = coerce_peak_unit(
+                peak.get("unit"),
+                figure_type=spectra_record.get("figure_type"),
+                canonical_key=canonical_key,
+                technique=spectra_record.get("technique"),
+            )
             evidence_ref = f"spectra-{figure_id}-peak-{index:02d}"
             signature = (
                 _string_or_none(canonical_key),
                 _string_or_none(position),
-                _string_or_none(unit),
+                unit,
                 evidence_ref,
             )
             if signature in existing_signatures:
