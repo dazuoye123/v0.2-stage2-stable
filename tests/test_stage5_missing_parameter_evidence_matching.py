@@ -42,6 +42,85 @@ def test_ph_text_evidence_generates_deterministic_link() -> None:
     assert any(link["source_id"] == "ev-ph" and link["target_id"] == "param-ph" for link in links)
 
 
+def test_ph_text_evidence_does_not_match_bare_percentage_range() -> None:
+    paper = {"paper_id": "paper-1"}
+    parameters = [
+        {
+            "parameter_id": "param-ph",
+            "canonical_key": "pH",
+            "raw_name": "pH",
+            "value": 2,
+            "unit": "dimensionless",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        }
+    ]
+    evidence = [
+        {
+            "evidence_id": "ev-range",
+            "evidence_type": "figure",
+            "caption": "Fig.2 Photograph of xerogel fibers",
+            "fact_summary": ["PVP质量分数为1%–2%，纺丝操作箱恒温30°C。"],
+            "detailed_observation": "PVP质量分数为1%–2%，纺丝操作箱恒温30°C。",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=evidence,
+        spectra=[],
+        samples=[],
+        process_steps=[],
+        link_types={"evidence_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, _ = build_deterministic_links(candidates)
+
+    assert not any(link["source_id"] == "ev-range" and link["target_id"] == "param-ph" for link in links)
+
+
+def test_ph_text_evidence_does_not_match_duration_without_ph_context() -> None:
+    paper = {"paper_id": "paper-1"}
+    parameters = [
+        {
+            "parameter_id": "param-ph",
+            "canonical_key": "pH",
+            "raw_name": "pH",
+            "value": 2,
+            "unit": "dimensionless",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        }
+    ]
+    evidence = [
+        {
+            "evidence_id": "ev-duration",
+            "evidence_type": "text",
+            "fact_summary": ["The fibers were held for 2 h before calcination."],
+            "detailed_observation": "The fibers were held for 2 h before calcination.",
+        }
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=evidence,
+        spectra=[],
+        samples=[],
+        process_steps=[],
+        link_types={"evidence_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, _ = build_deterministic_links(candidates)
+
+    assert not any(link["source_id"] == "ev-duration" and link["target_id"] == "param-ph" for link in links)
+
+
 def test_range_evidence_with_unit_generates_pvp_link() -> None:
     paper = {"paper_id": "paper-1"}
     parameters = [

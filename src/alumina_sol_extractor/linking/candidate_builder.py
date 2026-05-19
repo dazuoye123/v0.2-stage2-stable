@@ -1085,6 +1085,9 @@ def _match_process_step_semantics(
                     "process_step_duration_observed_value_semantic_match",
                 )
 
+    if _is_ph_canonical_key(canonical_key) and not _has_ph_context(normalized_text):
+        return None
+
     if canonical_key == "feeding_method":
         if _contains_any(normalized_text, ["分批加入", "一次性加入", "滴加"]):
             if value is None or _text_contains_value(normalized_text, value, unit):
@@ -1093,11 +1096,11 @@ def _match_process_step_semantics(
         if normalized_value and normalized_value in normalized_text and _contains_any(normalized_text, ["加入", "加料", "投料", "滴加"]):
             return _build_process_step_match(parameter, value, unit, 0.74, "process_step_feeding_method_text_match")
 
-    if canonical_key in {"stirring_speed_rpm", "Al_to_nitrate_molar_ratio", "ph"}:
+    if canonical_key in {"stirring_speed_rpm", "Al_to_nitrate_molar_ratio"}:
         if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
             return _build_process_step_match(parameter, value, unit, 0.8, "process_step_text_value_match")
 
-    if canonical_key == "ph" and ("ph" in normalized_text or _contains_any(normalized_text, ["酸度"])):
+    if _is_ph_canonical_key(canonical_key) and _has_ph_context(normalized_text):
         if value is not None and _text_contains_value(normalized_text, value, unit, tolerance=0.05):
             return _build_process_step_match(parameter, value, unit, 0.82, "process_step_ph_match")
 
@@ -1111,6 +1114,29 @@ def _process_step_semantic_keyword_match(canonical_key: str, text: str) -> bool:
     keyword_tokens = SEMANTIC_KEYWORDS.get(canonical_key.lower()) or ()
     normalized_tokens = [_normalize_match_text(token) for token in keyword_tokens if token]
     return any(token in text for token in normalized_tokens)
+
+
+def _is_ph_canonical_key(canonical_key: str) -> bool:
+    return canonical_key.lower() in {"ph", "ph_value"}
+
+
+def _has_ph_context(text: str) -> bool:
+    normalized_text = _normalize_match_text(text)
+    if not normalized_text:
+        return False
+    if re.search(r"(?<![a-z])ph(?![a-z])", normalized_text):
+        return True
+    return any(
+        token in normalized_text
+        for token in (
+            "ph值",
+            "酸碱度",
+            "调节ph",
+            "adjust ph",
+            "ph adjusted",
+            "ph was",
+        )
+    )
 
 
 def _process_step_text_value_context_allowed(
@@ -1166,6 +1192,8 @@ def _build_process_step_match(
 def _evidence_semantic_match(parameter: dict[str, Any], evidence_text: str) -> bool:
     canonical_key = str(parameter.get("canonical_key") or "").lower()
     text = _normalize_match_text(evidence_text)
+    if _is_ph_canonical_key(canonical_key):
+        return _has_ph_context(text)
     if "viscosity" in canonical_key:
         return "viscosity" in text or "pa_s" in text
     if "nmr" in canonical_key:

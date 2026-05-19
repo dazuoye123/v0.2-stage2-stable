@@ -13,7 +13,7 @@ def build_link_aware_summary(
     final_parameters_linked: list[dict[str, Any]],
     evidence_parameter_links: list[dict[str, Any]],
     spectra_parameter_links: list[dict[str, Any]],
-    samples: list[dict[str, Any]],
+    sample_parameter_matrix: list[dict[str, Any]],
     showcase_rows: list[dict[str, Any]],
     include_showcase: bool,
 ) -> dict[str, Any]:
@@ -65,8 +65,8 @@ def build_link_aware_summary(
         "evidence_object_parameter_links": evidence_object_parameter_links,
         "spectra_parameter_links": spectra_parameter_links_count,
         "visual_parameter_links": visual_parameter_links,
-        "total_samples": len(samples),
-        "sample_matrix_rows": len(samples),
+        "total_samples": len(sample_parameter_matrix),
+        "sample_matrix_rows": len(sample_parameter_matrix),
         "showcase_rows": len(showcase_rows),
         "showcase_is_complete": showcase_complete,
         "showcase_warning": None
@@ -113,11 +113,14 @@ def build_link_aware_readme(*, include_showcase: bool, output_warnings: list[str
             "- `final_parameters_linked.parquet`: parquet version of the linked parameter table.",
             showcase_note,
             "- `link_aware_export_summary.json`: export statistics and guidance on which tables to treat as primary.",
+            "- `link_aware_export_diagnosis.md`: a markdown snapshot rebuilt from the latest summary and table row counts.",
             "",
             "## Notes",
             "- Original `parameters.jsonl`, `process_steps.jsonl`, `evidence.jsonl`, `spectra.jsonl`, and `samples.jsonl` are not modified.",
             "- Missing links remain explicit; the exporter does not invent unsupported evidence or spectra relationships.",
             "- Prefer the primary tables above for final analysis, database loading, and group-meeting reporting.",
+            "- `parameter_count` and `linked_parameter_count` in `sample_parameter_matrix.csv` are legacy fields kept for compatibility.",
+            "- For new analysis and plotting, prefer `matrix_parameter_field_count`, `sample_parameter_value_count`, `unique_linked_parameter_count`, `linked_parameter_edge_count`, `linked_evidence_edge_count`, `linked_spectra_edge_count`, and `linked_process_step_edge_count`.",
             "- If a CSV is locked by Excel, WPS, VS Code preview, or Explorer preview pane, the exporter keeps the warning and writes a `*.generated.csv` fallback when possible.",
             "- If `process_steps_table.csv` could not be overwritten, check `process_steps_table.generated.csv` first, then close the locking application and rerun the Stage 5+ export command.",
             *warning_lines,
@@ -181,3 +184,111 @@ def _parquet_value(value: Any) -> Any:
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
+
+
+def build_link_aware_diagnosis(output_dir: Path | str) -> str:
+    output_dir = Path(output_dir)
+    summary_path = output_dir / "link_aware_export_summary.json"
+    summary: dict[str, Any] = {}
+    warnings: list[str] = []
+
+    if summary_path.exists():
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            warnings.append("could_not_parse_summary:link_aware_export_summary.json")
+    else:
+        warnings.append("missing_file:link_aware_export_summary.json")
+
+    table_summaries = [
+        _collect_table_count(output_dir, "final_parameters_linked.csv", warnings, summary),
+        _collect_table_count(output_dir, "process_steps_table.csv", warnings, summary),
+        _collect_table_count(output_dir, "evidence_parameter_links.csv", warnings, summary),
+        _collect_table_count(output_dir, "spectra_parameter_links.csv", warnings, summary),
+        _collect_table_count(output_dir, "sample_parameter_matrix.csv", warnings, summary),
+    ]
+    summary_lines = [
+        f"- `total_parameters`: {_render_summary_value(summary, 'total_parameters')}",
+        f"- `parameters_with_any_link`: {_render_summary_value(summary, 'parameters_with_any_link')}",
+        f"- `parameters_missing_all_links`: {_render_summary_value(summary, 'parameters_missing_all_links')}",
+        f"- `process_step_parameter_links`: {_render_summary_value(summary, 'process_step_parameter_links')}",
+        f"- `sample_matrix_rows`: {_render_summary_value(summary, 'sample_matrix_rows')}",
+    ]
+    table_lines = []
+    for item in table_summaries:
+        label = f"`{item['file_name']}` rows"
+        if item["row_count"] is None:
+            table_lines.append(f"- {label}: warning")
+            continue
+        suffix = f" ({item['source_label']})" if item["source_label"] else ""
+        table_lines.append(f"- {label}: {item['row_count']}{suffix}")
+
+    warning_lines = warnings or ["none"]
+    return "\n".join(
+        [
+            "# Link-aware Export Diagnosis",
+            "",
+            "Generated from the latest `link_aware_export_summary.json` and current table files in this directory.",
+            "",
+            "## Summary Snapshot",
+            *summary_lines,
+            "",
+            "## Table Row Counts",
+            *table_lines,
+            "",
+            "## Sample Matrix Count Notes",
+            "- `parameter_count` and `linked_parameter_count` are legacy fields kept for backward compatibility.",
+            "- Prefer `matrix_parameter_field_count`, `sample_parameter_value_count`, `unique_linked_parameter_count`, and the `linked_*_edge_count` fields for new analysis.",
+            "",
+            "## Warnings",
+            *[f"- `{item}`" for item in warning_lines],
+        ]
+    )
+
+
+def _collect_table_count(
+    output_dir: Path,
+    file_name: str,
+    warnings: list[str],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    canonical_path = output_dir / file_name
+    fallback_name = f"{canonical_path.stem}.generated{canonical_path.suffix}"
+    fallback_path = output_dir / fallback_name
+    locked_files = set(summary.get("locked_files") or [])
+
+    if file_name in locked_files:
+        if fallback_path.exists():
+            return {
+                "file_name": file_name,
+                "row_count": _csv_row_count(fallback_path),
+                "source_label": f"latest fallback `{fallback_name}`",
+            }
+        warnings.append(f"locked_file_missing_fallback:{file_name}")
+        return {"file_name": file_name, "row_count": None, "source_label": None}
+
+    if canonical_path.exists():
+        return {"file_name": file_name, "row_count": _csv_row_count(canonical_path), "source_label": None}
+
+    if fallback_path.exists():
+        warnings.append(f"missing_canonical_using_fallback:{file_name}")
+        return {
+            "file_name": file_name,
+            "row_count": _csv_row_count(fallback_path),
+            "source_label": f"fallback `{fallback_name}`",
+        }
+
+    warnings.append(f"missing_file:{file_name}")
+    return {"file_name": file_name, "row_count": None, "source_label": None}
+
+
+def _csv_row_count(path: Path) -> int:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle)
+        next(reader, None)
+        return sum(1 for _ in reader)
+
+
+def _render_summary_value(summary: dict[str, Any], key: str) -> str:
+    value = summary.get(key)
+    return "warning" if value is None else str(value)

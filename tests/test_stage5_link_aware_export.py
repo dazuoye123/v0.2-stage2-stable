@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from alumina_sol_extractor.dataset_fusion.link_aware_export import generate_link_aware_exports
+from alumina_sol_extractor.dataset_fusion.link_aware_io import build_link_aware_diagnosis
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -284,3 +285,48 @@ def test_link_aware_export_handles_missing_links_and_empty_spectra(tmp_path: Pat
         "created_by",
     ]
     assert frame.empty
+
+
+def test_link_aware_export_diagnosis_matches_latest_summary_and_tables(tmp_path: Path) -> None:
+    dataset_dir = _build_dataset(tmp_path, links=None, spectra=[])
+    result = generate_link_aware_exports(dataset_dir, include_showcase=False)
+    output_dir = dataset_dir / "link_aware_exports"
+
+    summary = json.loads((output_dir / "link_aware_export_summary.json").read_text(encoding="utf-8"))
+    diagnosis = (output_dir / "link_aware_export_diagnosis.md").read_text(encoding="utf-8")
+    process_steps_rows = len(pd.read_csv(output_dir / "process_steps_table.csv"))
+    evidence_rows = len(pd.read_csv(output_dir / "evidence_parameter_links.csv"))
+    sample_rows = len(pd.read_csv(output_dir / "sample_parameter_matrix.csv"))
+
+    assert result["summary"] == summary
+    assert f"- `total_parameters`: {summary['total_parameters']}" in diagnosis
+    assert f"- `parameters_missing_all_links`: {summary['parameters_missing_all_links']}" in diagnosis
+    assert f"- `process_step_parameter_links`: {summary['process_step_parameter_links']}" in diagnosis
+    assert f"- `sample_matrix_rows`: {summary['sample_matrix_rows']}" in diagnosis
+    assert f"- `process_steps_table.csv` rows: {process_steps_rows}" in diagnosis
+    assert f"- `evidence_parameter_links.csv` rows: {evidence_rows}" in diagnosis
+    assert f"- `sample_parameter_matrix.csv` rows: {sample_rows}" in diagnosis
+
+
+def test_link_aware_export_diagnosis_rebuilds_updated_summary_and_warns_on_missing_file(tmp_path: Path) -> None:
+    dataset_dir = _build_dataset(tmp_path, links=None, spectra=[])
+    generate_link_aware_exports(dataset_dir, include_showcase=False)
+    output_dir = dataset_dir / "link_aware_exports"
+    summary_path = output_dir / "link_aware_export_summary.json"
+
+    updated_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    updated_summary["total_parameters"] = 99
+    updated_summary["parameters_missing_all_links"] = 7
+    updated_summary["process_step_parameter_links"] = 3
+    updated_summary["sample_matrix_rows"] = 4
+    summary_path.write_text(json.dumps(updated_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    (output_dir / "process_steps_table.csv").unlink()
+
+    diagnosis = build_link_aware_diagnosis(output_dir)
+
+    assert f"- `total_parameters`: {updated_summary['total_parameters']}" in diagnosis
+    assert f"- `parameters_missing_all_links`: {updated_summary['parameters_missing_all_links']}" in diagnosis
+    assert f"- `process_step_parameter_links`: {updated_summary['process_step_parameter_links']}" in diagnosis
+    assert f"- `sample_matrix_rows`: {updated_summary['sample_matrix_rows']}" in diagnosis
+    assert "- `process_steps_table.csv` rows: warning" in diagnosis
+    assert "- `missing_file:process_steps_table.csv`" in diagnosis

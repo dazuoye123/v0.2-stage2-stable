@@ -19,6 +19,7 @@ from alumina_sol_extractor.dataset_fusion.link_aware_fields import (
     SPECTRA_PARAMETER_LINK_FIELDS,
 )
 from alumina_sol_extractor.dataset_fusion.link_aware_io import (
+    build_link_aware_diagnosis,
     build_link_aware_readme,
     build_link_aware_summary,
     safe_write,
@@ -116,6 +117,8 @@ def generate_link_aware_exports(
         paper=paper,
         samples=samples,
         final_parameters_linked=final_parameters_linked,
+        evidence_parameter_links=evidence_parameter_links,
+        spectra_parameter_links=spectra_parameter_links,
         spectra=spectra,
     )
     process_steps_table = _build_process_steps_table(
@@ -138,7 +141,7 @@ def generate_link_aware_exports(
         final_parameters_linked=final_parameters_linked,
         evidence_parameter_links=evidence_parameter_links,
         spectra_parameter_links=spectra_parameter_links,
-        samples=samples,
+        sample_parameter_matrix=sample_parameter_matrix,
         showcase_rows=final_showcase_table,
         include_showcase=include_showcase,
     )
@@ -200,6 +203,7 @@ def generate_link_aware_exports(
     readme = build_link_aware_readme(include_showcase=include_showcase, output_warnings=write_warnings)
     write_json(output_dir / "link_aware_export_summary.json", summary)
     write_markdown(output_dir / "link_aware_export_readme.md", readme)
+    write_markdown(output_dir / "link_aware_export_diagnosis.md", build_link_aware_diagnosis(output_dir))
 
     return {
         "paper_id": paper_id,
@@ -437,6 +441,8 @@ def _build_sample_parameter_matrix(
     paper: dict[str, Any],
     samples: list[dict[str, Any]],
     final_parameters_linked: list[dict[str, Any]],
+    evidence_parameter_links: list[dict[str, Any]],
+    spectra_parameter_links: list[dict[str, Any]],
     spectra: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
@@ -456,6 +462,21 @@ def _build_sample_parameter_matrix(
     for sample in samples:
         sample_id = sample.get("sample_id")
         sample_parameters = parameters_by_sample.get(sample_id, [])
+        sample_parameter_ids = {
+            str(item.get("parameter_id"))
+            for item in sample_parameters
+            if item.get("parameter_id")
+        }
+        sample_evidence_links = [
+            row
+            for row in evidence_parameter_links
+            if row.get("parameter_id") and str(row.get("parameter_id")) in sample_parameter_ids
+        ]
+        sample_spectra_links = [
+            row
+            for row in spectra_parameter_links
+            if row.get("parameter_id") and str(row.get("parameter_id")) in sample_parameter_ids
+        ]
         linked_evidence_ids = _sorted_unique(
             [
                 evidence_id
@@ -487,6 +508,11 @@ def _build_sample_parameter_matrix(
                 if spectra_by_id.get(spectra_id, {}).get("technique")
             ]
         )
+        unique_linked_parameter_count = len(sample_parameter_ids)
+        sample_parameter_value_count = sum(1 for item in sample_parameters if _display_value(item))
+        linked_process_step_edge_count = sum(1 for row in sample_evidence_links if row.get("source_type") == "process_step")
+        linked_evidence_edge_count = sum(1 for row in sample_evidence_links if row.get("source_type") != "process_step")
+        linked_spectra_edge_count = len(sample_spectra_links)
         row: dict[str, Any] = {
             "paper_id": paper_id,
             "title": title,
@@ -496,6 +522,13 @@ def _build_sample_parameter_matrix(
             "process_route": paper.get("process_route"),
             "parameter_count": len(sample.get("linked_parameters") or []),
             "linked_parameter_count": len(sample_parameters),
+            "matrix_parameter_field_count": 0,
+            "sample_parameter_value_count": sample_parameter_value_count,
+            "unique_linked_parameter_count": unique_linked_parameter_count,
+            "linked_parameter_edge_count": linked_evidence_edge_count + linked_spectra_edge_count + linked_process_step_edge_count,
+            "linked_evidence_edge_count": linked_evidence_edge_count,
+            "linked_spectra_edge_count": linked_spectra_edge_count,
+            "linked_process_step_edge_count": linked_process_step_edge_count,
             "evidence_count": len(linked_evidence_ids),
             "spectra_count": len(linked_spectra_ids),
             "evidence_linked_parameter_count": sum(
@@ -520,6 +553,7 @@ def _build_sample_parameter_matrix(
             if len(unique_values) > 1:
                 multi_value_keys.append(canonical_key)
             row[canonical_key] = "; ".join(unique_values)
+        row["matrix_parameter_field_count"] = sum(1 for canonical_key in CORE_SAMPLE_MATRIX_KEYS if row.get(canonical_key))
         row["multi_value_flags"] = "; ".join(multi_value_keys)
         rows.append(row)
     return rows

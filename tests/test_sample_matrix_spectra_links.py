@@ -37,7 +37,7 @@ def test_sample_matrix_collects_spectra_linked_counts_for_single_sample(tmp_path
                 "value": 467,
                 "unit": "cm^-1",
                 "source_scope": "stage4.spectra.peaks",
-                "evidence_refs": [{"source_id": "spectra-Fig.5-peak-01", "figure_id": "Fig.5"}],
+                "evidence_refs": [{"evidence_id": "ev-1"}],
                 "quality_flags": [],
                 "normalization_note": None,
                 "linked_figure_ids": ["Fig.5"],
@@ -52,7 +52,7 @@ def test_sample_matrix_collects_spectra_linked_counts_for_single_sample(tmp_path
                 "value": 25.5,
                 "unit": "2theta_deg",
                 "source_scope": "stage4.spectra.peaks",
-                "evidence_refs": [{"source_id": "spectra-Fig.3-peak-01", "figure_id": "Fig.3"}],
+                "evidence_refs": [{"evidence_id": "ev-2"}],
                 "quality_flags": [],
                 "normalization_note": None,
                 "linked_figure_ids": ["Fig.3"],
@@ -60,8 +60,24 @@ def test_sample_matrix_collects_spectra_linked_counts_for_single_sample(tmp_path
             },
         ],
     )
-    _write_jsonl(dataset_dir / "process_steps.jsonl", [])
-    _write_jsonl(dataset_dir / "evidence.jsonl", [])
+    _write_jsonl(
+        dataset_dir / "process_steps.jsonl",
+        [
+            {
+                "step_id": "step-1",
+                "step_order": 1,
+                "action": "calcine",
+                "evidence_text": "The fibers were calcined before characterization.",
+            }
+        ],
+    )
+    _write_jsonl(
+        dataset_dir / "evidence.jsonl",
+        [
+            {"evidence_id": "ev-1", "evidence_type": "figure", "figure_id": "Fig.5", "figure_type": "ftir_spectrum"},
+            {"evidence_id": "ev-2", "evidence_type": "figure", "figure_id": "Fig.3", "figure_type": "xrd_pattern"},
+        ],
+    )
     _write_jsonl(
         dataset_dir / "spectra.jsonl",
         [
@@ -77,6 +93,18 @@ def test_sample_matrix_collects_spectra_linked_counts_for_single_sample(tmp_path
             {
                 "link_id": "link-1",
                 "paper_id": "paper-1",
+                "source_type": "process_step",
+                "source_id": "step-1",
+                "target_type": "parameter",
+                "target_id": "param-ftir",
+                "link_type": "supports",
+                "confidence": "medium",
+                "reasoning": "step context",
+                "created_by": "deterministic",
+            },
+            {
+                "link_id": "link-2",
+                "paper_id": "paper-1",
                 "source_type": "spectra_peak",
                 "source_id": "spectra-Fig.5-peak-01",
                 "target_type": "parameter",
@@ -87,7 +115,7 @@ def test_sample_matrix_collects_spectra_linked_counts_for_single_sample(tmp_path
                 "created_by": "deterministic_spectra_peak_value_match",
             },
             {
-                "link_id": "link-2",
+                "link_id": "link-3",
                 "paper_id": "paper-1",
                 "source_type": "spectra_peak",
                 "source_id": "spectra-Fig.3-peak-01",
@@ -100,16 +128,34 @@ def test_sample_matrix_collects_spectra_linked_counts_for_single_sample(tmp_path
             },
         ],
     )
-    _write_json(dataset_dir / "linking" / "linking_summary.json", {"accepted_links": 2})
+    _write_json(dataset_dir / "linking" / "linking_summary.json", {"accepted_links": 3})
 
     result = generate_link_aware_exports(dataset_dir, include_showcase=False)
 
     matrix = result["sample_parameter_matrix"][0]
+    assert "parameter_count" in matrix
+    assert "linked_parameter_count" in matrix
+    assert matrix["parameter_count"] == 2
+    assert matrix["linked_parameter_count"] == 2
+    assert matrix["matrix_parameter_field_count"] == 2
+    assert matrix["sample_parameter_value_count"] == 2
+    assert matrix["unique_linked_parameter_count"] == 2
+    assert matrix["linked_evidence_edge_count"] == 2
+    assert matrix["linked_spectra_edge_count"] == 2
+    assert matrix["linked_process_step_edge_count"] == 1
+    assert matrix["linked_parameter_edge_count"] == 5
+    assert matrix["linked_parameter_edge_count"] > matrix["matrix_parameter_field_count"]
     assert matrix["spectra_linked_parameter_count"] == 2
     assert matrix["linked_spectra_count"] == 2
     assert set(matrix["linked_spectra_ids"].split("; ")) == {"spectra-Fig.3", "spectra-Fig.5"}
     assert set(matrix["linked_spectra_figure_ids"].split("; ")) == {"Fig.3", "Fig.5"}
     assert set(matrix["linked_spectra_techniques"].split("; ")) == {"XRD", "FTIR"}
+
+    readme_text = (dataset_dir / "link_aware_exports" / "link_aware_export_readme.md").read_text(encoding="utf-8")
+    diagnosis_text = (dataset_dir / "link_aware_exports" / "link_aware_export_diagnosis.md").read_text(encoding="utf-8")
+    assert "matrix_parameter_field_count" in readme_text
+    assert "linked_parameter_edge_count" in readme_text
+    assert "legacy fields kept for backward compatibility" in diagnosis_text
 
 
 

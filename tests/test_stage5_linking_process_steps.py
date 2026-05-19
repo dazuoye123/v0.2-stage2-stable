@@ -462,3 +462,51 @@ def test_process_step_links_collector_distance_in_distance_context() -> None:
 
     assert any(link["target_id"] == "param-distance" for link in links)
     assert unresolved == []
+
+
+def test_process_step_ph_requires_explicit_ph_context() -> None:
+    paper = {"paper_id": "paper-1", "title": "pH Context Test"}
+    parameters = [
+        {
+            "parameter_id": "param-ph",
+            "canonical_key": "pH",
+            "raw_name": "pH",
+            "value": 2,
+            "unit": "dimensionless",
+            "sample_id": None,
+            "evidence_refs": [],
+            "linked_figure_ids": [],
+            "linked_spectra_ids": [],
+        }
+    ]
+    process_steps = [
+        {
+            "step_id": "step-range",
+            "action": "spin",
+            "action_zh": "纺丝",
+            "evidence_text": "PVP质量分数为1%–2%，纺丝操作箱恒温30°C。",
+        },
+        {
+            "step_id": "step-ph",
+            "action": "adjust",
+            "action_zh": "调节pH",
+            "evidence_text": "加入盐酸调节 pH 至 2。",
+        },
+    ]
+
+    candidates = build_link_candidates(
+        paper,
+        parameters,
+        evidence=[],
+        spectra=[],
+        samples=[],
+        process_steps=process_steps,
+        link_types={"process_step_to_parameter"},
+        max_candidates_per_type=20,
+    )
+    links, unresolved = build_deterministic_links(candidates)
+    step_ids = {link["source_id"] for link in links if link["target_id"] == "param-ph"}
+
+    assert "step-range" not in step_ids
+    assert "step-ph" in step_ids
+    assert unresolved == []
