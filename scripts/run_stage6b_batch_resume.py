@@ -11,7 +11,7 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from alumina_sol_extractor.batch_validation.resume import run_stage6b_batch_resume
+from alumina_sol_extractor.pipeline.resume_status import run_stage6b_batch_resume
 
 
 def parse_args() -> argparse.Namespace:

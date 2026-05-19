@@ -1,58 +1,139 @@
 # alumina_sol_extractor
 
-Lightweight alumina-sol literature extraction project.
+Alumina-sol and alumina-fiber literature extraction pipeline for building structured datasets from PDF / Markdown papers.
 
-Current stage:
+## Project Goal
 
-1. Upload a local PDF to MinerU.
-2. Download MinerU Markdown and images.
-3. Save raw MinerU output under `data/mineru_raw/{paper_id}/`.
-4. Rewrite local image paths into `data/outputs/{paper_id}/figures/`.
-5. Normalize common chemistry formula artifacts.
-6. Save cleaned Markdown to `data/markdown/{paper_id}.md`.
+The maintained pipeline turns literature into structured outputs for downstream analysis:
 
-Docling and Mistral are not used in this version.
+`PDF / Markdown -> Stage 3 / Stage 4A extraction -> Stage 5 fusion -> link-aware export`
+
+Target objects include:
+- samples
+- parameters
+- process steps
+- evidence
+- spectra
+- figures
+- parameter links
+- sample parameter matrices
+
+## Main Entry
+
+The recommended runtime entry is:
+
+```bash
+python scripts/run_full_pipeline.py --outputs-dir .\data\outputs ...
+```
+
+`python main.py` remains in the repository as a legacy lightweight entry, but it is no longer the recommended full-pipeline command.
+
+## Core Stages
+
+### Stage 1: PDF -> Markdown
+- MinerU-based PDF to Markdown conversion
+- image path rewriting
+- chemistry/symbol cleanup
+- cleaned markdown output
+
+### Stage 2: Figure / Table Preparation
+- figure extraction
+- vision input preparation
+- figure metadata for downstream Stage 4A
+
+### Stage 3: Structured Text Extraction
+- cleaned-body text preparation
+- procedure section selection
+- structured extraction for samples, parameters, evidence, process steps, and related fields
+
+### Stage 4A: Vision / Spectra Extraction
+- figure-level structured extraction for XRD, FTIR/IR, Raman, NMR, TG/TGA, DSC/DTA, TG-DSC/TG-DTA, Ferron, SEM, TEM, and related figure types
+
+### Stage 5: Fusion + Linking + Link-Aware Export
+- final dataset fusion
+- deterministic / controlled linking
+- link-aware export tables
+- sample matrix outputs
+
+## Important Directories
+
+- `src/alumina_sol_extractor/`
+  Core runtime package.
+- `scripts/`
+  Runtime and operational entry scripts.
+- `scripts/dev/`
+  Manual inspection, batch planning, manifest, and developer utilities. These are not the main pipeline.
+- `tests/`
+  Regression tests. These protect runtime behavior and are not part of the main pipeline itself.
+- `docs/`
+  Design notes, operational docs, and cleanup planning.
+- `data/outputs/`
+  Generated paper outputs. Do not commit runtime result files from this directory.
 
 ## Setup
+
+Install the project in your preferred environment. The repository currently includes both `pyproject.toml` and `requirements.txt`; `pyproject.toml` is the better long-term source of truth, while `requirements.txt` remains for compatibility.
+
+Example:
+
+```bash
+pip install -e .
+```
+
+If you still use the compatibility path:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Set your MinerU token:
+Some stages require local environment variables or API credentials, depending on which parts of the pipeline you run.
+
+## Typical Usage
+
+Full pipeline:
 
 ```bash
-set MINERU_API_KEY=your-token
+python scripts/run_full_pipeline.py ^
+  --markdown-dir .\data\markdown ^
+  --outputs-dir .\data\outputs ^
+  --paper-ids "example_paper" ^
+  --export-link-aware
 ```
 
-Optional:
+Stage 5 only:
 
 ```bash
-set MINERU_BASE_URL=https://mineru.net
+python scripts/run_stage5_dataset_fusion.py ...
 ```
 
-## Run
-
-Put a PDF at:
-
-```text
-data/pdfs/example.pdf
-```
-
-Then run:
+Linking only:
 
 ```bash
-python main.py
+python scripts/run_stage5_linking.py ...
 ```
 
-## Test
+Link-aware export only:
 
 ```bash
-python scripts/test_chemical_text_normalizer.py
+python scripts/export_link_aware_dataset.py ...
 ```
 
-## License Note
+## Testing
 
-This project keeps the Apache 2.0 license notice. Earlier design discussion was
-inspired by LeMaterial/lematerial-llm-synthesis, but this code path is now a
-MinerU-only, alumina-sol-specific implementation.
+Run the regression suite with:
+
+```bash
+pytest
+```
+
+Optional compile check:
+
+```bash
+python -m compileall .\src .\scripts .\tests
+```
+
+## Repository Notes
+
+- `scripts/dev/` is intentionally separate from the core runtime flow.
+- `tests/` should be kept as regression protection, especially for Stage 3, Stage 4A, Stage 5, linking, and sample-matrix behavior.
+- `data/outputs/`, `data/markdown/`, `data/pdfs/`, and other generated or local source data should not be committed.

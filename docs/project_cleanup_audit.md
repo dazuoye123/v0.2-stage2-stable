@@ -3,6 +3,12 @@
 Date: 2026-05-19
 Scope: structure audit only. No runtime code, test logic, or pipeline behavior was changed in this pass.
 
+Update: 2026-05-19 (safe migration pass)
+- The full pipeline orchestrator has now been moved to `src/alumina_sol_extractor/pipeline/full_pipeline_runner.py`.
+- Resume status logic has now been moved to `src/alumina_sol_extractor/pipeline/resume_status.py`.
+- `src/alumina_sol_extractor/batch_validation/full_resume.py` and `src/alumina_sol_extractor/batch_validation/resume.py` are now legacy compatibility shims.
+- Legacy removal is still deferred to a later pass.
+
 ## Audit Basis
 
 This audit classifies files by current runtime usage, import references, script entry-point reachability, and documentation visibility.
@@ -119,6 +125,10 @@ Why it is misplaced:
 Suggested future destination:
 - `src/alumina_sol_extractor/pipeline/full_pipeline_runner.py`
 
+Current status:
+- Migrated.
+- Old path retained only as legacy compatibility.
+
 ### 2. `src/alumina_sol_extractor/batch_validation/resume.py`
 Why it is core:
 - Imported by `scripts/run_full_pipeline.py` for `discover_resume_candidates`.
@@ -128,7 +138,11 @@ Why it is misplaced:
 - Same naming problem as above: it is runtime orchestration, not just validation.
 
 Suggested future destination:
-- `src/alumina_sol_extractor/pipeline/resume_runner.py`
+- `src/alumina_sol_extractor/pipeline/resume_status.py`
+
+Current status:
+- Migrated.
+- Old path retained only as legacy compatibility.
 
 ### 3. `src/alumina_sol_extractor/dataset_fusion/batch_link_aware_export.py`
 Why it is close to core:
@@ -228,7 +242,7 @@ Why it is not the main future entry:
 ### 3. `scripts/run_stage6b_batch_resume.py`
 ### 4. `scripts/run_stage6c_full_resume.py`
 Why they are compat wrappers:
-- Thin CLI layers over `batch_validation.resume` and `batch_validation.full_resume`.
+- Thin CLI layers over `pipeline.resume_status` and `pipeline.full_pipeline_runner`.
 - Useful for direct invocation, but the naming is historical and the main user-facing entry is now `scripts/run_full_pipeline.py`.
 
 ### 5. `requirements.txt`
@@ -347,8 +361,8 @@ Practical recommendation:
 This is a future plan only. No files were moved in this pass.
 
 1. Update `README.md` to describe the current real pipeline.
-2. Rename or relocate `batch_validation/full_resume.py` into a real pipeline namespace.
-3. Rename or relocate `batch_validation/resume.py` into the same namespace.
+2. Keep `pipeline/full_pipeline_runner.py` as the canonical orchestrator path and gradually remove old references to `batch_validation/full_resume.py`.
+3. Keep `pipeline/resume_status.py` as the canonical resume-status path and gradually remove old references to `batch_validation/resume.py`.
 4. Keep `stage3/document_trim.py` as a compat shim until old imports are gone.
 5. Move historical notes like `refactor_audit.md` and `docs/stage3/prompt2_reference.txt` into an archive bucket if still worth keeping.
 6. Split optional dependencies in `pyproject.toml`.

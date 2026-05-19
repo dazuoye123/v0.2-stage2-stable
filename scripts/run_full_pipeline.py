@@ -14,8 +14,6 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from alumina_sol_extractor.batch_validation.full_resume import run_stage6c_full_resume
-from alumina_sol_extractor.batch_validation.resume import discover_resume_candidates
 from alumina_sol_extractor.config import build_runtime_settings, resolve_project_path
 from alumina_sol_extractor.dataset_fusion.batch_link_aware_export import export_batch_link_aware_dataset
 from alumina_sol_extractor.dataset_fusion.exporters import export_fusion_outputs
@@ -26,6 +24,8 @@ from alumina_sol_extractor.linking.candidate_builder import build_deterministic_
 from alumina_sol_extractor.linking.exporters import export_linking_outputs
 from alumina_sol_extractor.linking.report import render_linking_report
 from alumina_sol_extractor.linking.validators import build_linking_summary
+from alumina_sol_extractor.pipeline.full_pipeline_runner import run_stage6c_full_resume
+from alumina_sol_extractor.pipeline.resume_status import discover_resume_candidates
 from alumina_sol_extractor.pipeline.stage1_pdf_to_markdown import run_stage1_pdf_to_markdown
 
 
