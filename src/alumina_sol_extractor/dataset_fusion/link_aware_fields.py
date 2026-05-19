@@ -112,6 +112,35 @@ def build_sample_parameter_matrix_fields(additional_keys: list[str] | tuple[str,
 
 SAMPLE_PARAMETER_MATRIX_FIELDS = build_sample_parameter_matrix_fields()
 
+SAMPLE_PARAMETER_MATRIX_LONG_FIELDS = [
+    "paper_id",
+    "sample_id",
+    "sample_name",
+    "canonical_key",
+    "value",
+    "unit",
+    "parameter_id",
+    "value_origin",
+    "evidence_status",
+    "linked_evidence_ids",
+    "linked_spectra_ids",
+    "linked_process_step_ids",
+    "confidence",
+    "warning",
+]
+
+SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS = [
+    "sample_id",
+    "sample_name",
+    "canonical_key",
+    "matrix_value_present",
+    "final_parameter_exists",
+    "has_sample_link",
+    "has_global_value",
+    "missing_reason",
+    "recommended_action",
+]
+
 EVIDENCE_PARAMETER_LINK_FIELDS = [
     "paper_id",
     "source_type",

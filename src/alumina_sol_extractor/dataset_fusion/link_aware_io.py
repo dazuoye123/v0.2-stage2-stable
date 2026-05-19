@@ -78,6 +78,7 @@ def build_link_aware_summary(
             "evidence_parameter_links.csv",
             "spectra_parameter_links.csv",
             "sample_parameter_matrix.csv",
+            "sample_parameter_matrix_long.csv",
         ],
         "warning_count": sum(
             1
@@ -108,12 +109,14 @@ def build_link_aware_readme(*, include_showcase: bool, output_warnings: list[str
             "- `evidence_parameter_links.csv`: direct process-step and evidence-object links to parameters.",
             "- `spectra_parameter_links.csv`: direct spectra peak links and indirect spectra-evidence-parameter links.",
             "- `sample_parameter_matrix.csv`: sample-centric comparison matrix for meetings and sample-level review.",
+            "- `sample_parameter_matrix_long.csv`: provenance-aware long table for sample-level values; prefer this for plotting and diagnostics.",
             "",
             "## Additional Files",
+            "- `sample_matrix_missing_diagnosis.csv`: per-sample / per-canonical-key explanation of why a matrix cell is blank or left blank.",
             "- `final_parameters_linked.parquet`: parquet version of the linked parameter table.",
             showcase_note,
             "- `link_aware_export_summary.json`: export statistics and guidance on which tables to treat as primary.",
-            "- `link_aware_export_diagnosis.md`: a markdown snapshot rebuilt from the latest summary and table row counts.",
+            "- `link_aware_export_diagnosis.md`: a markdown snapshot rebuilt from the latest summary, latest table row counts, and sample-matrix completeness diagnostics.",
             "",
             "## Notes",
             "- Original `parameters.jsonl`, `process_steps.jsonl`, `evidence.jsonl`, `spectra.jsonl`, and `samples.jsonl` are not modified.",
@@ -121,6 +124,8 @@ def build_link_aware_readme(*, include_showcase: bool, output_warnings: list[str
             "- Prefer the primary tables above for final analysis, database loading, and group-meeting reporting.",
             "- `parameter_count` and `linked_parameter_count` in `sample_parameter_matrix.csv` are legacy fields kept for compatibility.",
             "- For new analysis and plotting, prefer `matrix_parameter_field_count`, `sample_parameter_value_count`, `unique_linked_parameter_count`, `linked_parameter_edge_count`, `linked_evidence_edge_count`, `linked_spectra_edge_count`, and `linked_process_step_edge_count`.",
+            "- `sample_parameter_matrix_long.csv` records `value_origin` so you can distinguish `direct_sample_link` from conservative `broadcast_global` fills.",
+            "- `sample_matrix_missing_diagnosis.csv` explains blanks such as `no_parameter_extracted`, `extracted_but_unresolved_sample`, `global_applies_to_all_samples`, and `not_sample_level`.",
             "- If a CSV is locked by Excel, WPS, VS Code preview, or Explorer preview pane, the exporter keeps the warning and writes a `*.generated.csv` fallback when possible.",
             "- If `process_steps_table.csv` could not be overwritten, check `process_steps_table.generated.csv` first, then close the locking application and rerun the Stage 5+ export command.",
             *warning_lines,
@@ -206,6 +211,8 @@ def build_link_aware_diagnosis(output_dir: Path | str) -> str:
         _collect_table_count(output_dir, "evidence_parameter_links.csv", warnings, summary),
         _collect_table_count(output_dir, "spectra_parameter_links.csv", warnings, summary),
         _collect_table_count(output_dir, "sample_parameter_matrix.csv", warnings, summary),
+        _collect_table_count(output_dir, "sample_parameter_matrix_long.csv", warnings, summary),
+        _collect_table_count(output_dir, "sample_matrix_missing_diagnosis.csv", warnings, summary),
     ]
     summary_lines = [
         f"- `total_parameters`: {_render_summary_value(summary, 'total_parameters')}",
@@ -224,6 +231,7 @@ def build_link_aware_diagnosis(output_dir: Path | str) -> str:
         table_lines.append(f"- {label}: {item['row_count']}{suffix}")
 
     warning_lines = warnings or ["none"]
+    completeness_lines = _build_sample_matrix_completeness_lines(output_dir, warnings, summary)
     return "\n".join(
         [
             "# Link-aware Export Diagnosis",
@@ -239,6 +247,10 @@ def build_link_aware_diagnosis(output_dir: Path | str) -> str:
             "## Sample Matrix Count Notes",
             "- `parameter_count` and `linked_parameter_count` are legacy fields kept for backward compatibility.",
             "- Prefer `matrix_parameter_field_count`, `sample_parameter_value_count`, `unique_linked_parameter_count`, and the `linked_*_edge_count` fields for new analysis.",
+            "- Prefer `sample_parameter_matrix_long.csv` when you need provenance (`direct_sample_link` vs `broadcast_global`) for plotting or QA.",
+            "",
+            "## Sample Matrix Completeness",
+            *completeness_lines,
             "",
             "## Warnings",
             *[f"- `{item}`" for item in warning_lines],
@@ -292,3 +304,56 @@ def _csv_row_count(path: Path) -> int:
 def _render_summary_value(summary: dict[str, Any], key: str) -> str:
     value = summary.get(key)
     return "warning" if value is None else str(value)
+
+
+def _build_sample_matrix_completeness_lines(
+    output_dir: Path,
+    warnings: list[str],
+    summary: dict[str, Any],
+) -> list[str]:
+    diagnosis_info = _collect_table_count(output_dir, "sample_matrix_missing_diagnosis.csv", warnings, summary)
+    long_info = _collect_table_count(output_dir, "sample_parameter_matrix_long.csv", warnings, summary)
+    diagnosis_path = _resolved_table_path(output_dir, diagnosis_info["file_name"], summary)
+    long_path = _resolved_table_path(output_dir, long_info["file_name"], summary)
+    lines: list[str] = []
+
+    if diagnosis_path is None or not diagnosis_path.exists():
+        return ["- warning: sample matrix missing diagnosis is unavailable."]
+
+    reason_counts: dict[str, int] = {}
+    with diagnosis_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            reason = (row.get("missing_reason") or "").strip() or "unknown"
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    if not reason_counts:
+        lines.append("- no blank matrix cells were recorded in `sample_matrix_missing_diagnosis.csv`.")
+    else:
+        for reason in sorted(reason_counts):
+            lines.append(f"- `{reason}`: {reason_counts[reason]}")
+
+    if long_path is not None and long_path.exists():
+        origin_counts: dict[str, int] = {}
+        with long_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                origin = (row.get("value_origin") or "").strip() or "unknown"
+                origin_counts[origin] = origin_counts.get(origin, 0) + 1
+        for origin in sorted(origin_counts):
+            lines.append(f"- `value_origin={origin}` rows: {origin_counts[origin]}")
+    else:
+        lines.append("- warning: `sample_parameter_matrix_long.csv` is unavailable, so provenance counts could not be summarized.")
+    return lines
+
+
+def _resolved_table_path(output_dir: Path, file_name: str, summary: dict[str, Any]) -> Path | None:
+    canonical_path = output_dir / file_name
+    if canonical_path.exists() and file_name not in set(summary.get("locked_files") or []):
+        return canonical_path
+    fallback_path = output_dir / f"{canonical_path.stem}.generated{canonical_path.suffix}"
+    if fallback_path.exists():
+        return fallback_path
+    if canonical_path.exists():
+        return canonical_path
+    return None

@@ -16,6 +16,8 @@ from alumina_sol_extractor.dataset_fusion.link_aware_fields import (
     FINAL_SHOWCASE_FIELDS,
     PROCESS_STEPS_TABLE_FIELDS,
     SAMPLE_PARAMETER_MATRIX_FIELDS,
+    SAMPLE_PARAMETER_MATRIX_LONG_FIELDS,
+    SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS,
     SPECTRA_PARAMETER_LINK_FIELDS,
     build_sample_parameter_matrix_fields,
 )
@@ -112,15 +114,26 @@ def generate_link_aware_exports(
         evidence_parameter_links=evidence_parameter_links,
         spectra_parameter_links=spectra_parameter_links,
     )
+    sample_parameter_matrix_long = _build_sample_parameter_matrix_long(
+        paper_id=paper_id,
+        samples=samples,
+        final_parameters_linked=final_parameters_linked,
+        evidence_parameter_links=evidence_parameter_links,
+        spectra_parameter_links=spectra_parameter_links,
+    )
     sample_parameter_matrix = _build_sample_parameter_matrix(
         paper_id=paper_id,
         title=title,
         paper=paper,
         samples=samples,
-        final_parameters_linked=final_parameters_linked,
-        evidence_parameter_links=evidence_parameter_links,
-        spectra_parameter_links=spectra_parameter_links,
+        sample_parameter_matrix_long=sample_parameter_matrix_long,
         spectra=spectra,
+    )
+    sample_matrix_missing_diagnosis = _build_sample_matrix_missing_diagnosis(
+        samples=samples,
+        final_parameters_linked=final_parameters_linked,
+        sample_parameter_matrix=sample_parameter_matrix,
+        sample_parameter_matrix_long=sample_parameter_matrix_long,
     )
     sample_parameter_matrix_fields = build_sample_parameter_matrix_fields(
         _collect_sample_matrix_dynamic_keys(sample_parameter_matrix)
@@ -149,6 +162,8 @@ def generate_link_aware_exports(
         showcase_rows=final_showcase_table,
         include_showcase=include_showcase,
     )
+    summary["sample_parameter_matrix_long_rows"] = len(sample_parameter_matrix_long)
+    summary["sample_matrix_missing_diagnosis_rows"] = len(sample_matrix_missing_diagnosis)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_write(
@@ -168,6 +183,20 @@ def generate_link_aware_exports(
     safe_write(
         output_dir / "sample_parameter_matrix.csv",
         lambda path: write_csv_with_fields(path, sample_parameter_matrix, sample_parameter_matrix_fields),
+        write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
+    )
+    safe_write(
+        output_dir / "sample_parameter_matrix_long.csv",
+        lambda path: write_csv_with_fields(path, sample_parameter_matrix_long, SAMPLE_PARAMETER_MATRIX_LONG_FIELDS),
+        write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
+    )
+    safe_write(
+        output_dir / "sample_matrix_missing_diagnosis.csv",
+        lambda path: write_csv_with_fields(path, sample_matrix_missing_diagnosis, SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS),
         write_warnings,
         locked_files=locked_files,
         fallback_outputs=fallback_outputs,
@@ -215,7 +244,9 @@ def generate_link_aware_exports(
         "output_dir": str(output_dir),
         "summary": summary,
         "final_parameters_linked": final_parameters_linked,
+        "sample_parameter_matrix_long": sample_parameter_matrix_long,
         "sample_parameter_matrix": sample_parameter_matrix,
+        "sample_matrix_missing_diagnosis": sample_matrix_missing_diagnosis,
         "process_steps_table": process_steps_table,
         "evidence_parameter_links": evidence_parameter_links,
         "spectra_parameter_links": spectra_parameter_links,
@@ -444,57 +475,36 @@ def _build_sample_parameter_matrix(
     title: str,
     paper: dict[str, Any],
     samples: list[dict[str, Any]],
-    final_parameters_linked: list[dict[str, Any]],
-    evidence_parameter_links: list[dict[str, Any]],
-    spectra_parameter_links: list[dict[str, Any]],
+    sample_parameter_matrix_long: list[dict[str, Any]],
     spectra: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    parameters_by_sample = defaultdict(list)
-    sole_sample_id = samples[0].get("sample_id") if len(samples) == 1 else None
-    for row in final_parameters_linked:
-        resolved_sample_id = row.get("resolved_sample_id")
-        if resolved_sample_id:
-            parameters_by_sample[resolved_sample_id].append(row)
-        elif sole_sample_id and (
-            row.get("linked_sample_ids")
-            or row.get("linked_evidence_ids")
-            or row.get("linked_spectra_ids")
-        ):
-            parameters_by_sample[sole_sample_id].append(row)
+    long_rows_by_sample = defaultdict(list)
+    for row in sample_parameter_matrix_long:
+        sample_id = row.get("sample_id")
+        if sample_id:
+            long_rows_by_sample[str(sample_id)].append(row)
     sample_matrix_parameter_keys: list[str] = list(CORE_SAMPLE_MATRIX_KEYS)
     seen_matrix_parameter_keys = set(sample_matrix_parameter_keys)
-    for sample in samples:
-        sample_id = sample.get("sample_id")
-        for item in parameters_by_sample.get(sample_id, []):
-            canonical_key = _string_or_none(item.get("canonical_key"))
-            if not canonical_key or canonical_key in seen_matrix_parameter_keys:
-                continue
-            seen_matrix_parameter_keys.add(canonical_key)
-            sample_matrix_parameter_keys.append(canonical_key)
+    for item in sample_parameter_matrix_long:
+        canonical_key = _string_or_none(item.get("canonical_key"))
+        if not canonical_key or canonical_key in seen_matrix_parameter_keys:
+            continue
+        seen_matrix_parameter_keys.add(canonical_key)
+        sample_matrix_parameter_keys.append(canonical_key)
     spectra_by_id = {_spectra_id_for_figure(item.get("figure_id")): item for item in spectra if item.get("figure_id")}
     for sample in samples:
-        sample_id = sample.get("sample_id")
-        sample_parameters = parameters_by_sample.get(sample_id, [])
+        sample_id = _string_or_none(sample.get("sample_id"))
+        sample_long_rows = long_rows_by_sample.get(sample_id, [])
         sample_parameter_ids = {
             str(item.get("parameter_id"))
-            for item in sample_parameters
+            for item in sample_long_rows
             if item.get("parameter_id")
         }
-        sample_evidence_links = [
-            row
-            for row in evidence_parameter_links
-            if row.get("parameter_id") and str(row.get("parameter_id")) in sample_parameter_ids
-        ]
-        sample_spectra_links = [
-            row
-            for row in spectra_parameter_links
-            if row.get("parameter_id") and str(row.get("parameter_id")) in sample_parameter_ids
-        ]
         linked_evidence_ids = _sorted_unique(
             [
                 evidence_id
-                for item in sample_parameters
+                for item in sample_long_rows
                 for evidence_id in str(item.get("linked_evidence_ids") or "").split("; ")
                 if evidence_id
             ]
@@ -502,16 +512,24 @@ def _build_sample_parameter_matrix(
         linked_spectra_ids = _sorted_unique(
             [
                 spectra_id if str(spectra_id).startswith("spectra-") else _spectra_id_for_figure(spectra_id)
-                for item in sample_parameters
+                for item in sample_long_rows
                 for spectra_id in str(item.get("linked_spectra_ids") or "").split("; ")
                 if spectra_id
+            ]
+        )
+        linked_process_step_ids = _sorted_unique(
+            [
+                step_id
+                for item in sample_long_rows
+                for step_id in str(item.get("linked_process_step_ids") or "").split("; ")
+                if step_id
             ]
         )
         linked_figure_ids = _sorted_unique(
             [
                 figure_id
-                for item in sample_parameters
-                for figure_id in str(item.get("linked_figure_ids") or "").split("; ")
+                for spectra_id in linked_spectra_ids
+                for figure_id in [_string_or_none(spectra_by_id.get(spectra_id, {}).get("figure_id"))]
                 if figure_id
             ]
         )
@@ -522,11 +540,19 @@ def _build_sample_parameter_matrix(
                 if spectra_by_id.get(spectra_id, {}).get("technique")
             ]
         )
+        value_rows_by_key = defaultdict(list)
+        for item in sample_long_rows:
+            canonical_key = _string_or_none(item.get("canonical_key"))
+            if not canonical_key:
+                continue
+            value_rows_by_key[canonical_key].append(item)
         unique_linked_parameter_count = len(sample_parameter_ids)
-        sample_parameter_value_count = sum(1 for item in sample_parameters if _display_value(item))
-        linked_process_step_edge_count = sum(1 for row in sample_evidence_links if row.get("source_type") == "process_step")
-        linked_evidence_edge_count = sum(1 for row in sample_evidence_links if row.get("source_type") != "process_step")
-        linked_spectra_edge_count = len(sample_spectra_links)
+        sample_parameter_value_count = sum(1 for item in sample_long_rows if _string_or_none(item.get("value")))
+        linked_process_step_edge_count = sum(
+            int(item.get("_linked_process_step_edge_count") or 0) for item in sample_long_rows
+        )
+        linked_evidence_edge_count = sum(int(item.get("_linked_evidence_edge_count") or 0) for item in sample_long_rows)
+        linked_spectra_edge_count = sum(int(item.get("_linked_spectra_edge_count") or 0) for item in sample_long_rows)
         row: dict[str, Any] = {
             "paper_id": paper_id,
             "title": title,
@@ -535,7 +561,7 @@ def _build_sample_parameter_matrix(
             "material_system": paper.get("material_system"),
             "process_route": paper.get("process_route"),
             "parameter_count": len(sample.get("linked_parameters") or []),
-            "linked_parameter_count": len(sample_parameters),
+            "linked_parameter_count": len(sample_long_rows),
             "matrix_parameter_field_count": 0,
             "sample_parameter_value_count": sample_parameter_value_count,
             "unique_linked_parameter_count": unique_linked_parameter_count,
@@ -546,12 +572,14 @@ def _build_sample_parameter_matrix(
             "evidence_count": len(linked_evidence_ids),
             "spectra_count": len(linked_spectra_ids),
             "evidence_linked_parameter_count": sum(
-                1 for item in sample_parameters if item.get("evidence_status") in {"strong_evidence", "process_step_evidence", "linked_evidence"}
+                1
+                for item in sample_long_rows
+                if item.get("evidence_status") in {"strong_evidence", "process_step_evidence", "linked_evidence"}
             ),
             "process_step_linked_parameter_count": sum(
-                1 for item in sample_parameters if item.get("evidence_status") == "process_step_evidence"
+                1 for item in sample_long_rows if item.get("evidence_status") == "process_step_evidence"
             ),
-            "spectra_linked_parameter_count": sum(1 for item in sample_parameters if item.get("linked_spectra_ids")),
+            "spectra_linked_parameter_count": sum(1 for item in sample_long_rows if item.get("linked_spectra_ids")),
             "linked_spectra_count": len(linked_spectra_ids),
             "linked_spectra_ids": "; ".join(linked_spectra_ids),
             "linked_spectra_figure_ids": "; ".join(
@@ -562,7 +590,11 @@ def _build_sample_parameter_matrix(
         }
         multi_value_keys: list[str] = []
         for canonical_key in sample_matrix_parameter_keys:
-            values = [_display_value(item) for item in sample_parameters if item.get("canonical_key") == canonical_key and _display_value(item)]
+            values = [
+                _string_or_none(item.get("value"))
+                for item in value_rows_by_key.get(canonical_key, [])
+                if _string_or_none(item.get("value"))
+            ]
             unique_values = _sorted_unique(values)
             if len(unique_values) > 1:
                 multi_value_keys.append(canonical_key)
@@ -571,6 +603,332 @@ def _build_sample_parameter_matrix(
         row["multi_value_flags"] = "; ".join(multi_value_keys)
         rows.append(row)
     return rows
+
+
+_SAMPLE_MATRIX_GLOBAL_BROADCAST_KEYS = {
+    "reaction_temperature_C",
+    "cooling_water_temperature_C",
+    "reactor_volume_m3",
+    "stirring_method",
+    "aluminum_source",
+    "silicon_source",
+    "solid_content_wt_percent",
+    "pH",
+    "weight_kg",
+}
+
+_SAMPLE_MATRIX_NON_BROADCAST_KEYS = {
+    "xrd_peak_position_2theta_deg",
+    "ftir_peak_position_cm_1",
+    "raman_peak_position_cm_1",
+    "nmr_27Al_peak_position_ppm",
+    "dsc_peak_temperature_C",
+    "mass_loss_wt_percent",
+    "tensile_strength_MPa",
+    "elongation_at_break_percent",
+    "average_fiber_diameter_um",
+}
+
+
+def _build_sample_parameter_matrix_long(
+    *,
+    paper_id: str,
+    samples: list[dict[str, Any]],
+    final_parameters_linked: list[dict[str, Any]],
+    evidence_parameter_links: list[dict[str, Any]],
+    spectra_parameter_links: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    sample_names = {
+        str(sample.get("sample_id")): sample.get("sample_name")
+        for sample in samples
+        if sample.get("sample_id")
+    }
+    evidence_rows_by_parameter = defaultdict(list)
+    process_step_ids_by_parameter = defaultdict(list)
+    spectra_rows_by_parameter = defaultdict(list)
+    for row in evidence_parameter_links:
+        parameter_id = _string_or_none(row.get("parameter_id"))
+        if not parameter_id:
+            continue
+        evidence_rows_by_parameter[parameter_id].append(row)
+        if row.get("source_type") == "process_step" and row.get("source_id"):
+            process_step_ids_by_parameter[parameter_id].append(str(row.get("source_id")))
+    for row in spectra_parameter_links:
+        parameter_id = _string_or_none(row.get("parameter_id"))
+        if parameter_id:
+            spectra_rows_by_parameter[parameter_id].append(row)
+
+    direct_sample_rows_by_key = defaultdict(list)
+    unresolved_rows_by_key = defaultdict(list)
+    for row in final_parameters_linked:
+        canonical_key = _string_or_none(row.get("canonical_key"))
+        if not canonical_key or not _display_value(row):
+            continue
+        sample_ids = _linked_sample_ids_from_final_row(row)
+        if sample_ids:
+            direct_sample_rows_by_key[canonical_key].append(row)
+        else:
+            unresolved_rows_by_key[canonical_key].append(row)
+
+    for row in final_parameters_linked:
+        canonical_key = _string_or_none(row.get("canonical_key"))
+        parameter_id = _string_or_none(row.get("parameter_id"))
+        value = _display_value(row)
+        if not canonical_key or not parameter_id or not value:
+            continue
+        sample_ids = _linked_sample_ids_from_final_row(row)
+        if sample_ids:
+            for sample_id in sample_ids:
+                rows.append(
+                    _build_sample_matrix_long_row(
+                        paper_id=paper_id,
+                        sample_id=sample_id,
+                        sample_name=sample_names.get(sample_id),
+                        parameter_row=row,
+                        evidence_rows=evidence_rows_by_parameter.get(parameter_id, []),
+                        spectra_rows=spectra_rows_by_parameter.get(parameter_id, []),
+                        linked_process_step_ids=process_step_ids_by_parameter.get(parameter_id, []),
+                        value_origin="direct_sample_link",
+                        warning=None,
+                    )
+                )
+            continue
+
+        if not _can_broadcast_parameter_to_all_samples(
+            row,
+            direct_sample_rows_for_key=direct_sample_rows_by_key.get(canonical_key, []),
+        ):
+            continue
+        for sample in samples:
+            sample_id = _string_or_none(sample.get("sample_id"))
+            if not sample_id:
+                continue
+            rows.append(
+                _build_sample_matrix_long_row(
+                    paper_id=paper_id,
+                    sample_id=sample_id,
+                    sample_name=sample.get("sample_name"),
+                    parameter_row=row,
+                    evidence_rows=evidence_rows_by_parameter.get(parameter_id, []),
+                    spectra_rows=spectra_rows_by_parameter.get(parameter_id, []),
+                    linked_process_step_ids=process_step_ids_by_parameter.get(parameter_id, []),
+                    value_origin="broadcast_global",
+                    warning="broadcast_from_global_constant",
+                )
+            )
+    return rows
+
+
+def _build_sample_matrix_long_row(
+    *,
+    paper_id: str,
+    sample_id: str,
+    sample_name: str | None,
+    parameter_row: dict[str, Any],
+    evidence_rows: list[dict[str, Any]],
+    spectra_rows: list[dict[str, Any]],
+    linked_process_step_ids: list[str],
+    value_origin: str,
+    warning: str | None,
+) -> dict[str, Any]:
+    confidence = "high" if value_origin == "direct_sample_link" else "medium"
+    if parameter_row.get("sample_resolution_source") == "unresolved":
+        confidence = "medium"
+    linked_evidence_ids = _sorted_unique(
+        [row.get("evidence_id") for row in evidence_rows if row.get("source_type") != "process_step" and row.get("evidence_id")]
+        + [row.get("source_id") for row in evidence_rows if row.get("source_type") == "text_reference" and row.get("source_id")]
+    )
+    linked_spectra_ids = _sorted_unique([row.get("spectra_id") for row in spectra_rows if row.get("spectra_id")])
+    return {
+        "paper_id": paper_id,
+        "sample_id": sample_id,
+        "sample_name": sample_name,
+        "canonical_key": parameter_row.get("canonical_key"),
+        "value": _display_value(parameter_row),
+        "unit": parameter_row.get("unit"),
+        "parameter_id": parameter_row.get("parameter_id"),
+        "value_origin": value_origin,
+        "evidence_status": parameter_row.get("evidence_status"),
+        "linked_evidence_ids": "; ".join(linked_evidence_ids),
+        "linked_spectra_ids": "; ".join(linked_spectra_ids),
+        "linked_process_step_ids": "; ".join(_sorted_unique(linked_process_step_ids)),
+        "confidence": confidence,
+        "warning": warning,
+        "_linked_evidence_edge_count": len([row for row in evidence_rows if row.get("source_type") != "process_step"]),
+        "_linked_spectra_edge_count": len(spectra_rows),
+        "_linked_process_step_edge_count": len(_sorted_unique(linked_process_step_ids)),
+    }
+
+
+def _build_sample_matrix_missing_diagnosis(
+    *,
+    samples: list[dict[str, Any]],
+    final_parameters_linked: list[dict[str, Any]],
+    sample_parameter_matrix: list[dict[str, Any]],
+    sample_parameter_matrix_long: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    matrix_rows_by_sample = {
+        str(row.get("sample_id")): row
+        for row in sample_parameter_matrix
+        if row.get("sample_id")
+    }
+    long_rows_by_sample_and_key = defaultdict(list)
+    extracted_rows_by_key = defaultdict(list)
+    direct_rows_by_sample_and_key = defaultdict(list)
+    broadcast_rows_by_sample_and_key = defaultdict(list)
+    sample_matrix_keys = set(CORE_SAMPLE_MATRIX_KEYS)
+    for row in final_parameters_linked:
+        canonical_key = _string_or_none(row.get("canonical_key"))
+        if not canonical_key:
+            continue
+        sample_matrix_keys.add(canonical_key)
+        extracted_rows_by_key[canonical_key].append(row)
+        for sample_id in _linked_sample_ids_from_final_row(row):
+            direct_rows_by_sample_and_key[(sample_id, canonical_key)].append(row)
+    for row in sample_parameter_matrix_long:
+        sample_id = _string_or_none(row.get("sample_id"))
+        canonical_key = _string_or_none(row.get("canonical_key"))
+        if not sample_id or not canonical_key:
+            continue
+        long_rows_by_sample_and_key[(sample_id, canonical_key)].append(row)
+        if row.get("value_origin") == "broadcast_global":
+            broadcast_rows_by_sample_and_key[(sample_id, canonical_key)].append(row)
+
+    diagnosis_rows: list[dict[str, Any]] = []
+    for sample in samples:
+        sample_id = _string_or_none(sample.get("sample_id"))
+        if not sample_id:
+            continue
+        sample_name = sample.get("sample_name")
+        matrix_row = matrix_rows_by_sample.get(sample_id, {})
+        for canonical_key in sorted(sample_matrix_keys):
+            matrix_value_present = bool(_string_or_none(matrix_row.get(canonical_key)))
+            if matrix_value_present:
+                continue
+            rows_for_key = extracted_rows_by_key.get(canonical_key, [])
+            direct_rows = direct_rows_by_sample_and_key.get((sample_id, canonical_key), [])
+            long_rows = long_rows_by_sample_and_key.get((sample_id, canonical_key), [])
+            broadcast_rows = broadcast_rows_by_sample_and_key.get((sample_id, canonical_key), [])
+            final_parameter_exists = bool(rows_for_key)
+            has_sample_link = bool(direct_rows)
+            has_global_value = bool(broadcast_rows) or any(
+                _can_broadcast_parameter_to_all_samples(
+                    row,
+                    direct_sample_rows_for_key=[
+                        candidate
+                        for candidate in rows_for_key
+                        if _linked_sample_ids_from_final_row(candidate)
+                    ],
+                )
+                for row in rows_for_key
+            )
+            missing_reason, recommended_action = _classify_sample_matrix_missing_reason(
+                sample_id=sample_id,
+                canonical_key=canonical_key,
+                rows_for_key=rows_for_key,
+                direct_rows=direct_rows,
+                long_rows=long_rows,
+                has_global_value=has_global_value,
+            )
+            diagnosis_rows.append(
+                {
+                    "sample_id": sample_id,
+                    "sample_name": sample_name,
+                    "canonical_key": canonical_key,
+                    "matrix_value_present": False,
+                    "final_parameter_exists": final_parameter_exists,
+                    "has_sample_link": has_sample_link,
+                    "has_global_value": has_global_value,
+                    "missing_reason": missing_reason,
+                    "recommended_action": recommended_action,
+                }
+            )
+    return diagnosis_rows
+
+
+def _classify_sample_matrix_missing_reason(
+    *,
+    sample_id: str,
+    canonical_key: str,
+    rows_for_key: list[dict[str, Any]],
+    direct_rows: list[dict[str, Any]],
+    long_rows: list[dict[str, Any]],
+    has_global_value: bool,
+) -> tuple[str, str]:
+    if not rows_for_key:
+        return "no_parameter_extracted", "leave_blank"
+    if direct_rows and not long_rows:
+        return "sample_linked_but_missing_from_matrix", "fix_matrix_bug"
+    if has_global_value and not long_rows:
+        return "global_applies_to_all_samples", "broadcast_global_if_allowed"
+    unresolved_rows = [row for row in rows_for_key if not _linked_sample_ids_from_final_row(row)]
+    if unresolved_rows:
+        sample_level_unresolved = [row for row in unresolved_rows if not _is_not_sample_level_parameter(row)]
+        if sample_level_unresolved:
+            return "extracted_but_unresolved_sample", "needs_sample_resolution"
+    if any(_linked_sample_ids_from_final_row(row) for row in rows_for_key):
+        return "parameter_belongs_to_other_samples", "leave_blank"
+    if any(_is_not_sample_level_parameter(row) for row in rows_for_key):
+        return "not_sample_level", "leave_blank"
+    return "extracted_but_unresolved_sample", "needs_sample_resolution"
+
+
+def _linked_sample_ids_from_final_row(row: dict[str, Any]) -> list[str]:
+    sample_ids = _split_semicolon_field(row.get("linked_sample_ids"))
+    resolved_sample_id = _string_or_none(row.get("resolved_sample_id"))
+    if resolved_sample_id and resolved_sample_id not in sample_ids:
+        sample_ids.insert(0, resolved_sample_id)
+    return _sorted_unique(sample_ids)
+
+
+def _can_broadcast_parameter_to_all_samples(
+    row: dict[str, Any],
+    *,
+    direct_sample_rows_for_key: list[dict[str, Any]],
+) -> bool:
+    canonical_key = _string_or_none(row.get("canonical_key"))
+    source_scope = (_string_or_none(row.get("source_scope")) or "").casefold()
+    if not canonical_key or canonical_key not in _SAMPLE_MATRIX_GLOBAL_BROADCAST_KEYS:
+        return False
+    if direct_sample_rows_for_key:
+        return False
+    value = _display_value(row)
+    if not value:
+        return False
+    if canonical_key in _SAMPLE_MATRIX_NON_BROADCAST_KEYS:
+        return False
+    if _is_not_sample_level_parameter(row):
+        return False
+    if "global" not in source_scope and "paper" not in source_scope:
+        return False
+    return bool(value)
+
+
+def _is_not_sample_level_parameter(row: dict[str, Any]) -> bool:
+    canonical_key = _string_or_none(row.get("canonical_key")) or ""
+    source_scope = (_string_or_none(row.get("source_scope")) or "").casefold()
+    category = (_string_or_none(row.get("category")) or "").casefold()
+    if canonical_key in _SAMPLE_MATRIX_NON_BROADCAST_KEYS:
+        return True
+    if "peak_position" in canonical_key:
+        return True
+    if canonical_key.startswith(("xrd_", "ftir_", "raman_", "nmr_")):
+        return True
+    if "spectra" in source_scope or "figure" in source_scope or "stage4" in source_scope:
+        return True
+    if "performance" in source_scope or "result" in source_scope:
+        return True
+    if category in {"spectra", "spectral_feature", "figure_observation", "performance"}:
+        return True
+    return False
+
+
+def _split_semicolon_field(value: Any) -> list[str]:
+    text = _string_or_none(value)
+    if not text:
+        return []
+    return [part.strip() for part in text.split(";") if part.strip()]
 
 
 def _collect_sample_matrix_dynamic_keys(rows: list[dict[str, Any]]) -> list[str]:

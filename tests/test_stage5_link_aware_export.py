@@ -250,6 +250,8 @@ def test_link_aware_export_uses_links_and_does_not_modify_sources(tmp_path: Path
     assert (dataset_dir / "link_aware_exports" / "final_parameters_linked.csv").exists()
     assert (dataset_dir / "link_aware_exports" / "final_parameters_linked.parquet").exists()
     assert (dataset_dir / "link_aware_exports" / "sample_parameter_matrix.csv").exists()
+    assert (dataset_dir / "link_aware_exports" / "sample_parameter_matrix_long.csv").exists()
+    assert (dataset_dir / "link_aware_exports" / "sample_matrix_missing_diagnosis.csv").exists()
     assert (dataset_dir / "link_aware_exports" / "evidence_parameter_links.csv").exists()
     assert (dataset_dir / "link_aware_exports" / "spectra_parameter_links.csv").exists()
     assert (dataset_dir / "link_aware_exports" / "final_showcase_table.csv").exists()
@@ -297,6 +299,8 @@ def test_link_aware_export_diagnosis_matches_latest_summary_and_tables(tmp_path:
     process_steps_rows = len(pd.read_csv(output_dir / "process_steps_table.csv"))
     evidence_rows = len(pd.read_csv(output_dir / "evidence_parameter_links.csv"))
     sample_rows = len(pd.read_csv(output_dir / "sample_parameter_matrix.csv"))
+    sample_long_rows = len(pd.read_csv(output_dir / "sample_parameter_matrix_long.csv"))
+    sample_missing_rows = len(pd.read_csv(output_dir / "sample_matrix_missing_diagnosis.csv"))
 
     assert result["summary"] == summary
     assert f"- `total_parameters`: {summary['total_parameters']}" in diagnosis
@@ -306,6 +310,10 @@ def test_link_aware_export_diagnosis_matches_latest_summary_and_tables(tmp_path:
     assert f"- `process_steps_table.csv` rows: {process_steps_rows}" in diagnosis
     assert f"- `evidence_parameter_links.csv` rows: {evidence_rows}" in diagnosis
     assert f"- `sample_parameter_matrix.csv` rows: {sample_rows}" in diagnosis
+    assert f"- `sample_parameter_matrix_long.csv` rows: {sample_long_rows}" in diagnosis
+    assert f"- `sample_matrix_missing_diagnosis.csv` rows: {sample_missing_rows}" in diagnosis
+    assert "## Sample Matrix Completeness" in diagnosis
+    assert "`value_origin=direct_sample_link` rows" in diagnosis or "`value_origin=broadcast_global` rows" in diagnosis
 
 
 def test_link_aware_export_diagnosis_rebuilds_updated_summary_and_warns_on_missing_file(tmp_path: Path) -> None:
@@ -330,3 +338,15 @@ def test_link_aware_export_diagnosis_rebuilds_updated_summary_and_warns_on_missi
     assert f"- `sample_matrix_rows`: {updated_summary['sample_matrix_rows']}" in diagnosis
     assert "- `process_steps_table.csv` rows: warning" in diagnosis
     assert "- `missing_file:process_steps_table.csv`" in diagnosis
+
+
+def test_link_aware_export_diagnosis_warns_when_sample_matrix_diagnosis_file_is_missing(tmp_path: Path) -> None:
+    dataset_dir = _build_dataset(tmp_path, links=None, spectra=[])
+    generate_link_aware_exports(dataset_dir, include_showcase=False)
+    output_dir = dataset_dir / "link_aware_exports"
+    (output_dir / "sample_matrix_missing_diagnosis.csv").unlink()
+
+    diagnosis = build_link_aware_diagnosis(output_dir)
+
+    assert "## Sample Matrix Completeness" in diagnosis
+    assert "warning: sample matrix missing diagnosis is unavailable" in diagnosis

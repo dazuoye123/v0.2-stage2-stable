@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -267,3 +268,159 @@ def test_sample_matrix_expands_dynamic_sample_linked_fields_and_unit_fallbacks(t
         "weight_kg",
     ):
         assert field_name in csv_text
+
+
+def test_sample_matrix_long_tracks_direct_sample_link_and_missing_diagnosis(tmp_path: Path) -> None:
+    dataset_dir = tmp_path / "final_dataset"
+    _write_json(dataset_dir / "paper.json", {"paper_id": "paper-1", "title": "Direct Sample Link Test"})
+    _write_jsonl(
+        dataset_dir / "samples.jsonl",
+        [
+            {"sample_id": "S1", "sample_name": "Sample 1", "linked_parameters": ["param-1"]},
+            {"sample_id": "S2", "sample_name": "Sample 2", "linked_parameters": []},
+        ],
+    )
+    _write_jsonl(
+        dataset_dir / "parameters.jsonl",
+        [
+            {
+                "parameter_id": "param-1",
+                "paper_id": "paper-1",
+                "sample_id": "S1",
+                "canonical_key": "reaction_temperature_C",
+                "raw_name": "reaction temperature",
+                "value": 85,
+                "unit": None,
+                "source_scope": "sample",
+                "evidence_refs": [],
+                "quality_flags": [],
+                "normalization_note": None,
+            }
+        ],
+    )
+    _write_jsonl(dataset_dir / "process_steps.jsonl", [])
+    _write_jsonl(dataset_dir / "evidence.jsonl", [])
+    _write_jsonl(dataset_dir / "spectra.jsonl", [])
+    _write_jsonl(dataset_dir / "figures.jsonl", [])
+    _write_json(dataset_dir / "quality_summary.json", {"invalid_canonical_key_count": 0})
+    _write_jsonl(dataset_dir / "linking" / "links.jsonl", [])
+    _write_json(dataset_dir / "linking" / "linking_summary.json", {"accepted_links": 0})
+
+    result = generate_link_aware_exports(dataset_dir, include_showcase=False)
+
+    matrix_rows = {row["sample_id"]: row for row in result["sample_parameter_matrix"]}
+    assert matrix_rows["S1"]["reaction_temperature_C"] == "85 C"
+    assert matrix_rows["S2"]["reaction_temperature_C"] == ""
+
+    long_rows = result["sample_parameter_matrix_long"]
+    assert any(
+        row["sample_id"] == "S1"
+        and row["canonical_key"] == "reaction_temperature_C"
+        and row["value_origin"] == "direct_sample_link"
+        for row in long_rows
+    )
+
+    diagnosis_rows = result["sample_matrix_missing_diagnosis"]
+    assert any(
+        row["sample_id"] == "S2"
+        and row["canonical_key"] == "reaction_temperature_C"
+        and row["missing_reason"] == "parameter_belongs_to_other_samples"
+        for row in diagnosis_rows
+    )
+
+
+def test_sample_matrix_broadcasts_global_process_values_but_not_spectra_or_results(tmp_path: Path) -> None:
+    dataset_dir = tmp_path / "final_dataset"
+    _write_json(dataset_dir / "paper.json", {"paper_id": "paper-1", "title": "Broadcast Test"})
+    _write_jsonl(
+        dataset_dir / "samples.jsonl",
+        [
+            {"sample_id": "S1", "sample_name": "Sample 1", "linked_parameters": []},
+            {"sample_id": "S2", "sample_name": "Sample 2", "linked_parameters": []},
+        ],
+    )
+    _write_jsonl(
+        dataset_dir / "parameters.jsonl",
+        [
+            {
+                "parameter_id": "param-global",
+                "paper_id": "paper-1",
+                "sample_id": None,
+                "canonical_key": "reactor_volume_m3",
+                "raw_name": "reactor volume",
+                "value": 0.5,
+                "unit": None,
+                "source_scope": "global_constants.additional_parameter_records",
+                "evidence_refs": [],
+                "quality_flags": [],
+                "normalization_note": None,
+            },
+            {
+                "parameter_id": "param-spectra",
+                "paper_id": "paper-1",
+                "sample_id": None,
+                "canonical_key": "ftir_peak_position_cm_1",
+                "raw_name": "FTIR peak",
+                "value": 467,
+                "unit": "cm^-1",
+                "source_scope": "stage4.spectra.peaks",
+                "evidence_refs": [],
+                "quality_flags": [],
+                "normalization_note": None,
+            },
+            {
+                "parameter_id": "param-result",
+                "paper_id": "paper-1",
+                "sample_id": None,
+                "canonical_key": "tensile_strength_MPa",
+                "raw_name": "tensile strength",
+                "value": 620,
+                "unit": "MPa",
+                "source_scope": "result_discussion",
+                "evidence_refs": [],
+                "quality_flags": [],
+                "normalization_note": None,
+            },
+        ],
+    )
+    _write_jsonl(dataset_dir / "process_steps.jsonl", [])
+    _write_jsonl(dataset_dir / "evidence.jsonl", [])
+    _write_jsonl(dataset_dir / "spectra.jsonl", [])
+    _write_jsonl(dataset_dir / "figures.jsonl", [])
+    _write_json(dataset_dir / "quality_summary.json", {"invalid_canonical_key_count": 0})
+    _write_jsonl(dataset_dir / "linking" / "links.jsonl", [])
+    _write_json(dataset_dir / "linking" / "linking_summary.json", {"accepted_links": 0})
+
+    result = generate_link_aware_exports(dataset_dir, include_showcase=False)
+
+    matrix_rows = {row["sample_id"]: row for row in result["sample_parameter_matrix"]}
+    assert matrix_rows["S1"]["reactor_volume_m3"] == "0.5 m3"
+    assert matrix_rows["S2"]["reactor_volume_m3"] == "0.5 m3"
+    assert matrix_rows["S1"]["ftir_peak_position_cm_1"] == ""
+    assert matrix_rows["S2"]["ftir_peak_position_cm_1"] == ""
+    assert matrix_rows["S1"]["tensile_strength_MPa"] == ""
+    assert matrix_rows["S2"]["tensile_strength_MPa"] == ""
+
+    long_rows = result["sample_parameter_matrix_long"]
+    assert sum(1 for row in long_rows if row["canonical_key"] == "reactor_volume_m3") == 2
+    assert all(row["value_origin"] == "broadcast_global" for row in long_rows if row["canonical_key"] == "reactor_volume_m3")
+    assert not any(row["canonical_key"] == "ftir_peak_position_cm_1" for row in long_rows)
+    assert not any(row["canonical_key"] == "tensile_strength_MPa" for row in long_rows)
+
+    diagnosis_rows = result["sample_matrix_missing_diagnosis"]
+    assert any(
+        row["canonical_key"] == "ftir_peak_position_cm_1" and row["missing_reason"] == "not_sample_level"
+        for row in diagnosis_rows
+    )
+    assert any(
+        row["canonical_key"] == "tensile_strength_MPa" and row["missing_reason"] == "not_sample_level"
+        for row in diagnosis_rows
+    )
+
+    long_csv = dataset_dir / "link_aware_exports" / "sample_parameter_matrix_long.csv"
+    diagnosis_csv = dataset_dir / "link_aware_exports" / "sample_matrix_missing_diagnosis.csv"
+    assert long_csv.exists()
+    assert diagnosis_csv.exists()
+    with long_csv.open("r", encoding="utf-8", newline="") as handle:
+        fieldnames = csv.DictReader(handle).fieldnames or []
+    assert "value_origin" in fieldnames
