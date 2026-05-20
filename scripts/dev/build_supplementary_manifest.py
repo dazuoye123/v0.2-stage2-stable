@@ -39,55 +39,56 @@ SUPPLEMENTARY_FIELDS = [
     "download_status",
     "needs_manual_download",
     "confidence",
+    "detection_hits",
     "evidence_strength",
     "strong_evidence_hits",
     "weak_evidence_hits",
-    "needs_manual_review",
     "notes",
 ]
 
 STRONG_TEXT_PATTERNS = {
-    "supplementary information": re.compile(r"\bsupplementary information\b", re.IGNORECASE),
-    "supporting information": re.compile(r"\bsupporting information\b", re.IGNORECASE),
-    "supplementary material": re.compile(r"\bsupplementary material\b", re.IGNORECASE),
-    "electronic supplementary material": re.compile(r"\belectronic supplementary material\b", re.IGNORECASE),
-    "esi": re.compile(r"\besi\b", re.IGNORECASE),
-    "supplementary data": re.compile(r"\bsupplementary data\b", re.IGNORECASE),
-    "supplementary file": re.compile(r"\bsupplementary file\b", re.IGNORECASE),
-    "supporting file": re.compile(r"\bsupporting file\b", re.IGNORECASE),
-    "supporting data": re.compile(r"\bsupporting data\b", re.IGNORECASE),
-    "supplementary materials are available": re.compile(
-        r"\bsupplementary materials are available\b", re.IGNORECASE
+    "Supplementary Information": re.compile(r"\bsupplementary information\b", re.IGNORECASE),
+    "Supporting Information": re.compile(r"\bsupporting information\b", re.IGNORECASE),
+    "Supplementary Material": re.compile(r"\bsupplementary material\b", re.IGNORECASE),
+    "Supplementary Materials": re.compile(r"\bsupplementary materials\b", re.IGNORECASE),
+    "Electronic Supplementary Material": re.compile(r"\belectronic supplementary material\b", re.IGNORECASE),
+    "Electronic Supporting Information": re.compile(r"\belectronic supporting information\b", re.IGNORECASE),
+    "ESI": re.compile(r"\besi\b", re.IGNORECASE),
+    "Supporting Data": re.compile(r"\bsupporting data\b", re.IGNORECASE),
+    "Supplementary Data": re.compile(r"\bsupplementary data\b", re.IGNORECASE),
+    "Supplementary File": re.compile(r"\bsupplementary file\b", re.IGNORECASE),
+    "Supporting File": re.compile(r"\bsupporting file\b", re.IGNORECASE),
+    "See Supplementary Information": re.compile(r"\bsee supplementary information\b", re.IGNORECASE),
+    "See Supporting Information": re.compile(r"\bsee supporting information\b", re.IGNORECASE),
+    "Available in the Supporting Information": re.compile(
+        r"\bavailable in the supporting information\b",
+        re.IGNORECASE,
     ),
-    "supporting information is available": re.compile(
-        r"\bsupporting information is available\b", re.IGNORECASE
+    "Available in the Supplementary Information": re.compile(
+        r"\bavailable in the supplementary information\b",
+        re.IGNORECASE,
     ),
-    "available in the supporting information": re.compile(
-        r"\bavailable in the supporting information\b", re.IGNORECASE
-    ),
-    "see supporting information": re.compile(r"\bsee supporting information\b", re.IGNORECASE),
-    "see supplementary information": re.compile(r"\bsee supplementary information\b", re.IGNORECASE),
+    "\u8865\u5145\u4fe1\u606f": re.compile("\u8865\u5145\u4fe1\u606f"),
     "\u8865\u5145\u6750\u6599": re.compile("\u8865\u5145\u6750\u6599"),
     "\u652f\u6301\u4fe1\u606f": re.compile("\u652f\u6301\u4fe1\u606f"),
     "\u7535\u5b50\u8865\u5145\u6750\u6599": re.compile("\u7535\u5b50\u8865\u5145\u6750\u6599"),
     "\u8be6\u89c1\u8865\u5145\u6750\u6599": re.compile("\u8be6\u89c1\u8865\u5145\u6750\u6599"),
     "\u89c1\u8865\u5145\u6750\u6599": re.compile("\u89c1\u8865\u5145\u6750\u6599"),
+    "\u8865\u5145\u6570\u636e": re.compile("\u8865\u5145\u6570\u636e"),
 }
-WEAK_TEXT_PATTERNS = {
+WEAK_NOTE_PATTERNS = {
     "\u9644\u5f55": re.compile("\u9644\u5f55"),
-    "appendix": re.compile(r"\bappendix\b", re.IGNORECASE),
+    "Appendix": re.compile(r"\bappendix\b", re.IGNORECASE),
     "available online": re.compile(r"\bavailable online\b", re.IGNORECASE),
     "online version": re.compile(r"\bonline version\b", re.IGNORECASE),
 }
-STRONG_URL_TOKENS = ("supplementary", "supporting", "suppinfo", "suppl", "esm", "si")
-FILE_LIKE_SUFFIXES = {".pdf", ".docx", ".xlsx", ".zip", ".csv", ".xls", ".doc"}
 DOI_PATTERN = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+\b", re.IGNORECASE)
 URL_PATTERN = re.compile(r"https?://[^\s<>\"]+", re.IGNORECASE)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build a supplementary-information detection manifest without downloading files."
+        description="Build a keyword-based supplementary-information manifest without downloading files."
     )
     parser.add_argument(
         "--source-manifest",
@@ -180,98 +181,55 @@ def _build_supplementary_row(
     pdf_text = _read_pdf_like_text(main_pdf_path)
     combined_text = "\n".join(part for part in [markdown_text, pdf_text] if part)
 
-    markdown_hits = _collect_text_hits(markdown_text)
-    pdf_hits = _collect_text_hits(pdf_text)
+    detection_hits = _collect_detection_hits(combined_text)
+    weak_notes = _collect_weak_notes(combined_text)
     doi = _extract_first_doi(combined_text)
     urls = _extract_urls(combined_text)
-    url_analysis = _classify_urls(urls)
     local_files = _discover_local_supplementary_files(
         supplementary_dir,
         category=category,
         paper_id_guess=paper_id_guess,
     )
 
-    strong_hits: list[str] = []
-    weak_hits: list[str] = []
+    supplementary_detected = "true" if detection_hits else "false"
+    confidence = "high" if supplementary_detected == "true" else "low"
+    evidence_strength = "strong" if supplementary_detected == "true" else "none"
+
     notes: list[str] = []
     detection_methods: list[str] = []
-    supplementary_sources: list[str] = []
+    supplementary_source = "unknown"
+    supplementary_url = ""
+    needs_manual_download = False
+    download_status = "unavailable"
 
-    if markdown_hits["strong"] or markdown_hits["weak"]:
-        detection_methods.append("markdown_keyword")
-    if pdf_hits["strong"] or pdf_hits["weak"]:
-        detection_methods.append("pdf_text_keyword")
-
-    if markdown_hits["strong"]:
-        notes.append("strong supplementary signal found in markdown")
-        strong_hits.extend(f"markdown:{hit}" for hit in markdown_hits["strong"])
-    if pdf_hits["strong"]:
-        notes.append("strong supplementary signal found in pdf-like text")
-        strong_hits.extend(f"pdf:{hit}" for hit in pdf_hits["strong"])
-    if markdown_hits["weak"]:
-        notes.append("weak supplementary signal found in markdown")
-        weak_hits.extend(f"markdown:{hit}" for hit in markdown_hits["weak"])
-    if pdf_hits["weak"]:
-        notes.append("weak supplementary signal found in pdf-like text")
-        weak_hits.extend(f"pdf:{hit}" for hit in pdf_hits["weak"])
-
-    if local_files:
-        detection_methods.append("manual_hint")
-        supplementary_sources.append("local_file")
-        notes.append("local supplementary files present")
-        strong_hits.append("local_file")
-
-    if doi:
-        detection_methods.append("doi_metadata")
-        weak_hits.append(f"doi:{doi}")
-        notes.append("doi detected")
-
-    if url_analysis["all_urls"]:
-        detection_methods.append("markdown_link" if markdown_text else "pdf_link")
-        notes.append("url detected in source text")
-    if url_analysis["strong_urls"]:
-        strong_hits.extend(url_analysis["strong_hit_labels"])
-        supplementary_sources.append("markdown_link" if markdown_text else "pdf_link")
-        notes.append("strong supplementary url detected")
-    elif url_analysis["all_urls"]:
-        weak_hits.extend(url_analysis["weak_hit_labels"])
-        supplementary_sources.append("publisher_page")
-        notes.append("only weak/general urls detected")
-
-    evidence_strength = _determine_evidence_strength(
-        strong_hits=strong_hits,
-        weak_hits=weak_hits,
-    )
-    supplementary_detected = "true" if evidence_strength == "strong" else "unknown"
-    needs_manual_review = evidence_strength == "weak"
-    confidence = _determine_confidence(
-        evidence_strength=evidence_strength,
-        has_strong_url=bool(url_analysis["strong_urls"]),
-        has_local_files=bool(local_files),
-        has_doi=bool(doi),
-    )
-    if not detection_methods:
+    if detection_hits:
+        detection_methods.extend(_infer_detection_methods(markdown_text, pdf_text, detection_hits))
+        if urls:
+            supplementary_url = urls[0]
+            supplementary_source = "markdown_link" if markdown_text else "pdf_link"
+            needs_manual_download = False
+            download_status = "not_attempted"
+            notes.append("supplementary keyword detected with url")
+        else:
+            supplementary_source = "unknown"
+            needs_manual_download = True
+            download_status = "manual_required"
+            notes.append("supplementary keyword detected without url")
+    else:
         detection_methods.append("none")
-    if not supplementary_sources:
-        supplementary_sources.append("unknown")
+        if weak_notes:
+            notes.append("non-supplementary weak phrases present")
+        if doi:
+            notes.append(f"doi detected: {doi}")
+        if urls:
+            notes.append("general url present without supplementary keyword")
 
-    preferred_urls = url_analysis["strong_urls"] or url_analysis["all_urls"]
-    supplementary_url = "; ".join(_unique_preserve_order(preferred_urls))
-    supplementary_source = "; ".join(_unique_preserve_order(supplementary_sources))
-    if not local_files and supplementary_source == "unknown" and doi:
-        supplementary_source = "doi_page"
-
-    download_status = "not_attempted"
-    needs_manual_download = bool(not local_files and url_analysis["strong_urls"])
     if local_files:
-        download_status = "downloaded"
-        needs_manual_download = False
-    elif evidence_strength == "weak" and doi:
-        download_status = "manual_required"
+        notes.append("local supplementary files present")
 
     title_guess = _guess_title(markdown_text, paper_id_guess)
     supplementary_file_type = _infer_file_type(
-        local_files[0] if local_files else preferred_urls[0] if preferred_urls else ""
+        local_files[0] if local_files else supplementary_url
     )
 
     return {
@@ -291,11 +249,11 @@ def _build_supplementary_row(
         "download_status": download_status,
         "needs_manual_download": needs_manual_download,
         "confidence": confidence,
+        "detection_hits": "; ".join(_unique_preserve_order(detection_hits)),
         "evidence_strength": evidence_strength,
-        "strong_evidence_hits": "; ".join(_unique_preserve_order(strong_hits)),
-        "weak_evidence_hits": "; ".join(_unique_preserve_order(weak_hits)),
-        "needs_manual_review": needs_manual_review,
-        "notes": "; ".join(_unique_preserve_order(notes)),
+        "strong_evidence_hits": "; ".join(_unique_preserve_order(detection_hits)),
+        "weak_evidence_hits": "",
+        "notes": "; ".join(_unique_preserve_order(notes + weak_notes)),
     }
 
 
@@ -313,12 +271,7 @@ def _build_summary(
         category_rows = [row for row in rows if row["category"] == category]
         by_category[category] = _count_summary_fields(category_rows)
 
-    detection_counts = Counter()
-    for row in rows:
-        for item in _split_semi(row.get("detection_method", "")):
-            detection_counts[item] += 1
-
-    recommended_smoke = _recommend_supplementary_smoke(rows)
+    recommended_list = _recommend_download_or_manual_check(rows)
     summary_counts = _count_summary_fields(rows)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -327,40 +280,29 @@ def _build_summary(
         "markdown_dir": str(markdown_dir),
         "supplementary_dir": str(supplementary_dir),
         "total_sources": len(rows),
-        "possible_supplementary_count": summary_counts["supplementary_detected_true"],
-        "doi_detected_count": summary_counts["doi_detected"],
-        "strong_evidence_count": summary_counts["strong_evidence_count"],
-        "weak_only_count": summary_counts["weak_only_count"],
-        "no_evidence_count": summary_counts["no_evidence_count"],
-        "needs_manual_review_count": summary_counts["needs_manual_review_count"],
-        "high_confidence_count": summary_counts["high_confidence_count"],
-        "medium_confidence_count": summary_counts["medium_confidence_count"],
-        "low_confidence_count": summary_counts["low_confidence_count"],
-        "category_summary": by_category,
-        "detection_method_counts": dict(detection_counts),
-        "recommended_supplementary_smoke_10": recommended_smoke,
+        "supplementary_detected_count": summary_counts["supplementary_detected_count"],
+        "no_supplementary_detected_count": summary_counts["no_supplementary_detected_count"],
+        "needs_manual_download_count": summary_counts["needs_manual_download_count"],
+        "with_supplementary_url_count": summary_counts["with_supplementary_url_count"],
+        "doi_detected_count": summary_counts["doi_detected_count"],
+        "possible_supplementary_count": summary_counts["supplementary_detected_count"],
+        "by_category": by_category,
+        "recommended_download_or_manual_check_list": recommended_list,
     }
 
 
 def _count_summary_fields(rows: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "total": len(rows),
-        "supplementary_detected_true": sum(1 for row in rows if row["supplementary_detected"] == "true"),
-        "supplementary_detected_unknown": sum(1 for row in rows if row["supplementary_detected"] == "unknown"),
-        "doi_detected": sum(1 for row in rows if row["doi"]),
-        "local_file_detected": sum(1 for row in rows if row["supplementary_local_path"]),
-        "strong_evidence_count": sum(1 for row in rows if row["evidence_strength"] == "strong"),
-        "weak_only_count": sum(1 for row in rows if row["evidence_strength"] == "weak"),
-        "no_evidence_count": sum(1 for row in rows if row["evidence_strength"] == "none"),
-        "needs_manual_review_count": sum(1 for row in rows if _is_true(row["needs_manual_review"])),
-        "high_confidence_count": sum(1 for row in rows if row["confidence"] == "high"),
-        "medium_confidence_count": sum(1 for row in rows if row["confidence"] == "medium"),
-        "low_confidence_count": sum(1 for row in rows if row["confidence"] == "low"),
+        "supplementary_detected_count": sum(1 for row in rows if row["supplementary_detected"] == "true"),
+        "no_supplementary_detected_count": sum(1 for row in rows if row["supplementary_detected"] == "false"),
+        "needs_manual_download_count": sum(1 for row in rows if _is_true(row["needs_manual_download"])),
+        "with_supplementary_url_count": sum(1 for row in rows if row["supplementary_url"]),
+        "doi_detected_count": sum(1 for row in rows if row["doi"]),
     }
 
 
 def _build_run_groups(rows: list[dict[str, Any]], summary: dict[str, Any]) -> str:
-    smoke_lines = [f"- {source_id}" for source_id in summary.get("recommended_supplementary_smoke_10", [])] or ["- none"]
     lines = [
         "# Supplementary Run Groups",
         "",
@@ -369,61 +311,51 @@ def _build_run_groups(rows: list[dict[str, Any]], summary: dict[str, Any]) -> st
     ]
     for category in BATCH_CATEGORY_PRIORITY:
         category_rows = [row for row in rows if row["category"] == category]
-        strong_hits = [row["source_id"] for row in category_rows if row["evidence_strength"] == "strong"]
-        weak_hits = [row["source_id"] for row in category_rows if row["evidence_strength"] == "weak"]
-        no_hits = [row["source_id"] for row in category_rows if row["evidence_strength"] == "none"]
+        detected_rows = [row for row in category_rows if row["supplementary_detected"] == "true"]
+        no_detect_rows = [row for row in category_rows if row["supplementary_detected"] == "false"]
         lines.append(f"## {category}")
         lines.append(f"- total: {len(category_rows)}")
-        lines.append(f"- strong_evidence_count: {len(strong_hits)}")
-        lines.append(f"- weak_only_count: {len(weak_hits)}")
-        lines.append(f"- no_evidence_count: {len(no_hits)}")
+        lines.append(f"- supplementary_detected_count: {len(detected_rows)}")
+        lines.append(f"- no_supplementary_detected_count: {len(no_detect_rows)}")
         lines.append("")
-        lines.append("### Strong Supplementary Candidates")
-        lines.extend([f"- {source_id}" for source_id in strong_hits[:10]] or ["- none"])
+        lines.append("### Detected Supplementary Candidates")
+        lines.extend(
+            [
+                f"- {row['source_id']} | url={'yes' if row['supplementary_url'] else 'no'} | manual_download={row['needs_manual_download']}"
+                for row in detected_rows[:10]
+            ]
+            or ["- none"]
+        )
         lines.append("")
-        lines.append("### Weak / Manual Review Candidates")
-        lines.extend([f"- {source_id}" for source_id in weak_hits[:10]] or ["- none"])
-        lines.append("")
-        lines.append("### No Evidence")
-        lines.extend([f"- {source_id}" for source_id in no_hits[:10]] or ["- none"])
+        lines.append("### No Supplementary Keyword Detected")
+        lines.append(f"- count: {len(no_detect_rows)}")
         lines.append("")
     lines.extend(
         [
-            "## Recommended Supplementary Smoke 10",
-            *smoke_lines,
+            "## Recommended Download / Manual Check List",
+            *(
+                [
+                    f"- {source_id}"
+                    for source_id in summary.get("recommended_download_or_manual_check_list", [])
+                ]
+                or ["- none"]
+            ),
         ]
     )
     return "\n".join(lines).strip() + "\n"
 
 
-def _recommend_supplementary_smoke(rows: list[dict[str, Any]]) -> list[str]:
-    category_buckets: dict[str, list[dict[str, Any]]] = {}
-    for category in BATCH_CATEGORY_PRIORITY:
-        category_rows = [row for row in rows if row["category"] == category and row["evidence_strength"] == "strong"]
-        category_buckets[category] = sorted(
-            category_rows,
-            key=lambda row: (
-                0 if _has_strong_url(row) else 1,
-                0 if row["doi"] else 1,
-                0 if row["confidence"] == "high" else 1,
-                row["source_id"],
-            ),
+def _recommend_download_or_manual_check(rows: list[dict[str, Any]]) -> list[str]:
+    detected_rows = [row for row in rows if row["supplementary_detected"] == "true"]
+    detected_rows.sort(
+        key=lambda row: (
+            0 if row["supplementary_url"] else 1,
+            0 if row["doi"] else 1,
+            BATCH_CATEGORY_PRIORITY.index(row["category"]) if row["category"] in BATCH_CATEGORY_PRIORITY else 999,
+            row["source_id"],
         )
-
-    picks: list[str] = []
-    while len(picks) < 10:
-        added = False
-        for category in BATCH_CATEGORY_PRIORITY:
-            bucket = category_buckets.get(category) or []
-            if not bucket:
-                continue
-            picks.append(bucket.pop(0)["source_id"])
-            added = True
-            if len(picks) >= 10:
-                break
-        if not added:
-            break
-    return picks
+    )
+    return [row["source_id"] for row in detected_rows[:10]]
 
 
 def _read_text_if_exists(path: Path) -> str:
@@ -454,10 +386,23 @@ def _read_pdf_like_text(path: Path) -> str:
         return ""
 
 
-def _collect_text_hits(text: str) -> dict[str, list[str]]:
-    strong_hits = [label for label, pattern in STRONG_TEXT_PATTERNS.items() if pattern.search(text)]
-    weak_hits = [label for label, pattern in WEAK_TEXT_PATTERNS.items() if pattern.search(text)]
-    return {"strong": strong_hits, "weak": weak_hits}
+def _collect_detection_hits(text: str) -> list[str]:
+    return [label for label, pattern in STRONG_TEXT_PATTERNS.items() if pattern.search(text)]
+
+
+def _collect_weak_notes(text: str) -> list[str]:
+    return [label for label, pattern in WEAK_NOTE_PATTERNS.items() if pattern.search(text)]
+
+
+def _infer_detection_methods(markdown_text: str, pdf_text: str, detection_hits: list[str]) -> list[str]:
+    methods: list[str] = []
+    if any(pattern.search(markdown_text) for pattern in STRONG_TEXT_PATTERNS.values() if markdown_text):
+        methods.append("markdown_keyword")
+    if any(pattern.search(pdf_text) for pattern in STRONG_TEXT_PATTERNS.values() if pdf_text):
+        methods.append("pdf_text_keyword")
+    if not methods and detection_hits:
+        methods.append("markdown_keyword" if markdown_text else "pdf_text_keyword")
+    return methods or ["none"]
 
 
 def _extract_first_doi(text: str) -> str:
@@ -467,33 +412,6 @@ def _extract_first_doi(text: str) -> str:
 
 def _extract_urls(text: str) -> list[str]:
     return [match.rstrip(").,;") for match in URL_PATTERN.findall(text)]
-
-
-def _classify_urls(urls: list[str]) -> dict[str, list[str]]:
-    strong_urls: list[str] = []
-    strong_hit_labels: list[str] = []
-    weak_hit_labels: list[str] = []
-    for url in urls:
-        if _looks_like_strong_supplementary_url(url):
-            strong_urls.append(url)
-            strong_hit_labels.append(f"url:{url}")
-        else:
-            weak_hit_labels.append(f"url:{url}")
-    return {
-        "all_urls": _unique_preserve_order(urls),
-        "strong_urls": _unique_preserve_order(strong_urls),
-        "strong_hit_labels": _unique_preserve_order(strong_hit_labels),
-        "weak_hit_labels": _unique_preserve_order(weak_hit_labels),
-    }
-
-
-def _looks_like_strong_supplementary_url(url: str) -> bool:
-    lowered = url.lower()
-    if any(token in lowered for token in STRONG_URL_TOKENS):
-        return True
-    return Path(lowered.split("?", 1)[0]).suffix in FILE_LIKE_SUFFIXES and any(
-        token in lowered for token in STRONG_URL_TOKENS
-    )
 
 
 def _discover_local_supplementary_files(
@@ -511,30 +429,6 @@ def _discover_local_supplementary_files(
         if candidate.is_dir():
             files.extend(sorted(path for path in candidate.rglob("*") if path.is_file()))
     return files
-
-
-def _determine_evidence_strength(*, strong_hits: list[str], weak_hits: list[str]) -> str:
-    if strong_hits:
-        return "strong"
-    if weak_hits:
-        return "weak"
-    return "none"
-
-
-def _determine_confidence(
-    *,
-    evidence_strength: str,
-    has_strong_url: bool,
-    has_local_files: bool,
-    has_doi: bool,
-) -> str:
-    if evidence_strength == "strong":
-        if has_strong_url or has_local_files:
-            return "high"
-        return "medium"
-    if evidence_strength == "weak":
-        return "medium" if has_doi else "low"
-    return "low"
 
 
 def _guess_title(markdown_text: str, fallback: str) -> str:
@@ -563,16 +457,8 @@ def _unique_preserve_order(values: list[str]) -> list[str]:
     return ordered
 
 
-def _split_semi(value: str) -> list[str]:
-    return [item.strip() for item in value.split(";") if item.strip()]
-
-
 def _is_true(value: Any) -> bool:
     return str(value).strip().lower() in {"true", "1", "yes"}
-
-
-def _has_strong_url(row: dict[str, Any]) -> bool:
-    return any(hit.startswith("url:") for hit in _split_semi(str(row.get("strong_evidence_hits", ""))))
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:

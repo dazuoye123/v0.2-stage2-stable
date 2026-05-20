@@ -32,7 +32,7 @@ REPORT_FIELDS = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Dry-run-first downloader for high-confidence supplementary candidates.")
+    parser = argparse.ArgumentParser(description="Dry-run-first downloader for detected supplementary candidates with URLs.")
     parser.add_argument("--manifest", default=str(PROJECT_ROOT / "data" / "batch_manifest" / "supplementary_manifest.csv"))
     parser.add_argument("--supplementary-dir", default=str(PROJECT_ROOT / "data" / "supplementary"))
     parser.add_argument("--out-dir", default=str(PROJECT_ROOT / "data" / "batch_validation_reports"))
@@ -60,7 +60,7 @@ def download_supplementary_candidates(
     candidates = [
         row
         for row in rows
-        if row.get("confidence") == "high" and row.get("supplementary_url")
+        if _as_bool(row.get("supplementary_detected")) and row.get("supplementary_url")
     ]
     if manual_only:
         candidates = [row for row in candidates if _as_bool(row.get("needs_manual_download"))]
