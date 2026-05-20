@@ -48,6 +48,8 @@ REPORT_FIELDS = [
     "paper_id_guess",
     "pdf_path",
     "markdown_path",
+    "paper_output_dir",
+    "stage1_output_root",
     "stage1_raw_output_path",
     "status",
     "markdown_char_count",
@@ -86,6 +88,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--markdown-dir", default=str(DEFAULT_MARKDOWN_DIR))
+    parser.add_argument("--outputs-dir", default=str(DEFAULT_OUTPUTS_DIR))
     parser.add_argument("--report-dir", default=str(DEFAULT_REPORT_DIR))
     parser.add_argument("--category", choices=KNOWN_CATEGORIES)
     parser.add_argument("--paper-ids", default="")
@@ -102,6 +105,7 @@ def run_stage1_markdown_batch(
     *,
     manifest: Path | str = DEFAULT_MANIFEST,
     markdown_dir: Path | str = DEFAULT_MARKDOWN_DIR,
+    outputs_dir: Path | str = DEFAULT_OUTPUTS_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
     category: str | None = None,
     paper_ids: list[str] | None = None,
@@ -113,6 +117,7 @@ def run_stage1_markdown_batch(
 ) -> dict[str, Any]:
     manifest = Path(manifest)
     markdown_dir = Path(markdown_dir)
+    outputs_dir = Path(outputs_dir)
     report_dir = Path(report_dir)
     if not manifest.exists():
         raise FileNotFoundError(_manifest_missing_message(manifest))
@@ -131,6 +136,7 @@ def run_stage1_markdown_batch(
         report_row = _process_manifest_row(
             row,
             markdown_dir=markdown_dir,
+            outputs_dir=outputs_dir,
             force=force,
             min_markdown_chars=min_markdown_chars,
             dry_run=dry_run,
@@ -146,6 +152,7 @@ def run_stage1_markdown_batch(
         report_rows,
         manifest=manifest,
         markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
         report_dir=report_dir,
         category=category,
         paper_ids=paper_ids or [],
@@ -216,6 +223,7 @@ def _process_manifest_row(
     row: dict[str, str],
     *,
     markdown_dir: Path,
+    outputs_dir: Path,
     force: bool,
     min_markdown_chars: int,
     dry_run: bool,
@@ -228,6 +236,10 @@ def _process_manifest_row(
     paper_id_guess = row.get("paper_id_guess") or ""
     pdf_path = Path(row.get("pdf_path") or "")
     markdown_path = _resolve_markdown_path(row, markdown_dir=markdown_dir)
+    stage1_output_root, paper_output_dir = _resolve_output_paths(
+        row,
+        outputs_dir=outputs_dir,
+    )
     markdown_exists = markdown_path.exists()
     markdown_char_count = _read_char_count(markdown_path) if markdown_exists else 0
     pdf_file_size_mb = round(pdf_path.stat().st_size / (1024 * 1024), 3) if pdf_path.exists() else 0.0
@@ -256,6 +268,7 @@ def _process_manifest_row(
             stage1_result = _run_stage1_for_row(
                 row,
                 markdown_path=markdown_path,
+                stage1_output_root=stage1_output_root,
                 settings_template=settings_template or {},
             )
             stage1_raw_output_path = str(stage1_result.cleaned_markdown_path)
@@ -280,6 +293,8 @@ def _process_manifest_row(
         "paper_id_guess": paper_id_guess,
         "pdf_path": str(pdf_path),
         "markdown_path": str(markdown_path),
+        "paper_output_dir": str(paper_output_dir),
+        "stage1_output_root": str(stage1_output_root),
         "stage1_raw_output_path": stage1_raw_output_path,
         "status": status,
         "markdown_char_count": markdown_char_count,
@@ -298,6 +313,7 @@ def _run_stage1_for_row(
     row: dict[str, str],
     *,
     markdown_path: Path,
+    stage1_output_root: Path,
     settings_template: dict[str, Any],
 ) -> Any:
     category = normalize_batch_category(row.get("category"))
@@ -307,18 +323,20 @@ def _run_stage1_for_row(
     settings["paths"]["input_pdf"] = str(pdf_path)
     settings["paths"]["markdown_output_dir"] = str(markdown_path.parent)
     settings["paths"]["mineru_raw_dir"] = str(PROJECT_ROOT / "data" / "mineru_raw" / category)
-
-    output_dir_hint = row.get("output_dir") or ""
-    if output_dir_hint:
-        settings["paths"]["output_dir"] = str(Path(output_dir_hint).parent)
-    else:
-        output_root = DEFAULT_OUTPUTS_DIR / category if category != "uncategorized" else DEFAULT_OUTPUTS_DIR
-        settings["paths"]["output_dir"] = str(output_root)
+    settings["paths"]["output_dir"] = str(stage1_output_root)
 
     result = run_stage1_pdf_to_markdown(PROJECT_ROOT, settings)
     if is_dataclass(result):
         return result
     return result
+
+
+def _resolve_output_paths(row: dict[str, str], *, outputs_dir: Path) -> tuple[Path, Path]:
+    category = normalize_batch_category(row.get("category"))
+    paper_id_guess = row.get("paper_id_guess") or ""
+    stage1_output_root = outputs_dir / category
+    paper_output_dir = stage1_output_root / paper_id_guess
+    return stage1_output_root, paper_output_dir
 
 
 def _resolve_markdown_path(row: dict[str, str], *, markdown_dir: Path) -> Path:
@@ -335,6 +353,7 @@ def _build_summary(
     *,
     manifest: Path,
     markdown_dir: Path,
+    outputs_dir: Path,
     report_dir: Path,
     category: str | None,
     paper_ids: list[str],
@@ -361,6 +380,7 @@ def _build_summary(
     return {
         "manifest": str(manifest),
         "markdown_dir": str(markdown_dir),
+        "outputs_dir": str(outputs_dir),
         "report_dir": str(report_dir),
         "category_filter": category,
         "paper_ids_filter": paper_ids,
@@ -393,6 +413,7 @@ def _build_markdown_report(summary: dict[str, Any], rows: list[dict[str, Any]]) 
         "## Command Parameters",
         f"- manifest: {summary['manifest']}",
         f"- markdown_dir: {summary['markdown_dir']}",
+        f"- outputs_dir: {summary['outputs_dir']}",
         f"- report_dir: {summary['report_dir']}",
         f"- category_filter: {summary['category_filter'] or 'all'}",
         f"- paper_ids_filter: {', '.join(summary['paper_ids_filter']) or 'none'}",
@@ -460,6 +481,7 @@ def _build_markdown_report(summary: dict[str, Any], rows: list[dict[str, Any]]) 
             "python .\\scripts\\dev\\run_stage1_markdown_batch.py `",
             '  --manifest ".\\data\\batch_manifest\\source_manifest.csv" `',
             '  --markdown-dir ".\\data\\markdown" `',
+            '  --outputs-dir ".\\data\\outputs" `',
             '  --report-dir ".\\data\\batch_validation_reports" `',
             "  --dry-run `",
             "  --limit 0",
@@ -522,6 +544,7 @@ def main() -> int:
         result = run_stage1_markdown_batch(
             manifest=args.manifest,
             markdown_dir=args.markdown_dir,
+            outputs_dir=args.outputs_dir,
             report_dir=args.report_dir,
             category=args.category,
             paper_ids=[item.strip() for item in args.paper_ids.split(",") if item.strip()],

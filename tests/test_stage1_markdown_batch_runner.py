@@ -28,6 +28,7 @@ MANIFEST_FIELDS = [
 def test_stage1_batch_runner_filters_category_limit_and_ids_and_preserves_numbering(tmp_path: Path, monkeypatch) -> None:
     manifest_path = tmp_path / "source_manifest.csv"
     markdown_dir = tmp_path / "markdown"
+    outputs_dir = tmp_path / "outputs"
     report_dir = tmp_path / "reports"
     pdf_dir = tmp_path / "pdfs"
     (pdf_dir / "fiber_process").mkdir(parents=True, exist_ok=True)
@@ -40,7 +41,7 @@ def test_stage1_batch_runner_filters_category_limit_and_ids_and_preserves_number
             "pdf_path": str(pdf_dir / "fiber_process" / "001_alpha.pdf"),
             "markdown_expected_path": str(markdown_dir / "fiber_process" / "001_alpha.md"),
             "markdown_status": "not_generated",
-            "output_dir": str(tmp_path / "outputs" / "fiber_process" / "001_alpha"),
+            "output_dir": str(outputs_dir / "fiber_process" / "001_alpha"),
         },
         {
             "source_id": "fiber_process__002_beta",
@@ -49,7 +50,7 @@ def test_stage1_batch_runner_filters_category_limit_and_ids_and_preserves_number
             "pdf_path": str(pdf_dir / "fiber_process" / "002_beta.pdf"),
             "markdown_expected_path": str(markdown_dir / "fiber_process" / "002_beta.md"),
             "markdown_status": "not_generated",
-            "output_dir": str(tmp_path / "outputs" / "fiber_process" / "002_beta"),
+            "output_dir": str(outputs_dir / "fiber_process" / "002_beta"),
         },
         {
             "source_id": "mechanism__003_gamma",
@@ -58,7 +59,7 @@ def test_stage1_batch_runner_filters_category_limit_and_ids_and_preserves_number
             "pdf_path": str(pdf_dir / "mechanism" / "003_gamma.pdf"),
             "markdown_expected_path": str(markdown_dir / "mechanism" / "003_gamma.md"),
             "markdown_status": "not_generated",
-            "output_dir": str(tmp_path / "outputs" / "mechanism" / "003_gamma"),
+            "output_dir": str(outputs_dir / "mechanism" / "003_gamma"),
         },
     ]
     for row in rows:
@@ -76,6 +77,7 @@ def test_stage1_batch_runner_filters_category_limit_and_ids_and_preserves_number
     result = MODULE.run_stage1_markdown_batch(
         manifest=manifest_path,
         markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
         report_dir=report_dir,
         category="fiber_process",
         paper_ids=["001_alpha", "mechanism__003_gamma"],
@@ -89,11 +91,14 @@ def test_stage1_batch_runner_filters_category_limit_and_ids_and_preserves_number
     assert row["source_id"] == "fiber_process__001_alpha"
     assert row["status"] == "dry_run_planned"
     assert row["markdown_path"].endswith(str(Path("fiber_process") / "001_alpha.md"))
+    assert row["stage1_output_root"].endswith(str(Path("outputs") / "fiber_process"))
+    assert row["paper_output_dir"].endswith(str(Path("outputs") / "fiber_process" / "001_alpha"))
 
 
 def test_stage1_batch_runner_normalizes_manifest_category_filter(tmp_path: Path, monkeypatch) -> None:
     manifest_path = tmp_path / "source_manifest.csv"
     markdown_dir = tmp_path / "markdown"
+    outputs_dir = tmp_path / "outputs"
     report_dir = tmp_path / "reports"
     pdf_dir = tmp_path / "pdfs" / "Applications"
     pdf_dir.mkdir(parents=True, exist_ok=True)
@@ -109,7 +114,7 @@ def test_stage1_batch_runner_normalizes_manifest_category_filter(tmp_path: Path,
                 "pdf_path": str(pdf_path),
                 "markdown_expected_path": str(markdown_dir / "applications" / "001_alpha.md"),
                 "markdown_status": "not_generated",
-                "output_dir": str(tmp_path / "outputs" / "applications" / "001_alpha"),
+                "output_dir": str(outputs_dir / "applications" / "001_alpha"),
             }
         ],
     )
@@ -119,6 +124,7 @@ def test_stage1_batch_runner_normalizes_manifest_category_filter(tmp_path: Path,
     result = MODULE.run_stage1_markdown_batch(
         manifest=manifest_path,
         markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
         report_dir=report_dir,
         category="applications",
         dry_run=True,
@@ -132,6 +138,7 @@ def test_stage1_batch_runner_normalizes_manifest_category_filter(tmp_path: Path,
 def test_stage1_batch_runner_skips_existing_and_short_markdown_by_default(tmp_path: Path, monkeypatch) -> None:
     manifest_path = tmp_path / "source_manifest.csv"
     markdown_dir = tmp_path / "markdown"
+    outputs_dir = tmp_path / "outputs"
     report_dir = tmp_path / "reports"
     pdf_dir = tmp_path / "pdfs" / "fiber_process"
     pdf_dir.mkdir(parents=True, exist_ok=True)
@@ -149,7 +156,7 @@ def test_stage1_batch_runner_skips_existing_and_short_markdown_by_default(tmp_pa
             "pdf_path": str(pdf_dir / "001_alpha.pdf"),
             "markdown_expected_path": str(long_md),
             "markdown_status": "exists_ok",
-            "output_dir": str(tmp_path / "outputs" / "fiber_process" / "001_alpha"),
+            "output_dir": str(outputs_dir / "fiber_process" / "001_alpha"),
         },
         {
             "source_id": "fiber_process__002_beta",
@@ -158,7 +165,7 @@ def test_stage1_batch_runner_skips_existing_and_short_markdown_by_default(tmp_pa
             "pdf_path": str(pdf_dir / "002_beta.pdf"),
             "markdown_expected_path": str(short_md),
             "markdown_status": "exists_too_short",
-            "output_dir": str(tmp_path / "outputs" / "fiber_process" / "002_beta"),
+            "output_dir": str(outputs_dir / "fiber_process" / "002_beta"),
         },
     ]
     for row in rows:
@@ -170,6 +177,7 @@ def test_stage1_batch_runner_skips_existing_and_short_markdown_by_default(tmp_pa
     result = MODULE.run_stage1_markdown_batch(
         manifest=manifest_path,
         markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
         report_dir=report_dir,
         min_markdown_chars=1000,
     )
@@ -182,6 +190,7 @@ def test_stage1_batch_runner_skips_existing_and_short_markdown_by_default(tmp_pa
 def test_stage1_batch_runner_force_retries_and_continues_after_failures(tmp_path: Path, monkeypatch) -> None:
     manifest_path = tmp_path / "source_manifest.csv"
     markdown_dir = tmp_path / "markdown"
+    outputs_dir = tmp_path / "outputs"
     report_dir = tmp_path / "reports"
     pdf_dir = tmp_path / "pdfs" / "fiber_process"
     pdf_dir.mkdir(parents=True, exist_ok=True)
@@ -197,7 +206,7 @@ def test_stage1_batch_runner_force_retries_and_continues_after_failures(tmp_path
             "pdf_path": str(pdf_dir / "001_alpha.pdf"),
             "markdown_expected_path": str(existing_md),
             "markdown_status": "exists_too_short",
-            "output_dir": str(tmp_path / "outputs" / "fiber_process" / "001_alpha"),
+            "output_dir": str(outputs_dir / "fiber_process" / "001_alpha"),
         },
         {
             "source_id": "fiber_process__002_beta",
@@ -206,7 +215,7 @@ def test_stage1_batch_runner_force_retries_and_continues_after_failures(tmp_path
             "pdf_path": str(pdf_dir / "002_beta.pdf"),
             "markdown_expected_path": str(markdown_dir / "fiber_process" / "002_beta.md"),
             "markdown_status": "not_generated",
-            "output_dir": str(tmp_path / "outputs" / "fiber_process" / "002_beta"),
+            "output_dir": str(outputs_dir / "002_beta"),
         },
         {
             "source_id": "fiber_process__003_missing",
@@ -215,7 +224,7 @@ def test_stage1_batch_runner_force_retries_and_continues_after_failures(tmp_path
             "pdf_path": str(pdf_dir / "003_missing.pdf"),
             "markdown_expected_path": str(markdown_dir / "fiber_process" / "003_missing.md"),
             "markdown_status": "not_generated",
-            "output_dir": str(tmp_path / "outputs" / "fiber_process" / "003_missing"),
+            "output_dir": str(outputs_dir / "003_missing"),
         },
         {
             "source_id": "fiber_process__004_gamma",
@@ -224,7 +233,7 @@ def test_stage1_batch_runner_force_retries_and_continues_after_failures(tmp_path
             "pdf_path": str(pdf_dir / "004_gamma.pdf"),
             "markdown_expected_path": str(markdown_dir / "fiber_process" / "004_gamma.md"),
             "markdown_status": "not_generated",
-            "output_dir": str(tmp_path / "outputs" / "fiber_process" / "004_gamma"),
+            "output_dir": str(outputs_dir / "fiber_process" / "004_gamma"),
         },
     ]
     for row in rows:
@@ -234,10 +243,12 @@ def test_stage1_batch_runner_force_retries_and_continues_after_failures(tmp_path
 
     monkeypatch.setattr(MODULE, "build_runtime_settings", lambda *args, **kwargs: {"paths": {}})
     calls: list[str] = []
+    output_roots: dict[str, Path] = {}
 
     def fake_stage1(project_root: Path, settings: dict) -> SimpleNamespace:
         input_pdf = Path(settings["paths"]["input_pdf"])
         calls.append(input_pdf.stem)
+        output_roots[input_pdf.stem] = Path(settings["paths"]["output_dir"])
         if input_pdf.stem == "002_beta":
             raise RuntimeError("simulated stage1 failure")
         output_dir = Path(settings["paths"]["markdown_output_dir"])
@@ -255,6 +266,7 @@ def test_stage1_batch_runner_force_retries_and_continues_after_failures(tmp_path
     result = MODULE.run_stage1_markdown_batch(
         manifest=manifest_path,
         markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
         report_dir=report_dir,
         force=True,
         continue_on_error=True,
@@ -268,11 +280,18 @@ def test_stage1_batch_runner_force_retries_and_continues_after_failures(tmp_path
     assert statuses["fiber_process__003_missing"]["status"] == "missing_pdf"
     assert statuses["fiber_process__004_gamma"]["status"] == "success"
     assert (markdown_dir / "fiber_process" / "004_gamma.md").exists()
+    assert output_roots["001_alpha"] == outputs_dir / "fiber_process"
+    assert output_roots["002_beta"] == outputs_dir / "fiber_process"
+    assert output_roots["004_gamma"] == outputs_dir / "fiber_process"
+    assert statuses["fiber_process__002_beta"]["paper_output_dir"].endswith(
+        str(Path("outputs") / "fiber_process" / "002_beta")
+    )
 
 
 def test_stage1_batch_runner_writes_reports_and_summary(tmp_path: Path, monkeypatch) -> None:
     manifest_path = tmp_path / "source_manifest.csv"
     markdown_dir = tmp_path / "markdown"
+    outputs_dir = tmp_path / "outputs"
     report_dir = tmp_path / "reports"
     pdf_dir = tmp_path / "pdfs" / "mechanism"
     pdf_dir.mkdir(parents=True, exist_ok=True)
@@ -286,7 +305,7 @@ def test_stage1_batch_runner_writes_reports_and_summary(tmp_path: Path, monkeypa
         "pdf_path": str(pdf_path),
         "markdown_expected_path": str(markdown_dir / "mechanism" / "010_theta.md"),
         "markdown_status": "not_generated",
-        "output_dir": str(tmp_path / "outputs" / "mechanism" / "010_theta"),
+        "output_dir": str(outputs_dir / "mechanism" / "010_theta"),
     }
     _write_manifest(manifest_path, [row])
 
@@ -300,6 +319,7 @@ def test_stage1_batch_runner_writes_reports_and_summary(tmp_path: Path, monkeypa
     result = MODULE.run_stage1_markdown_batch(
         manifest=manifest_path,
         markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
         report_dir=report_dir,
     )
 
@@ -318,6 +338,49 @@ def test_stage1_batch_runner_writes_reports_and_summary(tmp_path: Path, monkeypa
     with report_csv.open("r", encoding="utf-8", newline="") as handle:
         csv_rows = list(csv.DictReader(handle))
     assert csv_rows[0]["status"] == "success"
+    assert csv_rows[0]["stage1_output_root"].endswith(str(Path("outputs") / "mechanism"))
+    assert csv_rows[0]["paper_output_dir"].endswith(str(Path("outputs") / "mechanism" / "010_theta"))
+
+
+def test_stage1_batch_runner_forces_category_output_root_for_uncategorized(tmp_path: Path, monkeypatch) -> None:
+    manifest_path = tmp_path / "source_manifest.csv"
+    markdown_dir = tmp_path / "markdown"
+    outputs_dir = tmp_path / "outputs"
+    report_dir = tmp_path / "reports"
+    pdf_dir = tmp_path / "pdfs" / "UnknownFolder"
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = pdf_dir / "011_misc.pdf"
+    pdf_path.write_text("fake pdf", encoding="utf-8")
+    _write_manifest(
+        manifest_path,
+        [
+            {
+                "source_id": "uncategorized__011_misc",
+                "category": "uncategorized",
+                "paper_id_guess": "011_misc",
+                "pdf_path": str(pdf_path),
+                "markdown_expected_path": str(markdown_dir / "uncategorized" / "011_misc.md"),
+                "markdown_status": "not_generated",
+                "output_dir": str(outputs_dir / "011_misc"),
+            }
+        ],
+    )
+
+    monkeypatch.setattr(MODULE, "run_stage1_pdf_to_markdown", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("dry-run should not call Stage 1")))
+
+    result = MODULE.run_stage1_markdown_batch(
+        manifest=manifest_path,
+        markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        dry_run=True,
+    )
+
+    row = result["rows"][0]
+    assert row["category"] == "uncategorized"
+    assert row["stage1_output_root"].endswith(str(Path("outputs") / "uncategorized"))
+    assert row["paper_output_dir"].endswith(str(Path("outputs") / "uncategorized" / "011_misc"))
+    assert not row["paper_output_dir"].endswith(str(Path("outputs") / "011_misc"))
 
 
 def test_stage1_batch_runner_missing_manifest_has_clear_error(tmp_path: Path) -> None:

@@ -123,7 +123,7 @@ def _collect_source_rows(
             source_id = f"{source_id}__{len(seen_source_ids) + 1}"
         seen_source_ids.add(source_id)
 
-        markdown_expected_path = markdown_dir / category / f"{paper_id_guess}.md" if category in KNOWN_CATEGORIES else markdown_dir / f"{paper_id_guess}.md"
+        markdown_expected_path = markdown_dir / category / f"{paper_id_guess}.md"
         legacy_markdown_path = markdown_dir / f"{paper_id_guess}.md"
         markdown_actual_path = markdown_expected_path if markdown_expected_path.exists() else legacy_markdown_path if legacy_markdown_path.exists() else markdown_expected_path
         markdown_exists = markdown_actual_path.exists()
@@ -135,7 +135,7 @@ def _collect_source_rows(
             min_markdown_chars=min_markdown_chars,
         )
 
-        recommended_output_dir = outputs_dir / category / paper_id_guess if category in KNOWN_CATEGORIES else outputs_dir / paper_id_guess
+        recommended_output_dir = outputs_dir / category / paper_id_guess
         legacy_output_dir = outputs_dir / paper_id_guess
         resolved_output_dir, output_dir_layout = _resolve_output_dir(recommended_output_dir, legacy_output_dir)
         has_output_dir = resolved_output_dir.exists()

@@ -114,6 +114,12 @@ def test_source_manifest_normalizes_category_aliases_and_paths(tmp_path: Path) -
             )
         else:
             assert row["category"] == "uncategorized"
+            assert row["markdown_expected_path"].endswith(
+                str(Path("markdown") / "uncategorized" / f"{paper_id}.md")
+            )
+            assert row["output_dir"].endswith(
+                str(Path("outputs") / "uncategorized" / paper_id)
+            )
 
 
 def test_source_manifest_writes_csv_and_run_groups(tmp_path: Path) -> None:
