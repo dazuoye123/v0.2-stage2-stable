@@ -78,6 +78,56 @@ def test_build_supplementary_manifest_detects_keywords_doi_and_local_files(tmp_p
     assert summary["doi_detected_count"] == 1
 
 
+def test_supplementary_manifest_normalizes_category_from_source_manifest(tmp_path: Path) -> None:
+    source_manifest = tmp_path / "source_manifest.csv"
+    pdf_dir = tmp_path / "pdfs"
+    markdown_dir = tmp_path / "markdown"
+    supplementary_dir = tmp_path / "supplementary"
+    out_dir = tmp_path / "batch_manifest"
+    pdf_path = pdf_dir / "Applications" / "001_app.pdf"
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    pdf_path.write_text("Supplementary Information DOI 10.1000/abc123", encoding="utf-8")
+    markdown_path = markdown_dir / "applications" / "001_app.md"
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.write_text("Supporting Information available online", encoding="utf-8")
+
+    with source_manifest.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "source_id",
+                "category",
+                "paper_id_guess",
+                "pdf_path",
+                "markdown_expected_path",
+                "markdown_actual_path",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "source_id": "applications__001_app",
+                "category": "Applications",
+                "paper_id_guess": "001_app",
+                "pdf_path": str(pdf_path),
+                "markdown_expected_path": str(markdown_path),
+                "markdown_actual_path": "",
+            }
+        )
+
+    result = SUPP_MODULE.build_supplementary_manifest(
+        source_manifest=source_manifest,
+        pdf_dir=pdf_dir,
+        markdown_dir=markdown_dir,
+        supplementary_dir=supplementary_dir,
+        out_dir=out_dir,
+    )
+
+    row = result["rows"][0]
+    assert row["category"] == "applications"
+    assert row["markdown_path"].endswith(str(Path("applications") / "001_app.md"))
+
+
 def test_supplementary_manifest_default_dry_run_does_not_download(tmp_path: Path) -> None:
     manifest_path = tmp_path / "supplementary_manifest.csv"
     supplementary_dir = tmp_path / "supplementary"

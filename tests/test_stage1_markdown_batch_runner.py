@@ -91,6 +91,44 @@ def test_stage1_batch_runner_filters_category_limit_and_ids_and_preserves_number
     assert row["markdown_path"].endswith(str(Path("fiber_process") / "001_alpha.md"))
 
 
+def test_stage1_batch_runner_normalizes_manifest_category_filter(tmp_path: Path, monkeypatch) -> None:
+    manifest_path = tmp_path / "source_manifest.csv"
+    markdown_dir = tmp_path / "markdown"
+    report_dir = tmp_path / "reports"
+    pdf_dir = tmp_path / "pdfs" / "Applications"
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = pdf_dir / "001_alpha.pdf"
+    pdf_path.write_text("fake pdf", encoding="utf-8")
+    _write_manifest(
+        manifest_path,
+        [
+            {
+                "source_id": "applications__001_alpha",
+                "category": "Applications",
+                "paper_id_guess": "001_alpha",
+                "pdf_path": str(pdf_path),
+                "markdown_expected_path": str(markdown_dir / "applications" / "001_alpha.md"),
+                "markdown_status": "not_generated",
+                "output_dir": str(tmp_path / "outputs" / "applications" / "001_alpha"),
+            }
+        ],
+    )
+
+    monkeypatch.setattr(MODULE, "run_stage1_pdf_to_markdown", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("dry-run should not call Stage 1")))
+
+    result = MODULE.run_stage1_markdown_batch(
+        manifest=manifest_path,
+        markdown_dir=markdown_dir,
+        report_dir=report_dir,
+        category="applications",
+        dry_run=True,
+    )
+
+    assert len(result["rows"]) == 1
+    assert result["rows"][0]["category"] == "applications"
+    assert result["rows"][0]["markdown_path"].endswith(str(Path("applications") / "001_alpha.md"))
+
+
 def test_stage1_batch_runner_skips_existing_and_short_markdown_by_default(tmp_path: Path, monkeypatch) -> None:
     manifest_path = tmp_path / "source_manifest.csv"
     markdown_dir = tmp_path / "markdown"

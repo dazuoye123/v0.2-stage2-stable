@@ -73,6 +73,49 @@ def test_build_source_manifest_scans_categories_and_avoids_name_collisions(tmp_p
     assert summary["category_summary"]["applications"]["pdf_count"] == 1
 
 
+def test_source_manifest_normalizes_category_aliases_and_paths(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdfs"
+    markdown_dir = tmp_path / "markdown"
+    outputs_dir = tmp_path / "outputs"
+    out_dir = tmp_path / "batch_manifest"
+
+    alias_cases = {
+        "Applications": ("applications", "001_app"),
+        "Fiber_Process": ("fiber_process", "002_fiber"),
+        "FiberProcess": ("fiber_process", "003_fiber_alt"),
+        "fiber-process": ("fiber_process", "004_fiber_dash"),
+        "Mechanism": ("mechanism", "005_mech"),
+        "Rheology": ("rheology", "006_rheo"),
+        "UnknownFolder": ("uncategorized", "007_unknown"),
+    }
+    for folder_name, (_, paper_id) in alias_cases.items():
+        (pdf_dir / folder_name).mkdir(parents=True, exist_ok=True)
+        (pdf_dir / folder_name / f"{paper_id}.pdf").write_text("fake pdf", encoding="utf-8")
+
+    result = MODULE.build_source_manifest(
+        pdf_dir=pdf_dir,
+        markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
+        out_dir=out_dir,
+        min_markdown_chars=100,
+    )
+
+    rows_by_paper = {row["paper_id_guess"]: row for row in result["rows"]}
+    for folder_name, (expected_category, paper_id) in alias_cases.items():
+        row = rows_by_paper[paper_id]
+        assert row["category"] == expected_category, folder_name
+        assert row["source_id"].startswith(f"{expected_category}__")
+        if expected_category != "uncategorized":
+            assert row["markdown_expected_path"].endswith(
+                str(Path("markdown") / expected_category / f"{paper_id}.md")
+            )
+            assert row["output_dir"].endswith(
+                str(Path("outputs") / expected_category / paper_id)
+            )
+        else:
+            assert row["category"] == "uncategorized"
+
+
 def test_source_manifest_writes_csv_and_run_groups(tmp_path: Path) -> None:
     pdf_dir = tmp_path / "pdfs"
     markdown_dir = tmp_path / "markdown"

@@ -16,6 +16,11 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from alumina_sol_extractor.utils.batch_categories import (
+    BATCH_CATEGORY_PRIORITY,
+    CANONICAL_BATCH_CATEGORIES,
+    normalize_batch_category,
+)
 
 SUPPLEMENTARY_FIELDS = [
     "source_id",
@@ -124,10 +129,14 @@ def _build_supplementary_row(
     markdown_dir: Path,
     supplementary_dir: Path,
 ) -> dict[str, Any]:
-    category = source_row.get("category") or "uncategorized"
+    category = normalize_batch_category(source_row.get("category"))
     paper_id_guess = source_row.get("paper_id_guess") or ""
     main_pdf_path = Path(source_row.get("pdf_path") or pdf_dir / f"{paper_id_guess}.pdf")
-    markdown_path = Path(source_row.get("markdown_actual_path") or source_row.get("markdown_expected_path") or markdown_dir / f"{paper_id_guess}.md")
+    markdown_path = Path(
+        source_row.get("markdown_actual_path")
+        or source_row.get("markdown_expected_path")
+        or markdown_dir / category / f"{paper_id_guess}.md"
+    )
 
     markdown_text = _read_text_if_exists(markdown_path)
     pdf_text = _read_pdf_like_text(main_pdf_path)
@@ -210,7 +219,7 @@ def _build_summary(
     supplementary_dir: Path,
 ) -> dict[str, Any]:
     by_category: dict[str, dict[str, int]] = {}
-    for category in sorted({row["category"] for row in rows} | {"applications", "fiber_process", "mechanism", "rheology"}):
+    for category in sorted({normalize_batch_category(row["category"]) for row in rows} | set(CANONICAL_BATCH_CATEGORIES)):
         category_rows = [row for row in rows if row["category"] == category]
         by_category[category] = {
             "total": len(category_rows),
@@ -247,7 +256,7 @@ def _build_run_groups(rows: list[dict[str, Any]], summary: dict[str, Any]) -> st
         "Priority order: fiber_process > mechanism > rheology > applications",
         "",
     ]
-    for category in ["fiber_process", "mechanism", "rheology", "applications", "uncategorized"]:
+    for category in BATCH_CATEGORY_PRIORITY:
         category_rows = [row for row in rows if row["category"] == category]
         lines.append(f"## {category}")
         lines.append(f"- total: {len(category_rows)}")

@@ -21,9 +21,13 @@ if str(SRC_DIR) not in sys.path:
 
 from alumina_sol_extractor.config import build_runtime_settings
 from alumina_sol_extractor.pipeline.stage1_pdf_to_markdown import run_stage1_pdf_to_markdown
+from alumina_sol_extractor.utils.batch_categories import (
+    CANONICAL_BATCH_CATEGORIES_WITH_UNCATEGORIZED,
+    normalize_batch_category,
+)
 
 
-KNOWN_CATEGORIES = ["applications", "fiber_process", "mechanism", "rheology", "uncategorized"]
+KNOWN_CATEGORIES = CANONICAL_BATCH_CATEGORIES_WITH_UNCATEGORIZED
 DEFAULT_MANIFEST = PROJECT_ROOT / "data" / "batch_manifest" / "source_manifest.csv"
 DEFAULT_MARKDOWN_DIR = PROJECT_ROOT / "data" / "markdown"
 DEFAULT_REPORT_DIR = PROJECT_ROOT / "data" / "batch_validation_reports"
@@ -194,7 +198,8 @@ def _select_manifest_rows(
 ) -> list[dict[str, str]]:
     filtered = rows
     if category:
-        filtered = [row for row in filtered if (row.get("category") or "uncategorized") == category]
+        normalized_category = normalize_batch_category(category)
+        filtered = [row for row in filtered if normalize_batch_category(row.get("category")) == normalized_category]
     if paper_ids:
         wanted = {item.strip() for item in paper_ids if item.strip()}
         filtered = [
@@ -219,7 +224,7 @@ def _process_manifest_row(
 ) -> dict[str, Any]:
     started_at = _now_iso()
     source_id = row.get("source_id", "")
-    category = row.get("category") or "uncategorized"
+    category = normalize_batch_category(row.get("category"))
     paper_id_guess = row.get("paper_id_guess") or ""
     pdf_path = Path(row.get("pdf_path") or "")
     markdown_path = _resolve_markdown_path(row, markdown_dir=markdown_dir)
@@ -295,7 +300,7 @@ def _run_stage1_for_row(
     markdown_path: Path,
     settings_template: dict[str, Any],
 ) -> Any:
-    category = row.get("category") or "uncategorized"
+    category = normalize_batch_category(row.get("category"))
     pdf_path = Path(row.get("pdf_path") or "")
     settings = copy.deepcopy(settings_template)
     settings.setdefault("paths", {})
@@ -320,7 +325,7 @@ def _resolve_markdown_path(row: dict[str, str], *, markdown_dir: Path) -> Path:
     expected = row.get("markdown_expected_path") or ""
     if expected:
         return Path(expected)
-    category = row.get("category") or "uncategorized"
+    category = normalize_batch_category(row.get("category"))
     paper_id_guess = row.get("paper_id_guess") or ""
     return markdown_dir / category / f"{paper_id_guess}.md"
 

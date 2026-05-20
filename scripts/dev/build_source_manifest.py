@@ -16,9 +16,14 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from alumina_sol_extractor.utils.batch_categories import (
+    BATCH_CATEGORY_PRIORITY,
+    CANONICAL_BATCH_CATEGORIES,
+    infer_batch_category_from_path,
+)
 
-KNOWN_CATEGORIES = ["applications", "fiber_process", "mechanism", "rheology"]
-CATEGORY_PRIORITY = ["fiber_process", "mechanism", "rheology", "applications", "uncategorized"]
+KNOWN_CATEGORIES = CANONICAL_BATCH_CATEGORIES
+CATEGORY_PRIORITY = BATCH_CATEGORY_PRIORITY
 SOURCE_MANIFEST_FIELDS = [
     "source_id",
     "category",
@@ -195,14 +200,7 @@ def _category_sort_key(category: str) -> int:
 
 
 def _infer_category(path: Path, pdf_dir: Path) -> str:
-    try:
-        relative_parts = path.relative_to(pdf_dir).parts
-    except ValueError:
-        return "uncategorized"
-    for part in relative_parts[:-1]:
-        if part in KNOWN_CATEGORIES:
-            return part
-    return "uncategorized"
+    return infer_batch_category_from_path(path, pdf_dir)
 
 
 def _build_source_id(category: str, stem: str) -> str:
