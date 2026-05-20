@@ -25,33 +25,90 @@ assert DOWNLOAD_SPEC and DOWNLOAD_SPEC.loader
 DOWNLOAD_SPEC.loader.exec_module(DOWNLOAD_MODULE)
 
 
-def test_build_supplementary_manifest_detects_keywords_doi_and_local_files(tmp_path: Path) -> None:
+def test_build_supplementary_manifest_classifies_strong_and_weak_evidence(tmp_path: Path) -> None:
     pdf_dir = tmp_path / "pdfs"
     markdown_dir = tmp_path / "markdown"
     outputs_dir = tmp_path / "outputs"
     out_dir = tmp_path / "batch_manifest"
     supplementary_dir = tmp_path / "supplementary"
-    paper_id = "paper-a"
 
-    (pdf_dir / "fiber_process").mkdir(parents=True, exist_ok=True)
-    (pdf_dir / "fiber_process" / f"{paper_id}.pdf").write_text(
-        "Supplementary Information available online. DOI 10.1000/xyz123. https://example.com/supplementary.pdf",
-        encoding="utf-8",
-    )
-    (markdown_dir / "fiber_process").mkdir(parents=True, exist_ok=True)
-    (markdown_dir / "fiber_process" / f"{paper_id}.md").write_text(
-        "# Example Title\nSupporting Information and ESI are available online.\nDOI: 10.1000/xyz123",
-        encoding="utf-8",
-    )
-    (supplementary_dir / "fiber_process" / paper_id).mkdir(parents=True, exist_ok=True)
-    (supplementary_dir / "fiber_process" / paper_id / "table-s1.xlsx").write_text("fake", encoding="utf-8")
+    cases = [
+        {
+            "paper_id": "paper-strong-en",
+            "category": "fiber_process",
+            "pdf_text": "Supplementary Information available online. DOI 10.1000/xyz123.",
+            "markdown_text": "# Strong EN\nSupporting Information is available.\nhttps://example.com/supplementary.pdf",
+            "local_file": "",
+        },
+        {
+            "paper_id": "paper-strong-zh",
+            "category": "mechanism",
+            "pdf_text": "\u8be6\u89c1\u8865\u5145\u6750\u6599",
+            "markdown_text": "# Strong ZH\n\u8865\u5145\u6750\u6599",
+            "local_file": "",
+        },
+        {
+            "paper_id": "paper-weak-appendix",
+            "category": "rheology",
+            "pdf_text": "\u9644\u5f55",
+            "markdown_text": "# Weak Appendix\n\u9644\u5f55",
+            "local_file": "",
+        },
+        {
+            "paper_id": "paper-weak-online",
+            "category": "applications",
+            "pdf_text": "available online",
+            "markdown_text": "# Weak Online\navailable online",
+            "local_file": "",
+        },
+        {
+            "paper_id": "paper-doi-only",
+            "category": "fiber_process",
+            "pdf_text": "DOI 10.2000/abc456",
+            "markdown_text": "# DOI Only\nDOI: 10.2000/abc456",
+            "local_file": "",
+        },
+        {
+            "paper_id": "paper-url-strong",
+            "category": "mechanism",
+            "pdf_text": "https://example.org/supporting-data.zip",
+            "markdown_text": "# Strong URL\nhttps://example.org/supporting-data.zip",
+            "local_file": "",
+        },
+        {
+            "paper_id": "paper-url-weak",
+            "category": "applications",
+            "pdf_text": "https://publisher.example.com/article/123",
+            "markdown_text": "# Weak URL\nhttps://publisher.example.com/article/123",
+            "local_file": "",
+        },
+        {
+            "paper_id": "paper-local-file",
+            "category": "rheology",
+            "pdf_text": "",
+            "markdown_text": "# Local File\n",
+            "local_file": "table-s1.xlsx",
+        },
+    ]
+
+    for case in cases:
+        pdf_path = pdf_dir / case["category"] / f"{case['paper_id']}.pdf"
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        pdf_path.write_text(case["pdf_text"], encoding="utf-8")
+        markdown_path = markdown_dir / case["category"] / f"{case['paper_id']}.md"
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(case["markdown_text"], encoding="utf-8")
+        if case["local_file"]:
+            local_dir = supplementary_dir / case["category"] / case["paper_id"]
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / case["local_file"]).write_text("fake", encoding="utf-8")
 
     source_result = SOURCE_MODULE.build_source_manifest(
         pdf_dir=pdf_dir,
         markdown_dir=markdown_dir,
         outputs_dir=outputs_dir,
         out_dir=out_dir,
-        min_markdown_chars=20,
+        min_markdown_chars=5,
     )
     result = SUPP_MODULE.build_supplementary_manifest(
         source_manifest=source_result["csv_path"],
@@ -61,21 +118,56 @@ def test_build_supplementary_manifest_detects_keywords_doi_and_local_files(tmp_p
         out_dir=out_dir,
     )
 
-    rows = result["rows"]
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["source_id"].startswith("fiber_process__")
-    assert row["supplementary_detected"] == "true"
-    assert "markdown_keyword" in row["detection_method"]
-    assert "pdf_text_keyword" in row["detection_method"]
-    assert row["doi"] == "10.1000/xyz123"
-    assert "supplementary.pdf" in row["supplementary_url"]
-    assert row["supplementary_local_path"].endswith("table-s1.xlsx")
-    assert row["supplementary_file_type"] in {"pdf", "xlsx"}
+    rows_by_paper = {row["paper_id_guess"]: row for row in result["rows"]}
+
+    strong_en = rows_by_paper["paper-strong-en"]
+    assert strong_en["supplementary_detected"] == "true"
+    assert strong_en["evidence_strength"] == "strong"
+    assert "markdown:supporting information" in strong_en["strong_evidence_hits"]
+    assert "url:https://example.com/supplementary.pdf" in strong_en["strong_evidence_hits"]
+
+    strong_zh = rows_by_paper["paper-strong-zh"]
+    assert strong_zh["supplementary_detected"] == "true"
+    assert strong_zh["evidence_strength"] == "strong"
+    assert "\u8865\u5145\u6750\u6599" in strong_zh["strong_evidence_hits"]
+
+    weak_appendix = rows_by_paper["paper-weak-appendix"]
+    assert weak_appendix["supplementary_detected"] == "unknown"
+    assert weak_appendix["evidence_strength"] == "weak"
+    assert "\u9644\u5f55" in weak_appendix["weak_evidence_hits"]
+    assert str(weak_appendix["needs_manual_review"]).lower() == "true"
+
+    weak_online = rows_by_paper["paper-weak-online"]
+    assert weak_online["supplementary_detected"] == "unknown"
+    assert weak_online["evidence_strength"] == "weak"
+    assert "available online" in weak_online["weak_evidence_hits"]
+
+    doi_only = rows_by_paper["paper-doi-only"]
+    assert doi_only["supplementary_detected"] == "unknown"
+    assert doi_only["evidence_strength"] == "weak"
+    assert "doi:10.2000/abc456" in doi_only["weak_evidence_hits"]
+
+    strong_url = rows_by_paper["paper-url-strong"]
+    assert strong_url["supplementary_detected"] == "true"
+    assert strong_url["evidence_strength"] == "strong"
+    assert "supporting-data.zip" in strong_url["supplementary_url"]
+
+    weak_url = rows_by_paper["paper-url-weak"]
+    assert weak_url["supplementary_detected"] == "unknown"
+    assert weak_url["evidence_strength"] == "weak"
+    assert weak_url["supplementary_url"] == "https://publisher.example.com/article/123"
+
+    local_file = rows_by_paper["paper-local-file"]
+    assert local_file["supplementary_detected"] == "true"
+    assert local_file["evidence_strength"] == "strong"
+    assert local_file["supplementary_local_path"].endswith("table-s1.xlsx")
+    assert local_file["confidence"] == "high"
 
     summary = json.loads(Path(result["summary_path"]).read_text(encoding="utf-8"))
-    assert summary["possible_supplementary_count"] == 1
-    assert summary["doi_detected_count"] == 1
+    assert summary["strong_evidence_count"] == 4
+    assert summary["weak_only_count"] == 4
+    assert summary["no_evidence_count"] == 0
+    assert summary["needs_manual_review_count"] == 4
 
 
 def test_supplementary_manifest_normalizes_category_from_source_manifest(tmp_path: Path) -> None:
@@ -154,6 +246,10 @@ def test_supplementary_manifest_default_dry_run_does_not_download(tmp_path: Path
                 "download_status": "not_attempted",
                 "needs_manual_download": "true",
                 "confidence": "high",
+                "evidence_strength": "strong",
+                "strong_evidence_hits": "url:https://example.com/supplementary.pdf",
+                "weak_evidence_hits": "",
+                "needs_manual_review": "false",
                 "notes": "",
             }
         )
