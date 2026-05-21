@@ -526,14 +526,15 @@ def test_stage2_pipeline_passes_category_aware_tables_and_figures_dirs(tmp_path:
     pdf_path.write_text("fake pdf", encoding="utf-8")
     output_dir = project_root / "data" / "outputs" / "fiber_process" / "paper1"
 
-    captured: dict[str, Path] = {}
+    captured: dict[str, object] = {}
 
     def fake_extract_tables_from_markdown(markdown: str, project_root: Path, paper_id: str, preview_rows: int = 8, tables_dir: Path | None = None):
         captured["tables_dir"] = Path(tables_dir)
         return markdown, []
 
-    def fake_load_mineru_image_layout(*args, **kwargs):
-        return {}
+    def fake_load_mineru_image_layout(path: Path):
+        captured["layout_dir"] = Path(path)
+        return {"figure_a.png": {"bbox": [1, 2, 3, 4]}}
 
     def fake_find_figures_in_markdown_any(
         markdown_text: str,
@@ -544,6 +545,7 @@ def test_stage2_pipeline_passes_category_aware_tables_and_figures_dirs(tmp_path:
         figures_all_dir: Path | None = None,
     ):
         captured["figures_all_dir"] = Path(figures_all_dir)
+        captured["mineru_layout"] = mineru_layout
         return []
 
     def fake_match_figure_contexts(markdown_text: str, figures: list):
@@ -560,6 +562,11 @@ def test_stage2_pipeline_passes_category_aware_tables_and_figures_dirs(tmp_path:
             "raw_mineru_image_count": 1,
             "final_figure_record_count": 0,
             "clip_not_run_count": 1,
+            "bbox_attached_count": 1,
+            "bbox_missing_count": 0,
+            "standard_caption_count": 1,
+            "pseudo_caption_count": 0,
+            "caption_none_count": 0,
         }
         (output_dir / "figure_stage2_summary.json").write_text(json.dumps(summary), encoding="utf-8")
         return summary
@@ -573,7 +580,11 @@ def test_stage2_pipeline_passes_category_aware_tables_and_figures_dirs(tmp_path:
 
     result = stage2_module.run_stage2_figure_pipeline(
         project_root=project_root,
-        settings={"paths": {}, "figures": {"run_resnet": False, "run_clip": False}, "outputs": {}},
+        settings={
+            "paths": {"mineru_raw_dir": str(project_root / "data" / "mineru_raw" / "fiber_process")},
+            "figures": {"run_resnet": False, "run_clip": False},
+            "outputs": {},
+        },
         input_pdf=pdf_path,
         paper_id="paper1",
         cleaned_markdown_path=cleaned_markdown_path,
@@ -582,8 +593,19 @@ def test_stage2_pipeline_passes_category_aware_tables_and_figures_dirs(tmp_path:
 
     assert captured["tables_dir"] == output_dir / "tables"
     assert captured["figures_all_dir"] == output_dir / "figures_all"
+    assert captured["layout_dir"] == project_root / "data" / "mineru_raw" / "fiber_process" / "paper1"
+    assert captured["mineru_layout"] == {"figure_a.png": {"bbox": [1, 2, 3, 4]}}
     assert result.tables_dir == output_dir / "tables"
     assert result.output_dir == output_dir
+    assert result.summary["mineru_layout_dir"] == str(project_root / "data" / "mineru_raw" / "fiber_process" / "paper1")
+    assert result.summary["mineru_layout_found"] is True
+    assert result.summary["mineru_layout_image_count"] == 1
+    assert result.summary["mineru_layout_warning"] is None
+    assert result.summary["bbox_attached_count"] == 1
+    assert result.summary["bbox_missing_count"] == 0
+    assert result.summary["standard_caption_count"] == 1
+    assert result.summary["pseudo_caption_count"] == 0
+    assert result.summary["caption_none_count"] == 0
     assert not (project_root / "data" / "outputs" / "paper1").exists()
 
     figures_rows = [json.loads(line) for line in (output_dir / "figures.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -592,6 +614,91 @@ def test_stage2_pipeline_passes_category_aware_tables_and_figures_dirs(tmp_path:
     vision_rows = [json.loads(line) for line in (output_dir / "vision_inputs.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     assert vision_rows[0]["image_path"] == str(output_dir / "figures_all" / "figure_a.png")
     assert vision_rows[0]["vision_image_path"] == str(output_dir / "figures_for_vision" / "figure_a.png")
+
+
+def test_stage2_pipeline_does_not_fallback_to_flat_mineru_layout(tmp_path: Path, monkeypatch) -> None:
+    from alumina_sol_extractor.pipeline import stage2_figure_pipeline as stage2_module
+
+    project_root = tmp_path
+    cleaned_markdown_path = project_root / "data" / "markdown" / "fiber_process" / "paper1.md"
+    cleaned_markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    cleaned_markdown_path.write_text("![img](data/outputs/fiber_process/paper1/figures_all/figure_a.png)\n", encoding="utf-8")
+    pdf_path = project_root / "pdfs" / "paper1.pdf"
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    pdf_path.write_text("fake pdf", encoding="utf-8")
+    output_dir = project_root / "data" / "outputs" / "fiber_process" / "paper1"
+    flat_only_layout_dir = project_root / "data" / "mineru_raw" / "paper1"
+    flat_only_layout_dir.mkdir(parents=True, exist_ok=True)
+    (flat_only_layout_dir / "content_list.json").write_text("[]", encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    def fake_extract_tables_from_markdown(markdown: str, project_root: Path, paper_id: str, preview_rows: int = 8, tables_dir: Path | None = None):
+        return markdown, []
+
+    def fake_load_mineru_image_layout(path: Path):
+        captured["layout_dir"] = Path(path)
+        return {}
+
+    def fake_find_figures_in_markdown_any(
+        markdown_text: str,
+        markdown_path: Path,
+        project_root: Path,
+        paper_id: str,
+        mineru_layout=None,
+        figures_all_dir: Path | None = None,
+    ):
+        captured["mineru_layout"] = mineru_layout
+        return []
+
+    def fake_match_figure_contexts(markdown_text: str, figures: list):
+        return figures
+
+    def fake_detect_and_merge_fragmented_figures(figures: list, paper_id: str, output_dir: Path, **kwargs):
+        return figures
+
+    def fake_save_figure_outputs(**kwargs):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "raw_mineru_image_count": 1,
+            "final_figure_record_count": 0,
+            "clip_not_run_count": 1,
+            "bbox_attached_count": 0,
+            "bbox_missing_count": 1,
+            "standard_caption_count": 0,
+            "pseudo_caption_count": 0,
+            "caption_none_count": 1,
+        }
+        (output_dir / "figure_stage2_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+        return summary
+
+    monkeypatch.setattr(stage2_module, "extract_tables_from_markdown", fake_extract_tables_from_markdown)
+    monkeypatch.setattr(stage2_module, "load_mineru_image_layout", fake_load_mineru_image_layout)
+    monkeypatch.setattr(stage2_module, "find_figures_in_markdown_any", fake_find_figures_in_markdown_any)
+    monkeypatch.setattr(stage2_module, "match_figure_contexts", fake_match_figure_contexts)
+    monkeypatch.setattr(stage2_module, "detect_and_merge_fragmented_figures", fake_detect_and_merge_fragmented_figures)
+    monkeypatch.setattr(stage2_module, "save_figure_outputs", fake_save_figure_outputs)
+
+    result = stage2_module.run_stage2_figure_pipeline(
+        project_root=project_root,
+        settings={
+            "paths": {"mineru_raw_dir": str(project_root / "data" / "mineru_raw" / "fiber_process")},
+            "figures": {"run_resnet": False, "run_clip": False},
+            "outputs": {},
+        },
+        input_pdf=pdf_path,
+        paper_id="paper1",
+        cleaned_markdown_path=cleaned_markdown_path,
+        output_dir=output_dir,
+    )
+
+    assert captured["layout_dir"] == project_root / "data" / "mineru_raw" / "fiber_process" / "paper1"
+    assert captured["mineru_layout"] == {}
+    assert result.summary["mineru_layout_dir"] == str(project_root / "data" / "mineru_raw" / "fiber_process" / "paper1")
+    assert result.summary["mineru_layout_found"] is False
+    assert result.summary["mineru_layout_image_count"] == 0
+    assert result.summary["mineru_layout_warning"] == "missing_category_mineru_layout"
+    assert not (project_root / "data" / "outputs" / "paper1").exists()
 
 
 def _write_manifest(path: Path, rows: list[dict[str, str]]) -> None:

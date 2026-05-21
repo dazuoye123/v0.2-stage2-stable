@@ -152,7 +152,10 @@ def _find_first(root: Path, filename: str) -> Path | None:
     if direct.exists():
         return direct
     matches = sorted(root.rglob(filename))
-    return matches[0] if matches else None
+    if matches:
+        return matches[0]
+    suffix_matches = sorted(path for path in root.rglob(f"*{filename}") if path.name.endswith(filename))
+    return suffix_matches[0] if suffix_matches else None
 
 
 def _read_json(path: Path) -> Any:

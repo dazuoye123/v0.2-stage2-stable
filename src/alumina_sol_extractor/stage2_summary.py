@@ -51,6 +51,7 @@ def save_stage2_outputs(
         "clip_not_run_count": clip_counts.get("not_run", 0),
         "unknown_figure_count": sum(1 for figure in figures if figure.figure_id.startswith("Unknown Figure")),
         "caption_none_count": sum(1 for figure in figures if not figure.caption),
+        "standard_caption_count": sum(1 for figure in figures if figure.caption_source == "standard_caption"),
         "pseudo_caption_count": sum(1 for figure in figures if figure.caption_source == "pseudo_caption"),
         "fragment_count": sum(1 for figure in figures if figure.is_fragment),
         "fragment_group_count": len({figure.fragment_group_id for figure in figures if figure.fragment_group_id}),

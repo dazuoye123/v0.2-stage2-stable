@@ -55,8 +55,8 @@ def run_stage2_figure_pipeline(
     final_markdown = cleaned_markdown_path.read_text(encoding="utf-8")
     raw_mineru_image_count = len(re.findall(r"!\[[^\]]*\]\([^\n]*\)", final_markdown))
 
-    mineru_raw_dir = resolve_project_path(project_root, paths.get("mineru_raw_dir", "data/mineru_raw")) / paper_id
-    mineru_layout = load_mineru_image_layout(mineru_raw_dir)
+    mineru_layout_dir = resolve_project_path(project_root, paths.get("mineru_raw_dir", "data/mineru_raw")) / paper_id
+    mineru_layout = load_mineru_image_layout(mineru_layout_dir)
     figures = find_figures_in_markdown_any(
         markdown_text=final_markdown,
         markdown_path=cleaned_markdown_path,
@@ -104,6 +104,10 @@ def run_stage2_figure_pipeline(
         summary["figure_classifier"] = "unavailable"
     if clip_error is not None:
         summary["clip_prefilter"] = "unavailable"
+    summary["mineru_layout_dir"] = str(mineru_layout_dir)
+    summary["mineru_layout_found"] = bool(mineru_layout)
+    summary["mineru_layout_image_count"] = len(mineru_layout)
+    summary["mineru_layout_warning"] = None if mineru_layout else "missing_category_mineru_layout"
     summary_path = output_dir / "figure_stage2_summary.json"
     summary_path.write_text(__import__("json").dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     return Stage2Result(

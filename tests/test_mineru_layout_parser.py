@@ -97,6 +97,37 @@ def test_model_json_normalized_bbox_with_page_size() -> None:
         assert layout["images/c.jpg"]["source"] == "model_json"
 
 
+def test_prefixed_content_list_v2_json_is_discovered() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        extracted = root / "extracted"
+        extracted.mkdir(parents=True, exist_ok=True)
+        (extracted / "17b5d190-c7a6-4e70-ab44-d7d41951daf0_content_list_v2.json").write_text(
+            json.dumps(
+                [
+                    [
+                        {
+                            "type": "image",
+                            "content": {
+                                "image_source": {"path": "images/prefixed.jpg"},
+                                "image_caption": [{"type": "text", "content": "\u56fe3 \u524d\u7f00\u5e03\u5c40\u56fe"}],
+                            },
+                            "bbox": [11, 22, 33, 44],
+                        }
+                    ]
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        layout = load_mineru_image_layout(root)
+
+        assert layout["images/prefixed.jpg"]["bbox"] == [11.0, 22.0, 33.0, 44.0]
+        assert layout["images/prefixed.jpg"]["caption"] == "\u56fe3 \u524d\u7f00\u5e03\u5c40\u56fe"
+        assert layout["prefixed.jpg"]["source"] == "content_list_v2"
+
+
 if __name__ == "__main__":
     test_content_list_json()
     test_content_list_v2_json()

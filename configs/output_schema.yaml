@@ -12,6 +12,7 @@ outputs:
     - clip_not_run_count
     - unknown_figure_count
     - caption_none_count
+    - standard_caption_count
     - pseudo_caption_count
     - fragment_count
     - fragment_group_count
