@@ -4,7 +4,7 @@ import argparse
 import copy
 import csv
 import json
-import shutil
+import re
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -48,9 +48,10 @@ REPORT_FIELDS = [
     "legacy_figures_all_dir",
     "category_figures_all_dir",
     "status",
+    "legacy_image_link_detected",
     "image_link_normalized",
     "image_link_replacement_count",
-    "copied_legacy_figure_count",
+    "image_file_missing_count",
     "figure_stage2_summary_path",
     "raw_mineru_image_count",
     "tables_count",
@@ -62,9 +63,6 @@ REPORT_FIELDS = [
     "error_message",
     "recommended_action",
 ]
-IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".gif", ".webp"}
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Batch runner for Stage 2 figure/table preprocessing using source_manifest.csv.",
@@ -242,9 +240,10 @@ def _process_manifest_row(
     raw_mineru_image_count = 0
     tables_count = 0
     figures_all_count = 0
+    legacy_image_link_detected = False
     image_link_normalized = False
     image_link_replacement_count = 0
-    copied_legacy_figure_count = 0
+    image_file_missing_count = 0
     error_type = ""
     error_message = ""
     recommended_action = ""
@@ -261,14 +260,16 @@ def _process_manifest_row(
         recommended_action = "run_without_dry_run"
     else:
         try:
-            image_link_normalized, image_link_replacement_count = _normalize_markdown_image_links(
+            (
+                legacy_image_link_detected,
+                image_link_normalized,
+                image_link_replacement_count,
+                image_file_missing_count,
+            ) = _normalize_markdown_image_links(
                 markdown_path=markdown_path,
+                outputs_dir=outputs_dir,
                 category=category,
                 paper_id_guess=paper_id_guess,
-            )
-            copied_legacy_figure_count = _copy_legacy_figure_images(
-                legacy_figures_all_dir=legacy_figures_all_dir,
-                category_figures_all_dir=category_figures_all_dir,
             )
             result = _run_stage2_for_row(
                 row,
@@ -285,6 +286,8 @@ def _process_manifest_row(
             tables_count = int(getattr(result, "tables_count", 0) or 0)
             figures_all_count = _resolve_figures_all_count(paper_output_dir, getattr(result, "summary", {}) or {})
             recommended_action = "ready_for_stage3_or_supplementary_review"
+            if image_file_missing_count > 0:
+                recommended_action = "inspect_missing_category_figure_paths_then_continue"
         except Exception as exc:
             status = "failed"
             error_type = type(exc).__name__
@@ -304,9 +307,10 @@ def _process_manifest_row(
         "legacy_figures_all_dir": str(legacy_figures_all_dir),
         "category_figures_all_dir": str(category_figures_all_dir),
         "status": status,
+        "legacy_image_link_detected": legacy_image_link_detected,
         "image_link_normalized": image_link_normalized,
         "image_link_replacement_count": image_link_replacement_count,
-        "copied_legacy_figure_count": copied_legacy_figure_count,
+        "image_file_missing_count": image_file_missing_count,
         "figure_stage2_summary_path": str(summary_path),
         "raw_mineru_image_count": raw_mineru_image_count,
         "tables_count": tables_count,
@@ -367,21 +371,25 @@ def _resolve_markdown_path(row: dict[str, str], *, markdown_dir: Path) -> Path:
 def _normalize_markdown_image_links(
     *,
     markdown_path: Path,
+    outputs_dir: Path,
     category: str,
     paper_id_guess: str,
-) -> tuple[bool, int]:
+) -> tuple[bool, bool, int, int]:
     text = markdown_path.read_text(encoding="utf-8")
     replacements = _build_markdown_link_replacements(category=category, paper_id_guess=paper_id_guess)
+    legacy_image_link_detected = False
     replacement_count = 0
     updated_text = text
     for old_value, new_value in replacements.items():
         hits = updated_text.count(old_value)
         if hits:
+            legacy_image_link_detected = True
             updated_text = updated_text.replace(old_value, new_value)
             replacement_count += hits
+    image_file_missing_count = _count_missing_category_figure_links(updated_text, outputs_dir=outputs_dir) if replacement_count else 0
     if replacement_count:
         markdown_path.write_text(updated_text, encoding="utf-8")
-    return replacement_count > 0, replacement_count
+    return legacy_image_link_detected, replacement_count > 0, replacement_count, image_file_missing_count
 
 
 def _build_markdown_link_replacements(*, category: str, paper_id_guess: str) -> dict[str, str]:
@@ -401,20 +409,32 @@ def _build_markdown_link_replacements(*, category: str, paper_id_guess: str) -> 
     }
 
 
-def _copy_legacy_figure_images(*, legacy_figures_all_dir: Path, category_figures_all_dir: Path) -> int:
-    if not legacy_figures_all_dir.exists() or not legacy_figures_all_dir.is_dir():
-        return 0
-    copied = 0
-    category_figures_all_dir.mkdir(parents=True, exist_ok=True)
-    for child in legacy_figures_all_dir.iterdir():
-        if not child.is_file() or child.suffix.lower() not in IMAGE_SUFFIXES:
+def _count_missing_category_figure_links(text: str, *, outputs_dir: Path) -> int:
+    normalized_text = text.replace("\\", "/")
+    figure_link_pattern = re.compile(
+        r'(?P<path>(?:[A-Za-z]:/|/)?[^()\[\]\s<>"\']*data/outputs/[^()\[\]\s<>"\']*/figures_all/[^()\[\]\s<>"\']+)'
+    )
+    missing_count = 0
+    seen_paths: set[Path] = set()
+    for match in figure_link_pattern.finditer(normalized_text):
+        normalized_path = match.group("path")
+        if "data/outputs/" not in normalized_path or "/figures_all/" not in normalized_path:
             continue
-        target = category_figures_all_dir / child.name
-        if target.exists():
+        if normalized_path.startswith(PROJECT_ROOT.as_posix()):
+            candidate = Path(normalized_path)
+        else:
+            if "/data/outputs/" in normalized_path:
+                relative_part = normalized_path.split("/data/outputs/", 1)[1]
+            else:
+                relative_part = normalized_path.split("data/outputs/", 1)[1]
+            candidate = outputs_dir / Path(relative_part)
+        candidate = candidate.resolve(strict=False)
+        if candidate in seen_paths:
             continue
-        shutil.copy2(child, target)
-        copied += 1
-    return copied
+        seen_paths.add(candidate)
+        if not candidate.exists():
+            missing_count += 1
+    return missing_count
 
 
 def _validate_stage2_jsonl_outputs(paper_output_dir: Path) -> None:
