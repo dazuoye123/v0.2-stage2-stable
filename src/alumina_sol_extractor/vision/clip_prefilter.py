@@ -14,8 +14,7 @@ from io import BytesIO
 from pathlib import Path
 
 import requests
-import torch
-from PIL import Image
+from PIL import Image, ImageFile, ImageOps
 
 from alumina_sol_extractor.models.figure import FigureInfo
 
@@ -67,14 +66,16 @@ class CLIPPrefilter:
     def __init__(self) -> None:
         try:
             from transformers import CLIPModel, CLIPProcessor
+            import torch
         except Exception as exc:
             raise RuntimeError(
-                "CLIP prefilter requires transformers. Install it with "
-                "`pip install transformers` or keep running without CLIP."
+                "CLIP prefilter requires transformers and torch. Install them with "
+                "`pip install transformers torch` or keep running without CLIP."
             ) from exc
 
+        self.torch = torch
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.processor = CLIPProcessor.from_pretrained(self.model_name)
+        self.processor = CLIPProcessor.from_pretrained(self.model_name, use_fast=False)
         self.model = CLIPModel.from_pretrained(self.model_name).to(self.device).eval()
         self.prompts = POSITIVE_PROMPTS + NEGATIVE_PROMPTS
         self.positive_count = len(POSITIVE_PROMPTS)
@@ -89,7 +90,7 @@ class CLIPPrefilter:
             padding=True,
         )
         inputs = {key: value.to(self.device) for key, value in inputs.items()}
-        with torch.no_grad():
+        with self.torch.no_grad():
             outputs = self.model(**inputs)
             probs = outputs.logits_per_image.softmax(dim=1)[0].detach().cpu()
 
@@ -128,22 +129,31 @@ class CLIPPrefilter:
         return figures
 
 
+def prepare_clip_image(image: Image.Image, max_side: int = 1024) -> Image.Image:
+    """Normalize CLIP input images with a conservative, crash-resistant path."""
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    if max(image.size) > max_side:
+        image.thumbnail((max_side, max_side))
+    return image.copy()
+
+
 def load_clip_image(image_or_figure: str | Path | Image.Image | FigureInfo) -> Image.Image:
     """Load an image from path, PIL, or FigureInfo."""
     if isinstance(image_or_figure, Image.Image):
-        return image_or_figure.convert("RGB")
+        return prepare_clip_image(image_or_figure)
     if isinstance(image_or_figure, (str, Path)):
-        return Image.open(image_or_figure).convert("RGB")
+        return prepare_clip_image(Image.open(image_or_figure))
     if isinstance(image_or_figure, FigureInfo):
         if image_or_figure.image_path:
-            return Image.open(image_or_figure.image_path).convert("RGB")
+            return prepare_clip_image(Image.open(image_or_figure.image_path))
         if image_or_figure.base64_data:
             data = image_or_figure.base64_data
             if data.startswith("data:") and "," in data:
                 data = data.split(",", 1)[1]
-            return Image.open(BytesIO(base64.b64decode(data))).convert("RGB")
+            return prepare_clip_image(Image.open(BytesIO(base64.b64decode(data))))
         if image_or_figure.image_url:
             response = requests.get(image_or_figure.image_url, timeout=30)
             response.raise_for_status()
-            return Image.open(BytesIO(response.content)).convert("RGB")
+            return prepare_clip_image(Image.open(BytesIO(response.content)))
     raise ValueError("No loadable image source for CLIP prefilter.")
