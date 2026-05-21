@@ -94,7 +94,7 @@ class CLIPPrefilter:
             outputs = self.model(**inputs)
             probs = outputs.logits_per_image.softmax(dim=1)[0].detach().cpu()
 
-        best_index = int(torch.argmax(probs).item())
+        best_index = int(self.torch.argmax(probs).item())
         best_label = self.prompts[best_index]
         best_score = float(probs[best_index].item())
         positive_score = float(probs[: self.positive_count].max().item())

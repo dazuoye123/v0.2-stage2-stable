@@ -144,3 +144,102 @@ def test_clip_processor_uses_use_fast_false(monkeypatch) -> None:
 
     assert instance.processor is not None
     assert calls == [(module.CLIPPrefilter.model_name, False)]
+
+
+def test_predict_uses_instance_torch_argmax(monkeypatch) -> None:
+    argmax_calls: list[object] = []
+
+    class FakeScalar:
+        def __init__(self, value: float) -> None:
+            self.value = value
+
+        def item(self) -> float:
+            return self.value
+
+    class FakeTensor:
+        def __init__(self, values: list[float] | None = None) -> None:
+            self.values = values or []
+
+        def to(self, _device):
+            return self
+
+        def softmax(self, dim: int = 1):
+            return FakeBatchTensor(self.values)
+
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def __getitem__(self, index):
+            if isinstance(index, slice):
+                return FakeTensor(self.values[index])
+            return FakeScalar(self.values[index])
+
+        def max(self):
+            return FakeScalar(max(self.values))
+
+    class FakeBatchTensor:
+        def __init__(self, values: list[float]) -> None:
+            self.values = values
+
+        def __getitem__(self, _index):
+            return FakeTensor(self.values)
+
+    class FakeOutputs:
+        def __init__(self, values: list[float]) -> None:
+            self.logits_per_image = FakeTensor(values)
+
+    class FakeProcessor:
+        @classmethod
+        def from_pretrained(cls, _model_name: str, use_fast: bool = True):
+            return cls()
+
+        def __call__(self, **kwargs):
+            return {"pixel_values": FakeTensor(), "input_ids": FakeTensor()}
+
+    class FakeModel:
+        @classmethod
+        def from_pretrained(cls, _model_name: str):
+            return cls()
+
+        def to(self, _device):
+            return self
+
+        def eval(self):
+            return self
+
+        def __call__(self, **_kwargs):
+            values = [0.91] + [0.01] * (len(module.POSITIVE_PROMPTS) + len(module.NEGATIVE_PROMPTS) - 1)
+            return FakeOutputs(values)
+
+    class FakeNoGrad:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_argmax(tensor: FakeTensor):
+        argmax_calls.append(tensor.values)
+        best_index = max(range(len(tensor.values)), key=lambda idx: tensor.values[idx])
+        return FakeScalar(best_index)
+
+    fake_torch = types.SimpleNamespace(
+        cuda=types.SimpleNamespace(is_available=lambda: False),
+        device=lambda name: name,
+        no_grad=lambda: FakeNoGrad(),
+        argmax=fake_argmax,
+    )
+    fake_transformers = types.SimpleNamespace(CLIPModel=FakeModel, CLIPProcessor=FakeProcessor)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setattr(module, "load_clip_image", lambda _value: Image.new("RGB", (32, 32), color="white"))
+
+    instance = module.CLIPPrefilter()
+    result = instance.predict("dummy-path.png")
+
+    assert result.clip_label == module.POSITIVE_PROMPTS[0]
+    assert result.clip_decision == "positive"
+    assert len(argmax_calls) == 1
