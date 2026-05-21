@@ -9,6 +9,7 @@ images. It only writes ``clip_label``, ``clip_score``, and ``clip_decision`` to
 from __future__ import annotations
 
 import base64
+import os
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -64,6 +65,11 @@ class CLIPPrefilter:
     model_name = "openai/clip-vit-base-patch32"
 
     def __init__(self) -> None:
+        local_files_only = os.getenv("STAGE2_CLIP_LOCAL_FILES_ONLY", "true").lower() not in {
+            "0",
+            "false",
+            "no",
+        }
         try:
             from transformers import CLIPModel, CLIPProcessor
             import torch
@@ -74,9 +80,27 @@ class CLIPPrefilter:
             ) from exc
 
         self.torch = torch
+        self.local_files_only = local_files_only
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.processor = CLIPProcessor.from_pretrained(self.model_name, use_fast=False)
-        self.model = CLIPModel.from_pretrained(self.model_name).to(self.device).eval()
+        try:
+            self.processor = CLIPProcessor.from_pretrained(
+                self.model_name,
+                use_fast=False,
+                local_files_only=local_files_only,
+            )
+            self.model = CLIPModel.from_pretrained(
+                self.model_name,
+                local_files_only=local_files_only,
+            ).to(self.device).eval()
+        except Exception as exc:
+            if local_files_only:
+                raise RuntimeError(
+                    "CLIP local cache not found for openai/clip-vit-base-patch32. "
+                    "Please download the model once with network access first, or set "
+                    "STAGE2_CLIP_LOCAL_FILES_ONLY=false to allow HuggingFace download, "
+                    "or temporarily use --vision-classifier-mode resnet / none."
+                ) from exc
+            raise
         self.prompts = POSITIVE_PROMPTS + NEGATIVE_PROMPTS
         self.positive_count = len(POSITIVE_PROMPTS)
 

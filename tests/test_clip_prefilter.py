@@ -98,7 +98,8 @@ def test_load_clip_image_base64_uses_prepare_clip_image(monkeypatch) -> None:
 
 
 def test_clip_processor_uses_use_fast_false(monkeypatch) -> None:
-    calls: list[tuple[str, object]] = []
+    processor_calls: list[tuple[str, object, object]] = []
+    model_calls: list[tuple[str, object]] = []
 
     class FakeTensor:
         def to(self, _device):
@@ -106,8 +107,13 @@ def test_clip_processor_uses_use_fast_false(monkeypatch) -> None:
 
     class FakeProcessor:
         @classmethod
-        def from_pretrained(cls, model_name: str, use_fast: bool = True):
-            calls.append((model_name, use_fast))
+        def from_pretrained(
+            cls,
+            model_name: str,
+            use_fast: bool = True,
+            local_files_only: bool = False,
+        ):
+            processor_calls.append((model_name, use_fast, local_files_only))
             return cls()
 
         def __call__(self, **kwargs):
@@ -115,7 +121,8 @@ def test_clip_processor_uses_use_fast_false(monkeypatch) -> None:
 
     class FakeModel:
         @classmethod
-        def from_pretrained(cls, _model_name: str):
+        def from_pretrained(cls, model_name: str, local_files_only: bool = False):
+            model_calls.append((model_name, local_files_only))
             return cls()
 
         def to(self, _device):
@@ -139,11 +146,109 @@ def test_clip_processor_uses_use_fast_false(monkeypatch) -> None:
     fake_transformers = types.SimpleNamespace(CLIPModel=FakeModel, CLIPProcessor=FakeProcessor)
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.delenv("STAGE2_CLIP_LOCAL_FILES_ONLY", raising=False)
 
     instance = module.CLIPPrefilter()
 
     assert instance.processor is not None
-    assert calls == [(module.CLIPPrefilter.model_name, False)]
+    assert instance.local_files_only is True
+    assert processor_calls == [(module.CLIPPrefilter.model_name, False, True)]
+    assert model_calls == [(module.CLIPPrefilter.model_name, True)]
+
+
+def test_clip_processor_respects_env_override_for_online_download(monkeypatch) -> None:
+    processor_calls: list[tuple[str, object, object]] = []
+    model_calls: list[tuple[str, object]] = []
+
+    class FakeProcessor:
+        @classmethod
+        def from_pretrained(
+            cls,
+            model_name: str,
+            use_fast: bool = True,
+            local_files_only: bool = False,
+        ):
+            processor_calls.append((model_name, use_fast, local_files_only))
+            return cls()
+
+    class FakeModel:
+        @classmethod
+        def from_pretrained(cls, model_name: str, local_files_only: bool = False):
+            model_calls.append((model_name, local_files_only))
+            return cls()
+
+        def to(self, _device):
+            return self
+
+        def eval(self):
+            return self
+
+    class FakeNoGrad:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    fake_torch = types.SimpleNamespace(
+        cuda=types.SimpleNamespace(is_available=lambda: False),
+        device=lambda name: name,
+        no_grad=lambda: FakeNoGrad(),
+    )
+    fake_transformers = types.SimpleNamespace(CLIPModel=FakeModel, CLIPProcessor=FakeProcessor)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setenv("STAGE2_CLIP_LOCAL_FILES_ONLY", "false")
+
+    instance = module.CLIPPrefilter()
+
+    assert instance.local_files_only is False
+    assert processor_calls == [(module.CLIPPrefilter.model_name, False, False)]
+    assert model_calls == [(module.CLIPPrefilter.model_name, False)]
+
+
+def test_clip_local_cache_missing_error_is_clear(monkeypatch) -> None:
+    class FakeProcessor:
+        @classmethod
+        def from_pretrained(
+            cls,
+            model_name: str,
+            use_fast: bool = True,
+            local_files_only: bool = False,
+        ):
+            raise OSError(f"missing cache for {model_name}, local_only={local_files_only}")
+
+    class FakeModel:
+        @classmethod
+        def from_pretrained(cls, _model_name: str, local_files_only: bool = False):
+            raise AssertionError("model load should not be reached when processor fails first")
+
+    class FakeNoGrad:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    fake_torch = types.SimpleNamespace(
+        cuda=types.SimpleNamespace(is_available=lambda: False),
+        device=lambda name: name,
+        no_grad=lambda: FakeNoGrad(),
+    )
+    fake_transformers = types.SimpleNamespace(CLIPModel=FakeModel, CLIPProcessor=FakeProcessor)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.delenv("STAGE2_CLIP_LOCAL_FILES_ONLY", raising=False)
+
+    try:
+        module.CLIPPrefilter()
+        assert False, "expected RuntimeError"
+    except RuntimeError as exc:
+        message = str(exc)
+
+    assert "CLIP local cache not found" in message
+    assert "STAGE2_CLIP_LOCAL_FILES_ONLY=false" in message
+    assert "--vision-classifier-mode resnet / none" in message
 
 
 def test_predict_uses_instance_torch_argmax(monkeypatch) -> None:
@@ -193,7 +298,12 @@ def test_predict_uses_instance_torch_argmax(monkeypatch) -> None:
 
     class FakeProcessor:
         @classmethod
-        def from_pretrained(cls, _model_name: str, use_fast: bool = True):
+        def from_pretrained(
+            cls,
+            _model_name: str,
+            use_fast: bool = True,
+            local_files_only: bool = False,
+        ):
             return cls()
 
         def __call__(self, **kwargs):
@@ -201,7 +311,11 @@ def test_predict_uses_instance_torch_argmax(monkeypatch) -> None:
 
     class FakeModel:
         @classmethod
-        def from_pretrained(cls, _model_name: str):
+        def from_pretrained(
+            cls,
+            _model_name: str,
+            local_files_only: bool = False,
+        ):
             return cls()
 
         def to(self, _device):
@@ -236,6 +350,7 @@ def test_predict_uses_instance_torch_argmax(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
     monkeypatch.setattr(module, "load_clip_image", lambda _value: Image.new("RGB", (32, 32), color="white"))
+    monkeypatch.delenv("STAGE2_CLIP_LOCAL_FILES_ONLY", raising=False)
 
     instance = module.CLIPPrefilter()
     result = instance.predict("dummy-path.png")
