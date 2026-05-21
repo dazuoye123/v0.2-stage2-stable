@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import shutil
 import sys
+import unicodedata
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,7 +41,12 @@ REPORT_FIELDS = [
     "source_id",
     "category",
     "paper_id_guess",
-    "raw_dir",
+    "expected_raw_dir",
+    "actual_raw_dir",
+    "raw_dir_match_method",
+    "cache_has_raw_mineru_md",
+    "cache_has_extracted_markdown",
+    "cache_has_zip",
     "mineru_markdown_path",
     "output_markdown_path",
     "paper_output_dir",
@@ -100,6 +107,7 @@ def rebuild_stage1_from_mineru_raw(
     _validate_manifest_fields(rows)
     selected_rows = _select_manifest_rows(rows, category=category, paper_ids=paper_ids, limit=limit)
     report_dir.mkdir(parents=True, exist_ok=True)
+    mineru_cache_index = build_mineru_cache_index(mineru_raw_dir)
 
     run_started = _now_iso()
     report_rows: list[dict[str, Any]] = []
@@ -107,6 +115,7 @@ def rebuild_stage1_from_mineru_raw(
         report_row = _process_manifest_row(
             row,
             mineru_raw_dir=mineru_raw_dir,
+            mineru_cache_index=mineru_cache_index,
             markdown_dir=markdown_dir,
             outputs_dir=outputs_dir,
             force=force,
@@ -124,6 +133,7 @@ def rebuild_stage1_from_mineru_raw(
         markdown_dir=markdown_dir,
         outputs_dir=outputs_dir,
         report_dir=report_dir,
+        mineru_cache_index=mineru_cache_index,
         category=category,
         paper_ids=paper_ids or [],
         limit=limit,
@@ -155,6 +165,7 @@ def _process_manifest_row(
     row: dict[str, str],
     *,
     mineru_raw_dir: Path,
+    mineru_cache_index: list[dict[str, Any]],
     markdown_dir: Path,
     outputs_dir: Path,
     force: bool,
@@ -162,10 +173,17 @@ def _process_manifest_row(
 ) -> dict[str, Any]:
     category = normalize_batch_category(row.get("category"))
     paper_id_guess = row.get("paper_id_guess") or ""
-    raw_dir = mineru_raw_dir / paper_id_guess
+    expected_raw_dir = mineru_raw_dir / paper_id_guess
     output_markdown_path = _resolve_markdown_path(row, markdown_dir=markdown_dir)
     paper_output_dir = outputs_dir / category / paper_id_guess
     figures_all_dir = paper_output_dir / "figures_all"
+    matched_cache = _match_mineru_cache_row(
+        row,
+        category=category,
+        mineru_raw_dir=mineru_raw_dir,
+        mineru_cache_index=mineru_cache_index,
+    )
+    actual_raw_dir = Path(matched_cache["actual_raw_dir"]) if matched_cache else None
 
     status = ""
     mineru_markdown_path = ""
@@ -175,12 +193,16 @@ def _process_manifest_row(
     error_type = ""
     error_message = ""
     recommended_action = ""
+    raw_dir_match_method = matched_cache["match_method"] if matched_cache else "not_found"
+    cache_has_raw_mineru_md = bool(matched_cache["has_raw_mineru_md"]) if matched_cache else False
+    cache_has_extracted_markdown = bool(matched_cache["has_extracted_markdown"]) if matched_cache else False
+    cache_has_zip = bool(matched_cache["has_zip"]) if matched_cache else False
 
-    if not raw_dir.exists():
+    if actual_raw_dir is None:
         status = "missing_mineru_raw"
         recommended_action = "check_mineru_raw_cache"
     else:
-        mineru_md = _find_mineru_markdown(raw_dir)
+        mineru_md = _find_mineru_markdown(actual_raw_dir)
         if mineru_md is None:
             status = "missing_mineru_markdown"
             recommended_action = "inspect_mineru_raw_contents"
@@ -228,7 +250,12 @@ def _process_manifest_row(
         "source_id": row.get("source_id", ""),
         "category": category,
         "paper_id_guess": paper_id_guess,
-        "raw_dir": str(raw_dir),
+        "expected_raw_dir": str(expected_raw_dir),
+        "actual_raw_dir": str(actual_raw_dir) if actual_raw_dir else "",
+        "raw_dir_match_method": raw_dir_match_method,
+        "cache_has_raw_mineru_md": cache_has_raw_mineru_md,
+        "cache_has_extracted_markdown": cache_has_extracted_markdown,
+        "cache_has_zip": cache_has_zip,
         "mineru_markdown_path": mineru_markdown_path,
         "output_markdown_path": str(output_markdown_path),
         "paper_output_dir": str(paper_output_dir),
@@ -256,6 +283,163 @@ def _find_mineru_markdown(raw_dir: Path) -> Path | None:
         md_candidates = sorted(extracted_dir.rglob("*.md"))
         if md_candidates:
             return md_candidates[0]
+    return None
+
+
+def build_mineru_cache_index(mineru_raw_dir: Path) -> list[dict[str, Any]]:
+    if not mineru_raw_dir.exists():
+        return []
+
+    candidates: dict[Path, dict[str, Any]] = {}
+    for raw_md in mineru_raw_dir.rglob("raw_mineru.md"):
+        _upsert_cache_candidate(candidates, raw_md.parent, has_raw_mineru_md=True)
+    for zip_path in mineru_raw_dir.rglob("mineru_result.zip"):
+        _upsert_cache_candidate(candidates, zip_path.parent, has_zip=True)
+    for markdown_path in mineru_raw_dir.rglob("*.md"):
+        raw_dir = _infer_cache_dir_from_markdown(markdown_path, mineru_raw_dir)
+        if raw_dir is not None:
+            _upsert_cache_candidate(candidates, raw_dir, has_extracted_markdown=True)
+
+    index = list(candidates.values())
+    index.sort(key=lambda item: item["actual_raw_dir"])
+    return index
+
+
+def _upsert_cache_candidate(
+    candidates: dict[Path, dict[str, Any]],
+    raw_dir: Path,
+    *,
+    has_raw_mineru_md: bool = False,
+    has_extracted_markdown: bool = False,
+    has_zip: bool = False,
+) -> None:
+    raw_dir = raw_dir.resolve()
+    item = candidates.setdefault(
+        raw_dir,
+        {
+            "actual_raw_dir": str(raw_dir),
+            "folder_name": raw_dir.name,
+            "normalized_folder_name": _normalize_cache_name(raw_dir.name),
+            "has_raw_mineru_md": False,
+            "has_extracted_markdown": False,
+            "has_zip": False,
+        },
+    )
+    item["has_raw_mineru_md"] = item["has_raw_mineru_md"] or has_raw_mineru_md
+    item["has_extracted_markdown"] = item["has_extracted_markdown"] or has_extracted_markdown
+    item["has_zip"] = item["has_zip"] or has_zip
+
+
+def _infer_cache_dir_from_markdown(markdown_path: Path, mineru_raw_dir: Path) -> Path | None:
+    if markdown_path.name == "raw_mineru.md":
+        return markdown_path.parent
+    try:
+        relative_parts = markdown_path.resolve().relative_to(mineru_raw_dir.resolve()).parts
+    except ValueError:
+        return None
+    if "extracted" not in relative_parts:
+        return None
+    extracted_index = relative_parts.index("extracted")
+    if extracted_index == 0:
+        return None
+    raw_dir_parts = relative_parts[:extracted_index]
+    return mineru_raw_dir.joinpath(*raw_dir_parts)
+
+
+def _normalize_cache_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value or "").strip().lower()
+    normalized = re.sub(r"[\s\-_—–－,，、.:。：；;()\[\]（）【】<>《》\"“”'‘’·]+", "_", normalized)
+    normalized = re.sub(r"_+", "_", normalized).strip("_")
+    return normalized
+
+
+def _match_mineru_cache_row(
+    row: dict[str, str],
+    *,
+    category: str,
+    mineru_raw_dir: Path,
+    mineru_cache_index: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    paper_id_guess = (row.get("paper_id_guess") or "").strip()
+    source_id = (row.get("source_id") or "").strip()
+    pdf_stem = Path((row.get("pdf_path") or "").strip()).stem if (row.get("pdf_path") or "").strip() else ""
+
+    folder_name_map = _build_cache_lookup(mineru_cache_index, "folder_name")
+    normalized_name_map = _build_cache_lookup(mineru_cache_index, "normalized_folder_name")
+    raw_dir_map = {Path(item["actual_raw_dir"]).resolve(): item for item in mineru_cache_index}
+
+    for method, key in (
+        ("exact_paper_id", paper_id_guess),
+        ("exact_source_id", source_id),
+        ("exact_pdf_stem", pdf_stem),
+    ):
+        matched = _unique_lookup(folder_name_map, key)
+        if matched is not None:
+            return {**matched, "match_method": method}
+
+    for method, key in (
+        ("normalized_paper_id", _normalize_cache_name(paper_id_guess)),
+        ("normalized_source_id", _normalize_cache_name(source_id)),
+        ("normalized_pdf_stem", _normalize_cache_name(pdf_stem)),
+    ):
+        matched = _unique_lookup(normalized_name_map, key)
+        if matched is not None:
+            return {**matched, "match_method": method}
+
+    if paper_id_guess:
+        category_raw_dir = (mineru_raw_dir / category / paper_id_guess).resolve()
+        matched = raw_dir_map.get(category_raw_dir)
+        if matched is not None:
+            return {**matched, "match_method": "category_exact"}
+
+    fuzzy = _fuzzy_unique_match(
+        mineru_cache_index,
+        keys=[paper_id_guess, source_id, pdf_stem],
+    )
+    if fuzzy is not None:
+        return {**fuzzy, "match_method": "fuzzy_unique"}
+    return None
+
+
+def _build_cache_lookup(index: list[dict[str, Any]], key: str) -> dict[str, list[dict[str, Any]]]:
+    lookup: dict[str, list[dict[str, Any]]] = {}
+    for item in index:
+        value = item.get(key) or ""
+        if not value:
+            continue
+        lookup.setdefault(str(value), []).append(item)
+    return lookup
+
+
+def _unique_lookup(lookup: dict[str, list[dict[str, Any]]], key: str) -> dict[str, Any] | None:
+    if not key:
+        return None
+    matches = lookup.get(key, [])
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def _fuzzy_unique_match(index: list[dict[str, Any]], *, keys: list[str]) -> dict[str, Any] | None:
+    normalized_keys = [_normalize_cache_name(key) for key in keys if key and _normalize_cache_name(key)]
+    if not normalized_keys:
+        return None
+    matches: list[dict[str, Any]] = []
+    for item in index:
+        folder_name = item["folder_name"]
+        normalized_folder_name = item["normalized_folder_name"]
+        for key in normalized_keys:
+            if (
+                folder_name.startswith(key)
+                or normalized_folder_name.startswith(key)
+                or key in folder_name
+                or key in normalized_folder_name
+            ):
+                matches.append(item)
+                break
+    unique = {item["actual_raw_dir"]: item for item in matches}
+    if len(unique) == 1:
+        return next(iter(unique.values()))
     return None
 
 
@@ -325,6 +509,7 @@ def _build_summary(
     markdown_dir: Path,
     outputs_dir: Path,
     report_dir: Path,
+    mineru_cache_index: list[dict[str, Any]],
     category: str | None,
     paper_ids: list[str],
     limit: int,
@@ -334,6 +519,9 @@ def _build_summary(
     finished_at: str,
 ) -> dict[str, Any]:
     status_counts = Counter(row["status"] for row in rows)
+    match_method_counts = Counter(row["raw_dir_match_method"] for row in rows)
+    matched_count = sum(1 for row in rows if row["raw_dir_match_method"] != "not_found")
+    unmatched_sample = [row["source_id"] for row in rows if row["raw_dir_match_method"] == "not_found"][:20]
     by_category: dict[str, dict[str, Any]] = {}
     for category_name in sorted({row["category"] for row in rows} | set(KNOWN_CATEGORIES)):
         category_rows = [row for row in rows if row["category"] == category_name]
@@ -345,6 +533,8 @@ def _build_summary(
             "missing_mineru_markdown_count": sum(1 for row in category_rows if row["status"] == "missing_mineru_markdown"),
             "failed_count": sum(1 for row in category_rows if row["status"] == "failed"),
             "dry_run_count": sum(1 for row in category_rows if row["status"] == "dry_run_planned"),
+            "matched_count": sum(1 for row in category_rows if row["raw_dir_match_method"] != "not_found"),
+            "raw_dir_match_method_counts": dict(Counter(row["raw_dir_match_method"] for row in category_rows)),
         }
     return {
         "manifest": str(manifest),
@@ -365,6 +555,10 @@ def _build_summary(
         "missing_mineru_markdown_count": status_counts.get("missing_mineru_markdown", 0),
         "failed_count": status_counts.get("failed", 0),
         "dry_run_count": status_counts.get("dry_run_planned", 0),
+        "mineru_cache_candidate_count": len(mineru_cache_index),
+        "raw_dir_match_method_counts": dict(match_method_counts),
+        "matched_count": matched_count,
+        "unmatched_sample": unmatched_sample,
         "by_category": by_category,
         "total_figures_all_file_count": sum(int(row["figures_all_file_count"]) for row in rows),
         "report_csv_path": str(report_dir / "rebuild_stage1_from_mineru_raw_report.csv"),
@@ -393,10 +587,18 @@ def _build_markdown_report(summary: dict[str, Any], rows: list[dict[str, Any]]) 
         f"- missing_mineru_markdown_count: {summary['missing_mineru_markdown_count']}",
         f"- failed_count: {summary['failed_count']}",
         f"- dry_run_count: {summary['dry_run_count']}",
+        f"- mineru_cache_candidate_count: {summary['mineru_cache_candidate_count']}",
+        f"- matched_count: {summary['matched_count']}",
         f"- total_figures_all_file_count: {summary['total_figures_all_file_count']}",
         "",
-        "## By Category",
+        "## Raw Cache Match Methods",
     ]
+    for method, count in sorted(summary["raw_dir_match_method_counts"].items()):
+        lines.append(f"- {method}: {count}")
+    lines.extend([
+        "",
+        "## By Category",
+    ])
     for category_name, counts in summary["by_category"].items():
         lines.extend(
             [
@@ -408,6 +610,7 @@ def _build_markdown_report(summary: dict[str, Any], rows: list[dict[str, Any]]) 
                 f"- missing_mineru_markdown_count: {counts['missing_mineru_markdown_count']}",
                 f"- failed_count: {counts['failed_count']}",
                 f"- dry_run_count: {counts['dry_run_count']}",
+                f"- matched_count: {counts['matched_count']}",
                 "",
             ]
         )
@@ -422,7 +625,7 @@ def _build_markdown_report(summary: dict[str, Any], rows: list[dict[str, Any]]) 
     lines.extend(["", "## Missing MinerU Raw / Markdown"])
     if missing_rows:
         for row in missing_rows:
-            lines.append(f"- {row['source_id']}: {row['status']}")
+            lines.append(f"- {row['source_id']}: {row['status']} | match_method={row['raw_dir_match_method']}")
     else:
         lines.append("- none")
 
