@@ -10,7 +10,10 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from PIL import Image  # noqa: E402
 
 from alumina_sol_extractor.linking import match_figure_contexts  # noqa: E402
-from alumina_sol_extractor.utils.figure_utils import find_figures_in_markdown_any  # noqa: E402
+from alumina_sol_extractor.utils.figure_utils import (  # noqa: E402
+    build_pseudo_caption,
+    find_figures_in_markdown_any,
+)
 from alumina_sol_extractor.vision.figure_filter import FigureFilter  # noqa: E402
 
 
@@ -41,6 +44,14 @@ def test_pseudo_caption_nmr() -> None:
     shutil.rmtree(work_dir)
 
 
+def test_pseudo_caption_fallback_is_bound_to_target_figure() -> None:
+    context = "\u6838\u78c1\u7ed3\u679c\u89c1\u56fe3.19\u3002\u5982\u56fe3.19\u6240\u793a\uff0cNMR ppm \u4fe1\u53f7\u53d8\u5316\u3002"
+
+    assert build_pseudo_caption("\u56fe3.20", context) is None
+    assert build_pseudo_caption("\u56fe3.19", context) == "\u56fe3.19 \u76f8\u5173\u6d4b\u8bd5\u7ed3\u679c\u56fe"
+
+
 if __name__ == "__main__":
     test_pseudo_caption_nmr()
+    test_pseudo_caption_fallback_is_bound_to_target_figure()
     print("pseudo caption test passed")

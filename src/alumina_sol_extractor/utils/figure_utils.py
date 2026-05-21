@@ -560,7 +560,12 @@ def build_pseudo_caption(figure_id: str, context: str) -> str | None:
     number = number_match.group(0)
     if re.search(rf"(?:\u6838\u78c1\u7ed3\u679c\u89c1\u56fe|\u6d4b\u8bd5\u7ed3\u679c\u89c1\u56fe|\u7ed3\u679c\u89c1\u56fe|\u5982\u56fe|\u7531\u56fe|\u56fe)\s*{re.escape(number)}(?![\d.])", context):
         return f"\u56fe{number} \u76f8\u5173\u6d4b\u8bd5\u7ed3\u679c\u56fe"
-    if PSEUDO_REFERENCE_PATTERN.search(context):
+    for match in PSEUDO_REFERENCE_PATTERN.finditer(context):
+        if match.group("number") != number:
+            continue
+        next_char = context[match.end()] if match.end() < len(context) else ""
+        if next_char and re.match(r"[\d.\-]", next_char):
+            continue
         return f"\u56fe{number} \u76f8\u5173\u6d4b\u8bd5\u7ed3\u679c\u56fe"
     return None
 
