@@ -71,11 +71,14 @@ def rewrite_mineru_image_paths(
     markdown_dir: Path,
     project_root: Path,
     paper_id: str,
+    figures_all_dir: Path | None = None,
 ) -> str:
-    """Copy local MinerU images into ``data/outputs/{paper_id}/figures_all``."""
+    """Copy local MinerU images into ``figures_all_dir`` or the legacy default output path."""
     markdown_dir = Path(markdown_dir)
     project_root = Path(project_root).resolve()
-    figures_dir = project_root / "data" / "outputs" / paper_id / "figures_all"
+    figures_dir = Path(figures_all_dir).resolve() if figures_all_dir is not None else (
+        project_root / "data" / "outputs" / paper_id / "figures_all"
+    )
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     def replace(match: re.Match[str]) -> str:
