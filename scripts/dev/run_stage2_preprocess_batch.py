@@ -4,6 +4,7 @@ import argparse
 import copy
 import csv
 import json
+import shutil
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -44,7 +45,12 @@ REPORT_FIELDS = [
     "pdf_path",
     "markdown_path",
     "paper_output_dir",
+    "legacy_figures_all_dir",
+    "category_figures_all_dir",
     "status",
+    "image_link_normalized",
+    "image_link_replacement_count",
+    "copied_legacy_figure_count",
     "figure_stage2_summary_path",
     "raw_mineru_image_count",
     "tables_count",
@@ -56,6 +62,7 @@ REPORT_FIELDS = [
     "error_message",
     "recommended_action",
 ]
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".gif", ".webp"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -226,12 +233,18 @@ def _process_manifest_row(
     pdf_path = Path(row.get("pdf_path") or "")
     markdown_path = _resolve_markdown_path(row, markdown_dir=markdown_dir)
     paper_output_dir = outputs_dir / category / paper_id_guess
+    legacy_paper_output_dir = outputs_dir / paper_id_guess
+    legacy_figures_all_dir = legacy_paper_output_dir / "figures_all"
+    category_figures_all_dir = paper_output_dir / "figures_all"
     summary_path = paper_output_dir / "figure_stage2_summary.json"
 
     status = ""
     raw_mineru_image_count = 0
     tables_count = 0
     figures_all_count = 0
+    image_link_normalized = False
+    image_link_replacement_count = 0
+    copied_legacy_figure_count = 0
     error_type = ""
     error_message = ""
     recommended_action = ""
@@ -248,6 +261,15 @@ def _process_manifest_row(
         recommended_action = "run_without_dry_run"
     else:
         try:
+            image_link_normalized, image_link_replacement_count = _normalize_markdown_image_links(
+                markdown_path=markdown_path,
+                category=category,
+                paper_id_guess=paper_id_guess,
+            )
+            copied_legacy_figure_count = _copy_legacy_figure_images(
+                legacy_figures_all_dir=legacy_figures_all_dir,
+                category_figures_all_dir=category_figures_all_dir,
+            )
             result = _run_stage2_for_row(
                 row,
                 pdf_path=pdf_path,
@@ -256,6 +278,7 @@ def _process_manifest_row(
                 settings_template=settings_template or {},
                 disable_vision_classifiers=disable_vision_classifiers,
             )
+            _validate_stage2_jsonl_outputs(paper_output_dir)
             status = "success"
             summary_path = paper_output_dir / "figure_stage2_summary.json"
             raw_mineru_image_count = int(getattr(result, "raw_mineru_image_count", 0) or 0)
@@ -278,7 +301,12 @@ def _process_manifest_row(
         "pdf_path": str(pdf_path),
         "markdown_path": str(markdown_path),
         "paper_output_dir": str(paper_output_dir),
+        "legacy_figures_all_dir": str(legacy_figures_all_dir),
+        "category_figures_all_dir": str(category_figures_all_dir),
         "status": status,
+        "image_link_normalized": image_link_normalized,
+        "image_link_replacement_count": image_link_replacement_count,
+        "copied_legacy_figure_count": copied_legacy_figure_count,
         "figure_stage2_summary_path": str(summary_path),
         "raw_mineru_image_count": raw_mineru_image_count,
         "tables_count": tables_count,
@@ -334,6 +362,78 @@ def _resolve_markdown_path(row: dict[str, str], *, markdown_dir: Path) -> Path:
     category = normalize_batch_category(row.get("category"))
     paper_id_guess = row.get("paper_id_guess") or ""
     return markdown_dir / category / f"{paper_id_guess}.md"
+
+
+def _normalize_markdown_image_links(
+    *,
+    markdown_path: Path,
+    category: str,
+    paper_id_guess: str,
+) -> tuple[bool, int]:
+    text = markdown_path.read_text(encoding="utf-8")
+    replacements = _build_markdown_link_replacements(category=category, paper_id_guess=paper_id_guess)
+    replacement_count = 0
+    updated_text = text
+    for old_value, new_value in replacements.items():
+        hits = updated_text.count(old_value)
+        if hits:
+            updated_text = updated_text.replace(old_value, new_value)
+            replacement_count += hits
+    if replacement_count:
+        markdown_path.write_text(updated_text, encoding="utf-8")
+    return replacement_count > 0, replacement_count
+
+
+def _build_markdown_link_replacements(*, category: str, paper_id_guess: str) -> dict[str, str]:
+    relative_old = f"data/outputs/{paper_id_guess}/figures_all/"
+    relative_new = f"data/outputs/{category}/{paper_id_guess}/figures_all/"
+    relative_old_windows = f"data\\outputs\\{paper_id_guess}\\figures_all\\"
+    relative_new_windows = f"data\\outputs\\{category}\\{paper_id_guess}\\figures_all\\"
+    absolute_old = f"{PROJECT_ROOT.as_posix()}/data/outputs/{paper_id_guess}/figures_all/"
+    absolute_new = f"{PROJECT_ROOT.as_posix()}/data/outputs/{category}/{paper_id_guess}/figures_all/"
+    absolute_old_windows = str(PROJECT_ROOT / "data" / "outputs" / paper_id_guess / "figures_all") + "\\"
+    absolute_new_windows = str(PROJECT_ROOT / "data" / "outputs" / category / paper_id_guess / "figures_all") + "\\"
+    return {
+        relative_old: relative_new,
+        relative_old_windows: relative_new_windows,
+        absolute_old: absolute_new,
+        absolute_old_windows: absolute_new_windows,
+    }
+
+
+def _copy_legacy_figure_images(*, legacy_figures_all_dir: Path, category_figures_all_dir: Path) -> int:
+    if not legacy_figures_all_dir.exists() or not legacy_figures_all_dir.is_dir():
+        return 0
+    copied = 0
+    category_figures_all_dir.mkdir(parents=True, exist_ok=True)
+    for child in legacy_figures_all_dir.iterdir():
+        if not child.is_file() or child.suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        target = category_figures_all_dir / child.name
+        if target.exists():
+            continue
+        shutil.copy2(child, target)
+        copied += 1
+    return copied
+
+
+def _validate_stage2_jsonl_outputs(paper_output_dir: Path) -> None:
+    for filename in ("figures.jsonl", "vision_inputs.jsonl"):
+        _validate_jsonl_file(paper_output_dir / filename)
+
+
+def _validate_jsonl_file(path: Path) -> None:
+    if not path.exists() or not path.is_file():
+        return
+    with path.open("r", encoding="utf-8") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid JSONL in {path} at line {line_number}: {exc.msg}") from exc
 
 
 def _read_existing_stage2_counts(summary_path: Path) -> tuple[int, int, int]:

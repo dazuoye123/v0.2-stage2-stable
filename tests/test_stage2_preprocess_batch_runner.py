@@ -94,6 +94,8 @@ def test_stage2_batch_runner_filters_category_limit_and_ids(tmp_path: Path, monk
     assert row["source_id"] == "fiber_process__001_alpha"
     assert row["status"] == "dry_run_planned"
     assert row["paper_output_dir"].endswith(str(Path("outputs") / "fiber_process" / "001_alpha"))
+    assert row["image_link_normalized"] is False
+    assert row["copied_legacy_figure_count"] == 0
 
 
 def test_stage2_batch_runner_missing_markdown_and_skip_existing(tmp_path: Path, monkeypatch) -> None:
@@ -159,9 +161,24 @@ def test_stage2_batch_runner_force_runs_and_ignores_legacy_flat_output_dir(tmp_p
     pdf_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = markdown_dir / "fiber_process" / "002_beta.md"
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
-    markdown_path.write_text("markdown", encoding="utf-8")
+    markdown_path.write_text(
+        "![legacy](data/outputs/002_beta/figures_all/fig1.png)\n"
+        "![legacy-abs](G:/paper/Al-gel-sol/alumina_sol_extractor/data/outputs/002_beta/figures_all/fig2.png)\n",
+        # Keep a Windows absolute legacy path too because real markdown may contain backslashes.
+        encoding="utf-8",
+    )
+    markdown_path.write_text(
+        markdown_path.read_text(encoding="utf-8")
+        + "![legacy-win](G:\\paper\\Al-gel-sol\\alumina_sol_extractor\\data\\outputs\\002_beta\\figures_all\\fig3.png)\n",
+        encoding="utf-8",
+    )
     pdf_path = pdf_dir / "002_beta.pdf"
     pdf_path.write_text("fake pdf", encoding="utf-8")
+    legacy_figures_all = outputs_dir / "002_beta" / "figures_all"
+    legacy_figures_all.mkdir(parents=True, exist_ok=True)
+    (legacy_figures_all / "fig1.png").write_text("img1", encoding="utf-8")
+    (legacy_figures_all / "fig2.png").write_text("img2", encoding="utf-8")
+    (legacy_figures_all / "fig3.png").write_text("img3", encoding="utf-8")
     _write_manifest(
         manifest_path,
         [
@@ -185,6 +202,16 @@ def test_stage2_batch_runner_force_runs_and_ignores_legacy_flat_output_dir(tmp_p
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "figures_all").mkdir(parents=True, exist_ok=True)
         (output_dir / "figures_all" / "fig1.png").write_text("img", encoding="utf-8")
+        (output_dir / "figures_all" / "fig2.png").write_text("img2", encoding="utf-8")
+        (output_dir / "figures_all" / "fig3.png").write_text("img3", encoding="utf-8")
+        (output_dir / "figures.jsonl").write_text(
+            json.dumps({"image_path": str(output_dir / "figures_all" / "fig1.png")}) + "\n",
+            encoding="utf-8",
+        )
+        (output_dir / "vision_inputs.jsonl").write_text(
+            json.dumps({"vision_image_path": str(output_dir / "figures_for_vision" / "fig1.png")}) + "\n",
+            encoding="utf-8",
+        )
         (output_dir / "figure_stage2_summary.json").write_text(
             json.dumps({"raw_mineru_image_count": 4, "final_figure_record_count": 1}),
             encoding="utf-8",
@@ -210,9 +237,27 @@ def test_stage2_batch_runner_force_runs_and_ignores_legacy_flat_output_dir(tmp_p
     assert settings["paths"]["mineru_raw_dir"] == str(Path(MODULE.PROJECT_ROOT) / "data" / "mineru_raw" / "fiber_process")
     assert settings["figures"]["run_resnet"] is False
     assert settings["figures"]["run_clip"] is False
+    normalized_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "data/outputs/fiber_process/002_beta/figures_all/fig1.png" in normalized_markdown
+    assert "G:/paper/Al-gel-sol/alumina_sol_extractor/data/outputs/fiber_process/002_beta/figures_all/fig2.png" in normalized_markdown
+    assert "G:\\paper\\Al-gel-sol\\alumina_sol_extractor\\data\\outputs\\fiber_process\\002_beta\\figures_all\\fig3.png" in normalized_markdown
+    assert "data/outputs/002_beta/figures_all/fig1.png" not in normalized_markdown
+    assert (outputs_dir / "fiber_process" / "002_beta" / "figures_all" / "fig1.png").exists()
+    assert (outputs_dir / "fiber_process" / "002_beta" / "figures_all" / "fig2.png").exists()
+    assert (outputs_dir / "fiber_process" / "002_beta" / "figures_all" / "fig3.png").exists()
+    for filename in ("figures.jsonl", "vision_inputs.jsonl"):
+        output_file = outputs_dir / "fiber_process" / "002_beta" / filename
+        for line in output_file.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                json.loads(line)
     row = result["rows"][0]
     assert row["status"] == "success"
     assert row["paper_output_dir"].endswith(str(Path("outputs") / "fiber_process" / "002_beta"))
+    assert row["image_link_normalized"] is True
+    assert row["image_link_replacement_count"] == 3
+    assert row["copied_legacy_figure_count"] == 3
+    assert row["legacy_figures_all_dir"].endswith(str(Path("outputs") / "002_beta" / "figures_all"))
+    assert row["category_figures_all_dir"].endswith(str(Path("outputs") / "fiber_process" / "002_beta" / "figures_all"))
 
 
 def test_stage2_batch_runner_supports_uncategorized_category_output(tmp_path: Path, monkeypatch) -> None:
@@ -293,6 +338,8 @@ def test_stage2_batch_runner_continues_after_failures_and_writes_reports(tmp_pat
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "tables").mkdir(parents=True, exist_ok=True)
         (output_dir / "tables" / "table1.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+        (output_dir / "figures.jsonl").write_text(json.dumps({"image_path": "ok"}) + "\n", encoding="utf-8")
+        (output_dir / "vision_inputs.jsonl").write_text(json.dumps({"vision_image_path": "ok"}) + "\n", encoding="utf-8")
         (output_dir / "figure_stage2_summary.json").write_text(
             json.dumps({"raw_mineru_image_count": 5, "final_figure_record_count": 3}),
             encoding="utf-8",
@@ -329,6 +376,58 @@ def test_stage2_batch_runner_continues_after_failures_and_writes_reports(tmp_pat
     with report_csv.open("r", encoding="utf-8", newline="") as handle:
         csv_rows = list(csv.DictReader(handle))
     assert len(csv_rows) == 2
+    assert "image_link_normalized" in csv_rows[0]
+    assert "image_link_replacement_count" in csv_rows[0]
+    assert "copied_legacy_figure_count" in csv_rows[0]
+
+
+def test_stage2_batch_runner_dry_run_does_not_modify_markdown_or_copy_images(tmp_path: Path, monkeypatch) -> None:
+    manifest_path = tmp_path / "source_manifest.csv"
+    markdown_dir = tmp_path / "markdown"
+    outputs_dir = tmp_path / "outputs"
+    report_dir = tmp_path / "reports"
+    pdf_dir = tmp_path / "pdfs" / "applications"
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    markdown_path = markdown_dir / "applications" / "009_gamma.md"
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    original_markdown = "![legacy](data/outputs/009_gamma/figures_all/img.png)\n"
+    markdown_path.write_text(original_markdown, encoding="utf-8")
+    pdf_path = pdf_dir / "009_gamma.pdf"
+    pdf_path.write_text("fake pdf", encoding="utf-8")
+    legacy_figures_all = outputs_dir / "009_gamma" / "figures_all"
+    legacy_figures_all.mkdir(parents=True, exist_ok=True)
+    (legacy_figures_all / "img.png").write_text("legacy", encoding="utf-8")
+    _write_manifest(
+        manifest_path,
+        [
+            {
+                "source_id": "applications__009_gamma",
+                "category": "applications",
+                "paper_id_guess": "009_gamma",
+                "pdf_path": str(pdf_path),
+                "markdown_expected_path": str(markdown_path),
+                "markdown_actual_path": "",
+                "output_dir": str(outputs_dir / "009_gamma"),
+            }
+        ],
+    )
+
+    monkeypatch.setattr(MODULE, "run_stage2_figure_pipeline", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("dry-run should not call Stage 2")))
+
+    result = MODULE.run_stage2_preprocess_batch(
+        manifest=manifest_path,
+        markdown_dir=markdown_dir,
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        dry_run=True,
+    )
+
+    row = result["rows"][0]
+    assert row["status"] == "dry_run_planned"
+    assert row["image_link_normalized"] is False
+    assert row["copied_legacy_figure_count"] == 0
+    assert markdown_path.read_text(encoding="utf-8") == original_markdown
+    assert not (outputs_dir / "applications" / "009_gamma" / "figures_all" / "img.png").exists()
 
 
 def _write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
