@@ -9,8 +9,6 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from PIL import Image  # noqa: E402
 
-from alumina_sol_extractor.models.figure import FigureInfo  # noqa: E402
-from alumina_sol_extractor.stage2_summary import save_stage2_outputs  # noqa: E402
 from alumina_sol_extractor.utils.figure_utils import find_figures_in_markdown_any  # noqa: E402
 from alumina_sol_extractor.vision.figure_filter import FigureFilter  # noqa: E402
 
@@ -132,8 +130,8 @@ def test_multi_caption_assignment_to_consecutive_images() -> None:
     shutil.rmtree(work_dir)
 
 
-def test_layout_caption_is_used_when_markdown_caption_missing() -> None:
-    paper_id = "_figure_layout_caption_test"
+def test_details_block_between_image_and_caption_still_extracts_standard_caption() -> None:
+    paper_id = "_figure_details_caption_test"
     work_dir = PROJECT_ROOT / "data" / "outputs" / paper_id
     markdown_dir = work_dir / "markdown"
     images_dir = markdown_dir / "images"
@@ -143,58 +141,15 @@ def test_layout_caption_is_used_when_markdown_caption_missing() -> None:
     images_dir.mkdir(parents=True, exist_ok=True)
     figures_all_dir.mkdir(parents=True, exist_ok=True)
 
-    Image.new("RGB", (18, 18), (200, 200, 200)).save(images_dir / "sem.png")
+    Image.new("RGB", (18, 18), (180, 180, 180)).save(images_dir / "sem.png")
 
     markdown_path = markdown_dir / "paper.md"
     markdown = """![](images/sem.png)
-
-\u672c\u6587\u8fdb\u4e00\u6b65\u5206\u6790\u4e86\u7ea4\u7ef4\u5f62\u8c8c\u3002"""
-    markdown_path.write_text(markdown, encoding="utf-8")
-
-    figures = find_figures_in_markdown_any(
-        markdown,
-        markdown_path,
-        PROJECT_ROOT,
-        paper_id,
-        mineru_layout={
-            "images/sem.png": {
-                "caption": "Fig.5 SEM images of alumina fibers",
-                "bbox": [1, 2, 3, 4],
-                "page_idx": 0,
-                "page_number": 1,
-                "mineru_img_path": "images/sem.png",
-                "source": "content_list_v2",
-            }
-        },
-        figures_all_dir=figures_all_dir,
-    )
-    figures = FigureFilter().apply(figures)
-
-    assert len(figures) == 1
-    assert figures[0].caption == "Fig.5 SEM images of alumina fibers"
-    assert figures[0].caption_source == "mineru_layout_caption"
-    assert figures[0].raw_caption == "Fig.5 SEM images of alumina fibers"
-    assert figures[0].figure_class == "microscopy_image"
-
-    shutil.rmtree(work_dir)
-
-
-def test_markdown_caption_takes_priority_over_layout_caption() -> None:
-    paper_id = "_figure_layout_caption_priority_test"
-    work_dir = PROJECT_ROOT / "data" / "outputs" / paper_id
-    markdown_dir = work_dir / "markdown"
-    images_dir = markdown_dir / "images"
-    figures_all_dir = work_dir / "figures_all"
-    if work_dir.exists():
-        shutil.rmtree(work_dir)
-    images_dir.mkdir(parents=True, exist_ok=True)
-    figures_all_dir.mkdir(parents=True, exist_ok=True)
-
-    Image.new("RGB", (18, 18), (180, 180, 180)).save(images_dir / "ftir.png")
-
-    markdown_path = markdown_dir / "paper.md"
-    markdown = """![](images/ftir.png)
-Fig.3 FTIR spectra of precursor fibers
+<details>
+<summary>naturalimage</summary>
+Microscopic view of a fiber surface
+</details>
+Fig.5 SEM images of alumina fibers
 """
     markdown_path.write_text(markdown, encoding="utf-8")
 
@@ -203,31 +158,21 @@ Fig.3 FTIR spectra of precursor fibers
         markdown_path,
         PROJECT_ROOT,
         paper_id,
-        mineru_layout={
-            "images/ftir.png": {
-                "caption": "Fig.3 SEM images of precursor fibers",
-                "bbox": [1, 2, 3, 4],
-                "page_idx": 0,
-                "page_number": 1,
-                "mineru_img_path": "images/ftir.png",
-                "source": "content_list_v2",
-            }
-        },
         figures_all_dir=figures_all_dir,
     )
     figures = FigureFilter().apply(figures)
 
     assert len(figures) == 1
-    assert figures[0].caption == "Fig.3 FTIR spectra of precursor fibers"
+    assert figures[0].caption == "Fig.5 SEM images of alumina fibers"
     assert figures[0].caption_source == "standard_caption"
-    assert figures[0].raw_caption == "Fig.3 FTIR spectra of precursor fibers"
-    assert figures[0].figure_class == "ftir_spectrum"
+    assert figures[0].raw_caption == "Fig.5 SEM images of alumina fibers"
+    assert figures[0].figure_class == "microscopy_image"
 
     shutil.rmtree(work_dir)
 
 
-def test_layout_body_reference_is_not_used_as_caption() -> None:
-    paper_id = "_figure_layout_body_reference_test"
+def test_grouped_images_with_details_blocks_still_extract_standard_caption() -> None:
+    paper_id = "_figure_group_details_caption_test"
     work_dir = PROJECT_ROOT / "data" / "outputs" / paper_id
     markdown_dir = work_dir / "markdown"
     images_dir = markdown_dir / "images"
@@ -237,11 +182,22 @@ def test_layout_body_reference_is_not_used_as_caption() -> None:
     images_dir.mkdir(parents=True, exist_ok=True)
     figures_all_dir.mkdir(parents=True, exist_ok=True)
 
-    Image.new("RGB", (18, 18), (150, 150, 150)).save(images_dir / "img.png")
+    Image.new("RGB", (18, 18), (150, 150, 150)).save(images_dir / "a.png")
+    Image.new("RGB", (18, 18), (160, 160, 160)).save(images_dir / "b.png")
 
     markdown_path = markdown_dir / "paper.md"
-    markdown = """![](images/img.png)
-\u5982\u56fe5\u6240\u793a\uff0c\u6837\u54c1\u8868\u9762\u5b58\u5728\u9897\u7c92\u5806\u79ef\u3002"""
+    markdown = """![](images/a.png)
+<details>
+<summary>naturalimage</summary>
+surface view
+</details>
+![](images/b.png)
+<details>
+<summary>naturalimage</summary>
+cross section view
+</details>
+Fig.6 SEM images of the surfaces(a) and the cross sections(b) of xerogel fibers
+"""
     markdown_path.write_text(markdown, encoding="utf-8")
 
     figures = find_figures_in_markdown_any(
@@ -249,48 +205,17 @@ def test_layout_body_reference_is_not_used_as_caption() -> None:
         markdown_path,
         PROJECT_ROOT,
         paper_id,
-        mineru_layout={
-            "images/img.png": {
-                "caption": "\u5982\u56fe5\u6240\u793a\uff0c\u6837\u54c1\u8868\u9762\u5b58\u5728\u9897\u7c92\u5806\u79ef\u3002",
-                "bbox": [1, 2, 3, 4],
-                "page_idx": 0,
-                "page_number": 1,
-                "mineru_img_path": "images/img.png",
-                "source": "content_list_v2",
-            }
-        },
         figures_all_dir=figures_all_dir,
     )
+    figures = FigureFilter().apply(figures)
 
-    assert len(figures) == 1
-    assert figures[0].caption_source != "mineru_layout_caption"
+    assert len(figures) == 2
+    assert all(figure.caption_source == "standard_caption" for figure in figures)
+    assert all(figure.caption == "Fig.6 SEM images of the surfaces(a) and the cross sections(b) of xerogel fibers" for figure in figures)
+    assert all(figure.figure_class == "microscopy_image" for figure in figures)
+    assert [figure.subfigure_label for figure in figures] == ["a", "b"]
 
     shutil.rmtree(work_dir)
-
-
-def test_stage2_summary_counts_layout_caption_and_raw_caption(tmp_path: Path) -> None:
-    paper_output_dir = tmp_path / "paper_output"
-    figure = FigureInfo(
-        paper_id="demo",
-        figure_id="Fig.5",
-        caption="Fig.5 SEM images of alumina fibers",
-        raw_caption="Fig.5 SEM images of alumina fibers",
-        caption_source="mineru_layout_caption",
-        bbox=[1.0, 2.0, 3.0, 4.0],
-        keep_for_archive=True,
-        send_to_vision_model=True,
-    )
-
-    summary = save_stage2_outputs(
-        figures=[figure],
-        paper_output_dir=paper_output_dir,
-        raw_mineru_image_count=1,
-    )
-
-    assert summary["raw_caption_count"] == 1
-    assert summary["mineru_layout_caption_count"] == 1
-    assert summary["standard_caption_count"] == 0
-
 
 if __name__ == "__main__":
     test_grouped_caption_extraction()

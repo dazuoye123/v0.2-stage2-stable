@@ -31,6 +31,7 @@ IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^\n]*)\)")
 DATA_IMAGE_PATTERN = re.compile(r"^data:image/[^;]+;base64,(?P<data>.+)$", re.DOTALL)
 TABLE_START_PATTERN = re.compile(r"^\s*(?:\u8868\s*\d+(?:\.\d+)*|Table\s*\d+(?:\.\d+)*|\[TableID:)", re.IGNORECASE)
 HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(?P<title>.+?)\s*$", re.MULTILINE)
+DETAILS_BLOCK_PATTERN = re.compile(r"<details\b.*?</details>", re.IGNORECASE | re.DOTALL)
 REFERENCE_SECTION_PATTERN = re.compile(
     r"^\s*(?:references|bibliography|\u53c2\u8003\u6587\u732e|\u81f4\u8c22|\u5b66\u4f4d\u8bba\u6587\u8bc4\u9605\u53ca\u7b54\u8fa9\u60c5\u51b5\u8868)\b",
     re.IGNORECASE,
@@ -62,18 +63,6 @@ PSEUDO_REFERENCE_PATTERN = re.compile(
     r"\u5982\u56fe|"
     r"\u7531\u56fe|"
     r"\u56fe)\s*(?P<number>\d+(?:\.\d+)*)",
-    re.IGNORECASE,
-)
-LAYOUT_CAPTION_REFERENCE_START_PATTERN = re.compile(
-    r"^\s*(?:"
-    r"\u5982\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*\u6240\u793a|"
-    r"\u7531\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"\u6839\u636e\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"\u4ece\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?|"
-    r"\u56fe\s*\d+(?:[.\-]\d+)*(?:\s*[\uff08(][A-Za-z0-9]+[\uff09)])?\s*(?:\u4e3a|\u662f|\u663e\u793a|\u8868\u660e|\u53ef\u77e5)|"
-    r"(?:Fig\.?|Figure)\s*S?\d+(?:[.\-]\d+)*\s+(?:shows|indicates)|"
-    r"as shown in\s+(?:Fig\.?|Figure)\s*S?\d+(?:[.\-]\d+)*"
-    r")",
     re.IGNORECASE,
 )
 
@@ -192,25 +181,6 @@ def find_figures_in_markdown_any(
             current_caption = caption
             caption_source = caption_assignment.source
             reference_sentences = list(caption_assignment.trailing_reference_sentences)
-            raw_caption = caption_assignment.raw_caption
-            caption_cleaned = caption_assignment.caption_cleaned
-            truncation_reason = caption_assignment.truncation_reason
-            if not current_caption and layout_record:
-                layout_caption_record = _extract_layout_caption_record(layout_record.get("caption"))
-                if layout_caption_record is not None:
-                    current_caption = layout_caption_record.caption
-                    caption_source = layout_caption_record.source
-                    raw_caption = layout_caption_record.raw_caption
-                    caption_cleaned = layout_caption_record.caption_cleaned
-                    truncation_reason = layout_caption_record.truncation_reason
-                    if layout_caption_record.trailing_reference_sentences:
-                        reference_sentences.extend(
-                            _clean_caption_reference_sentences(
-                                layout_caption_record.trailing_reference_sentences,
-                                current_figure_id=figure_id,
-                            )
-                        )
-                    reference_sentences = _dedupe_texts(reference_sentences)
             if not current_caption:
                 pseudo_caption = build_pseudo_caption(figure_id, local_window)
                 if pseudo_caption:
@@ -255,11 +225,11 @@ def find_figures_in_markdown_any(
                     section_title=section_title,
                     context_before=context_before,
                     context_after=context_after,
-                    raw_caption=raw_caption,
+                    raw_caption=caption_assignment.raw_caption,
                     caption=current_caption,
                     caption_source=caption_source,
-                    caption_cleaned=caption_cleaned,
-                    caption_truncation_reason=truncation_reason,
+                    caption_cleaned=caption_assignment.caption_cleaned,
+                    caption_truncation_reason=caption_assignment.truncation_reason,
                     reference_sentences=reference_sentences,
                     description_text=description_text,
                     keep_for_archive=True,
@@ -287,30 +257,6 @@ class CaptionRecord:
         self.raw_caption = raw_caption
         self.caption_cleaned = caption_cleaned
         self.truncation_reason = truncation_reason
-
-
-def _extract_layout_caption_record(raw_caption_text: str | None) -> CaptionRecord | None:
-    raw_text = _compact_spaces(str(raw_caption_text or ""))
-    if not raw_text:
-        return None
-    if not CAPTION_START_PATTERN.match(raw_text):
-        return None
-    if LAYOUT_CAPTION_REFERENCE_START_PATTERN.match(raw_text):
-        return None
-    raw_id, figure_id = _find_figure_id_pair(raw_text)
-    caption, trailing_refs, reason = _split_caption_details(raw_text, figure_id=figure_id or raw_id)
-    if not caption:
-        return None
-    return CaptionRecord(
-        caption=caption,
-        source="mineru_layout_caption",
-        trailing_reference_sentences=trailing_refs,
-        raw_caption=raw_text,
-        caption_cleaned=reason is not None,
-        truncation_reason=reason,
-    )
-
-
 @dataclass
 class CaptionAssignment:
     caption: str | None
@@ -348,9 +294,19 @@ def extract_caption_record(
     caption_lines: list[str] = []
     leading_blank_count = 0
     started = False
+    in_details_block = False
 
     for raw_line in lines:
         line = raw_line.strip()
+        if in_details_block:
+            if re.match(r"^</details\b", line, flags=re.IGNORECASE):
+                in_details_block = False
+            continue
+        if re.match(r"^<details\b", line, flags=re.IGNORECASE):
+            in_details_block = True
+            continue
+        if re.match(r"^</?summary\b", line, flags=re.IGNORECASE):
+            continue
         if IMAGE_PATTERN.search(line) or TABLE_START_PATTERN.match(line):
             break
         if HEADING_PATTERN.match(line) or REFERENCE_SECTION_PATTERN.match(line):
@@ -919,7 +875,7 @@ def _group_consecutive_images(text: str, matches: list[re.Match[str]]) -> list[l
 
 
 def _is_soft_gap_between_group_images(text: str) -> bool:
-    gap = _compact_spaces(text)
+    gap = _compact_spaces(DETAILS_BLOCK_PATTERN.sub(" ", text))
     if not gap:
         return True
     if len(gap) > 80 or CAPTION_START_PATTERN.search(gap) or HEADING_PATTERN.search(gap):
