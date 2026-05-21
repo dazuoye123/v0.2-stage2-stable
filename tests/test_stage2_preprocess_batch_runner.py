@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from alumina_sol_extractor.utils.figure_utils import find_figures_in_markdown_any
+
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "dev" / "run_stage2_preprocess_batch.py"
 SPEC = importlib.util.spec_from_file_location("run_stage2_preprocess_batch_script", SCRIPT_PATH)
@@ -487,6 +489,109 @@ def test_stage2_batch_runner_does_not_copy_legacy_figures_and_only_reports_missi
     assert markdown_path.read_text(encoding="utf-8") == f"![legacy](data/outputs/mechanism/{paper_id}/figures_all/fig.png)\n"
     assert not (outputs_dir / "mechanism" / paper_id / "figures_all" / "fig.png").exists()
     assert (outputs_dir / paper_id / "figures_all" / "fig.png").exists()
+
+
+def test_find_figures_in_markdown_any_uses_explicit_category_aware_figures_dir(tmp_path: Path) -> None:
+    project_root = tmp_path
+    markdown_path = project_root / "data" / "markdown" / "fiber_process" / "paper1.md"
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.write_text("![img](data/outputs/paper1/figures_all/figure_a.png)\n", encoding="utf-8")
+
+    category_figures_all_dir = project_root / "data" / "outputs" / "fiber_process" / "paper1" / "figures_all"
+    category_figures_all_dir.mkdir(parents=True, exist_ok=True)
+    (category_figures_all_dir / "figure_a.png").write_bytes(b"fake-png")
+
+    figures = find_figures_in_markdown_any(
+        markdown_text=markdown_path.read_text(encoding="utf-8"),
+        markdown_path=markdown_path,
+        project_root=project_root,
+        paper_id="paper1",
+        figures_all_dir=category_figures_all_dir,
+    )
+
+    assert len(figures) == 1
+    assert Path(figures[0].image_path) == category_figures_all_dir / "figure_a.png"
+    assert not (project_root / "data" / "outputs" / "paper1").exists()
+
+
+def test_stage2_pipeline_passes_category_aware_tables_and_figures_dirs(tmp_path: Path, monkeypatch) -> None:
+    from alumina_sol_extractor.pipeline import stage2_figure_pipeline as stage2_module
+
+    project_root = tmp_path
+    cleaned_markdown_path = project_root / "data" / "markdown" / "fiber_process" / "paper1.md"
+    cleaned_markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    cleaned_markdown_path.write_text("![img](data/outputs/paper1/figures_all/figure_a.png)\n", encoding="utf-8")
+    pdf_path = project_root / "pdfs" / "paper1.pdf"
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    pdf_path.write_text("fake pdf", encoding="utf-8")
+    output_dir = project_root / "data" / "outputs" / "fiber_process" / "paper1"
+
+    captured: dict[str, Path] = {}
+
+    def fake_extract_tables_from_markdown(markdown: str, project_root: Path, paper_id: str, preview_rows: int = 8, tables_dir: Path | None = None):
+        captured["tables_dir"] = Path(tables_dir)
+        return markdown, []
+
+    def fake_load_mineru_image_layout(*args, **kwargs):
+        return {}
+
+    def fake_find_figures_in_markdown_any(
+        markdown_text: str,
+        markdown_path: Path,
+        project_root: Path,
+        paper_id: str,
+        mineru_layout=None,
+        figures_all_dir: Path | None = None,
+    ):
+        captured["figures_all_dir"] = Path(figures_all_dir)
+        return []
+
+    def fake_match_figure_contexts(markdown_text: str, figures: list):
+        return figures
+
+    def fake_detect_and_merge_fragmented_figures(figures: list, paper_id: str, output_dir: Path, **kwargs):
+        return figures
+
+    def fake_save_figure_outputs(**kwargs):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "figures.jsonl").write_text(json.dumps({"image_path": str(output_dir / "figures_all" / "figure_a.png")}) + "\n", encoding="utf-8")
+        (output_dir / "vision_inputs.jsonl").write_text(json.dumps({"image_path": str(output_dir / "figures_all" / "figure_a.png"), "vision_image_path": str(output_dir / "figures_for_vision" / "figure_a.png")}) + "\n", encoding="utf-8")
+        summary = {
+            "raw_mineru_image_count": 1,
+            "final_figure_record_count": 0,
+            "clip_not_run_count": 1,
+        }
+        (output_dir / "figure_stage2_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+        return summary
+
+    monkeypatch.setattr(stage2_module, "extract_tables_from_markdown", fake_extract_tables_from_markdown)
+    monkeypatch.setattr(stage2_module, "load_mineru_image_layout", fake_load_mineru_image_layout)
+    monkeypatch.setattr(stage2_module, "find_figures_in_markdown_any", fake_find_figures_in_markdown_any)
+    monkeypatch.setattr(stage2_module, "match_figure_contexts", fake_match_figure_contexts)
+    monkeypatch.setattr(stage2_module, "detect_and_merge_fragmented_figures", fake_detect_and_merge_fragmented_figures)
+    monkeypatch.setattr(stage2_module, "save_figure_outputs", fake_save_figure_outputs)
+
+    result = stage2_module.run_stage2_figure_pipeline(
+        project_root=project_root,
+        settings={"paths": {}, "figures": {"run_resnet": False, "run_clip": False}, "outputs": {}},
+        input_pdf=pdf_path,
+        paper_id="paper1",
+        cleaned_markdown_path=cleaned_markdown_path,
+        output_dir=output_dir,
+    )
+
+    assert captured["tables_dir"] == output_dir / "tables"
+    assert captured["figures_all_dir"] == output_dir / "figures_all"
+    assert result.tables_dir == output_dir / "tables"
+    assert result.output_dir == output_dir
+    assert not (project_root / "data" / "outputs" / "paper1").exists()
+
+    figures_rows = [json.loads(line) for line in (output_dir / "figures.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert figures_rows[0]["image_path"] == str(output_dir / "figures_all" / "figure_a.png")
+
+    vision_rows = [json.loads(line) for line in (output_dir / "vision_inputs.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert vision_rows[0]["image_path"] == str(output_dir / "figures_all" / "figure_a.png")
+    assert vision_rows[0]["vision_image_path"] == str(output_dir / "figures_for_vision" / "figure_a.png")
 
 
 def _write_manifest(path: Path, rows: list[dict[str, str]]) -> None:

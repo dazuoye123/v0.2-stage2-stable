@@ -24,15 +24,21 @@ def extract_tables_from_markdown(
     project_root: Path,
     paper_id: str,
     preview_rows: int = 8,
+    tables_dir: Path | None = None,
 ) -> tuple[str, list[TableInfo]]:
     """Extract all ``<table>...</table>`` blocks and replace them in Markdown.
 
-    Tables are saved as CSV and JSON under
-    ``data/outputs/{paper_id}/tables``. The returned Markdown keeps a compact
+    Tables are saved as CSV and JSON under the explicit ``tables_dir`` when
+    provided. Otherwise, the legacy default ``data/outputs/{paper_id}/tables``
+    is used for backward compatibility. The returned Markdown keeps a compact
     preview in place of the raw HTML table.
     """
     project_root = Path(project_root).resolve()
-    tables_dir = project_root / "data" / "outputs" / paper_id / "tables"
+    tables_dir = (
+        Path(tables_dir).resolve()
+        if tables_dir is not None
+        else project_root / "data" / "outputs" / paper_id / "tables"
+    )
     tables_dir.mkdir(parents=True, exist_ok=True)
     index_path = tables_dir / "tables_index.jsonl"
 

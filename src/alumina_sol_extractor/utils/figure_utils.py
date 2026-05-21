@@ -88,7 +88,13 @@ def rewrite_mineru_image_paths(
         if parsed.scheme in {"http", "https", "data"}:
             return match.group(0)
 
-        source = _resolve_local_image_path(raw_path, markdown_dir, project_root, paper_id)
+        source = _resolve_local_image_path(
+            raw_path,
+            markdown_dir,
+            project_root,
+            paper_id,
+            figures_all_dir=figures_dir,
+        )
         if source is None or not source.exists():
             return match.group(0)
 
@@ -104,12 +110,17 @@ def find_figures_in_markdown_any(
     project_root: Path,
     paper_id: str,
     mineru_layout: dict[str, dict] | None = None,
+    figures_all_dir: Path | None = None,
 ) -> list[FigureInfo]:
     """Find figures in Markdown and return image-hash de-duplicated records."""
     markdown_path = Path(markdown_path)
     markdown_dir = markdown_path.parent
     project_root = Path(project_root).resolve()
-    figures_all_dir = project_root / "data" / "outputs" / paper_id / "figures_all"
+    figures_all_dir = (
+        Path(figures_all_dir).resolve()
+        if figures_all_dir is not None
+        else project_root / "data" / "outputs" / paper_id / "figures_all"
+    )
     figures_all_dir.mkdir(parents=True, exist_ok=True)
 
     matches = list(IMAGE_PATTERN.finditer(markdown_text))
@@ -816,7 +827,13 @@ def _materialize_image(
         return None, raw_path, None
     if parsed.scheme == "data" or raw_path.startswith("data:image/"):
         return None, None, _extract_base64_data(raw_path)
-    source = _resolve_local_image_path(raw_path, markdown_dir, project_root, paper_id)
+    source = _resolve_local_image_path(
+        raw_path,
+        markdown_dir,
+        project_root,
+        paper_id,
+        figures_all_dir=figures_all_dir,
+    )
     if source and source.exists():
         return str(_copy_image_to_figures(source, figures_all_dir)), None, None
     return None, None, None
@@ -961,21 +978,54 @@ def _extract_base64_data(data_uri: str) -> str:
     return match.group("data") if match else data_uri
 
 
-def _resolve_local_image_path(raw_path: str, markdown_dir: Path, project_root: Path, paper_id: str) -> Path | None:
+def _resolve_local_image_path(
+    raw_path: str,
+    markdown_dir: Path,
+    project_root: Path,
+    paper_id: str,
+    figures_all_dir: Path | None = None,
+) -> Path | None:
     decoded = unquote(raw_path)
     path = Path(decoded)
     parsed = urlparse(decoded)
-    figures_all_dir = project_root / "data" / "outputs" / paper_id / "figures_all"
-    legacy_figures_dir = project_root / "data" / "outputs" / paper_id / "figures"
+    explicit_figures_all_dir = figures_all_dir is not None
+    figures_all_dir = (
+        Path(figures_all_dir).resolve()
+        if explicit_figures_all_dir
+        else project_root / "data" / "outputs" / paper_id / "figures_all"
+    )
+    legacy_figures_dir = (
+        None
+        if explicit_figures_all_dir
+        else project_root / "data" / "outputs" / paper_id / "figures"
+    )
+
+    def _legacy_match(filename: str) -> Path | None:
+        if legacy_figures_dir is None:
+            return None
+        return _find_by_name(legacy_figures_dir, filename)
+
     if parsed.scheme and len(parsed.scheme) == 1 and decoded[1:3] in {":/", ":\\"}:
         candidate = Path(decoded)
-        return candidate if candidate.exists() else _find_by_name(figures_all_dir, path.name) or _find_by_name(legacy_figures_dir, path.name)
+        return (
+            candidate
+            if candidate.exists()
+            else _find_by_name(figures_all_dir, path.name) or _legacy_match(path.name)
+        )
     if path.is_absolute():
-        return path if path.exists() else _find_by_name(figures_all_dir, path.name) or _find_by_name(legacy_figures_dir, path.name)
+        return (
+            path
+            if path.exists()
+            else _find_by_name(figures_all_dir, path.name) or _legacy_match(path.name)
+        )
     candidate = markdown_dir / path
     if candidate.exists():
         return candidate
-    return _find_by_name(markdown_dir, path.name) or _find_by_name(figures_all_dir, path.name) or _find_by_name(legacy_figures_dir, path.name)
+    return (
+        _find_by_name(markdown_dir, path.name)
+        or _find_by_name(figures_all_dir, path.name)
+        or _legacy_match(path.name)
+    )
 
 
 def _copy_image_to_figures(source: Path, figures_dir: Path) -> Path:

@@ -49,6 +49,7 @@ def run_stage2_figure_pipeline(
         markdown=table_markdown,
         project_root=project_root,
         paper_id=paper_id,
+        tables_dir=output_dir / "tables",
     )
     cleaned_markdown_path.write_text(table_processed_markdown, encoding="utf-8")
     final_markdown = cleaned_markdown_path.read_text(encoding="utf-8")
@@ -62,6 +63,7 @@ def run_stage2_figure_pipeline(
         project_root=project_root,
         paper_id=paper_id,
         mineru_layout=mineru_layout,
+        figures_all_dir=output_dir / "figures_all",
     )
     figures = match_figure_contexts(final_markdown, figures)
 
