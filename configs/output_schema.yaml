@@ -11,8 +11,10 @@ outputs:
     - clip_uncertain_count
     - clip_not_run_count
     - unknown_figure_count
+    - raw_caption_count
     - caption_none_count
     - standard_caption_count
+    - mineru_layout_caption_count
     - pseudo_caption_count
     - fragment_count
     - fragment_group_count
