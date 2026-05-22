@@ -69,6 +69,9 @@ TOC_DOT_PATTERN = re.compile(r"(?:\.{3,}|\u2026{2,}|\. ?\. ?\.)")
 TOC_PAGE_PATTERN = re.compile(r"(?:\.{3,}|\u2026{2,}|\s)\d+\s*$")
 MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*\]\([^)]+\)")
 HTML_IMG_PATTERN = re.compile(r"<img\b[^>]*>", flags=re.IGNORECASE)
+DETAILS_TAG_START_PATTERN = re.compile(r"^\s*<details\b", flags=re.IGNORECASE)
+DETAILS_TAG_END_PATTERN = re.compile(r"^\s*</details>\s*$", flags=re.IGNORECASE)
+SUMMARY_TAG_PATTERN = re.compile(r"^\s*</?summary\b[^>]*>\s*$", flags=re.IGNORECASE)
 NUMBERED_TOC_LINE_PATTERN = re.compile(
     r"^\s*(?:#\s*)?(?:\d+(?:\.\d+)*|[一二三四五六七八九十]+(?:章|节)?)\s*.*?\s+\d+\s*$"
 )
@@ -343,10 +346,24 @@ def _cleanup_residual_lines(text: str) -> tuple[str, dict[str, int]]:
     removed_image_markdown_line_count = 0
     removed_html_img_line_count = 0
     removed_image_path_line_count = 0
+    removed_details_image_block_count = 0
+    in_details_block = False
+    current_details_lines: list[str] = []
 
     for raw_line in lines:
         line = raw_line.rstrip()
         stripped = line.strip()
+        if in_details_block:
+            current_details_lines.append(line)
+            if DETAILS_TAG_END_PATTERN.match(stripped):
+                removed_details_image_block_count += 1
+                in_details_block = False
+                current_details_lines = []
+            continue
+        if DETAILS_TAG_START_PATTERN.match(stripped):
+            in_details_block = True
+            current_details_lines = [line]
+            continue
         if not stripped:
             if cleaned_lines and cleaned_lines[-1] != "":
                 cleaned_lines.append("")
@@ -391,6 +408,7 @@ def _cleanup_residual_lines(text: str) -> tuple[str, dict[str, int]]:
         "removed_image_markdown_line_count": removed_image_markdown_line_count,
         "removed_html_img_line_count": removed_html_img_line_count,
         "removed_image_path_line_count": removed_image_path_line_count,
+        "removed_details_image_block_count": removed_details_image_block_count,
     }
 
 

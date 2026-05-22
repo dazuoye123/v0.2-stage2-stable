@@ -46,6 +46,7 @@ REPORT_FIELDS = [
     "stage3_summary_path",
     "stage3_mode",
     "stage3_dspy",
+    "markdown_chars",
     "cleaned_body_char_count",
     "paper_text_char_count",
     "samples_count",
@@ -56,7 +57,12 @@ REPORT_FIELDS = [
     "evidence_count",
     "evidence_object_count",
     "procedure_sections_count",
+    "llm_call_count",
     "estimated_llm_call_count",
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "estimated_cost_usd",
     "started_at",
     "finished_at",
     "elapsed_seconds",
@@ -146,7 +152,10 @@ def run_stage3_batch(
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     report_rows: list[dict[str, Any]] = []
 
-    for row in selected_rows:
+    total_rows = len(selected_rows)
+    for index, row in enumerate(selected_rows, start=1):
+        paper_label = f"{normalize_batch_category(row.get('category'))}/{row.get('paper_id_guess') or ''}"
+        print(f"START [{index}/{total_rows}] {paper_label}")
         report_row = _process_manifest_row(
             row,
             markdown_dir=markdown_dir,
@@ -160,6 +169,19 @@ def run_stage3_batch(
             run_id=run_id,
         )
         report_rows.append(report_row)
+        status_label = {
+            "success": "DONE",
+            "failed": "FAILED",
+            "skipped_existing": "SKIPPED",
+            "missing_markdown": "MISSING",
+            "dry_run_planned": "DRYRUN",
+            "estimate_only": "ESTIMATE",
+        }.get(report_row["status"], report_row["status"].upper())
+        print(
+            f"{status_label} [{index}/{total_rows}] {paper_label} "
+            f"elapsed={report_row['elapsed_seconds']}s mode={report_row['stage3_mode']} "
+            f"llm_calls={report_row['estimated_llm_call_count']}"
+        )
         if report_row["status"] == "failed" and not continue_on_error:
             break
 
@@ -224,6 +246,7 @@ def _process_manifest_row(
     status = ""
     stage3_mode = mode
     stage3_dspy = ""
+    markdown_chars = 0
     cleaned_body_char_count = 0
     paper_text_char_count = 0
     samples_count = 0
@@ -234,7 +257,12 @@ def _process_manifest_row(
     evidence_count = 0
     evidence_object_count = 0
     procedure_sections_count = 0
+    llm_call_count = 0
     estimated_llm_call_count = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    estimated_cost_usd: float | None = None
     error_type = ""
     error_message = ""
     recommended_action = ""
@@ -243,6 +271,8 @@ def _process_manifest_row(
         status = "missing_markdown"
         recommended_action = "generate_markdown_then_rerun_stage3"
     else:
+        markdown_text = markdown_path.read_text(encoding="utf-8", errors="ignore")
+        markdown_chars = len(markdown_text)
         cleaned_body_char_count, estimated_procedure_sections_count, estimated_process_steps_called = _estimate_markdown_cost(markdown_path)
         procedure_sections_count = estimated_procedure_sections_count
         experiment_series_count = _estimate_experiment_series_count(stage3_summary_path, cleaned_body_char_count)
@@ -257,11 +287,12 @@ def _process_manifest_row(
         if estimate_only:
             status = "estimate_only"
             recommended_action = "review_cost_before_live_stage3"
-        elif stage3_summary_path.exists() and not force:
+        elif _should_skip_existing(stage3_summary_path, mode=mode, force=force):
             status = "skipped_existing"
             (
                 stage3_mode,
                 stage3_dspy,
+                markdown_chars,
                 cleaned_body_char_count,
                 paper_text_char_count,
                 samples_count,
@@ -272,7 +303,12 @@ def _process_manifest_row(
                 evidence_count,
                 evidence_object_count,
                 procedure_sections_count,
+                llm_call_count,
                 estimated_llm_call_count,
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                estimated_cost_usd,
             ) = _read_stage3_counts(stage3_summary_path, stage3_dir)
             recommended_action = "skip_existing"
         elif dry_run:
@@ -300,6 +336,7 @@ def _process_manifest_row(
                 (
                     stage3_mode,
                     stage3_dspy,
+                    markdown_chars,
                     cleaned_body_char_count,
                     paper_text_char_count,
                     samples_count,
@@ -310,7 +347,12 @@ def _process_manifest_row(
                     evidence_count,
                     evidence_object_count,
                     procedure_sections_count,
+                    llm_call_count,
                     estimated_llm_call_count,
+                    input_tokens,
+                    output_tokens,
+                    total_tokens,
+                    estimated_cost_usd,
                 ) = _read_stage3_counts(stage3_summary_path, stage3_dir, fallback_summary=result.summary)
                 status = "success"
                 recommended_action = "ready_for_stage4_or_stage5"
@@ -336,6 +378,7 @@ def _process_manifest_row(
         "stage3_summary_path": str(stage3_summary_path),
         "stage3_mode": stage3_mode,
         "stage3_dspy": stage3_dspy,
+        "markdown_chars": markdown_chars,
         "cleaned_body_char_count": cleaned_body_char_count,
         "paper_text_char_count": paper_text_char_count,
         "samples_count": samples_count,
@@ -346,7 +389,12 @@ def _process_manifest_row(
         "evidence_count": evidence_count,
         "evidence_object_count": evidence_object_count,
         "procedure_sections_count": procedure_sections_count,
+        "llm_call_count": llm_call_count,
         "estimated_llm_call_count": estimated_llm_call_count,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "estimated_cost_usd": estimated_cost_usd,
         "started_at": started_at,
         "finished_at": finished_at,
         "elapsed_seconds": elapsed_seconds,
@@ -460,12 +508,26 @@ def _resolve_markdown_path(row: dict[str, str], *, markdown_dir: Path) -> Path:
     return markdown_dir / category / f"{paper_id_guess}.md"
 
 
+def _should_skip_existing(summary_path: Path, *, mode: str, force: bool) -> bool:
+    if force or not summary_path.exists():
+        return False
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    if str(summary.get("stage3_mode") or "") != mode:
+        return False
+    if summary.get("schema_valid") is False:
+        return False
+    return True
+
+
 def _read_stage3_counts(
     summary_path: Path,
     stage3_dir: Path,
     *,
     fallback_summary: dict[str, Any] | None = None,
-) -> tuple[str, str, int, int, int, int, int, int, int, int, int, int, int]:
+) -> tuple[str, str, int, int, int, int, int, int, int, int, int, int, int, int, int, int | None, int | None, int | None, float | None]:
     summary = fallback_summary or {}
     if summary_path.exists():
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -477,6 +539,7 @@ def _read_stage3_counts(
     return (
         str(summary.get("stage3_mode") or ""),
         str(summary.get("stage3_dspy") or ""),
+        int(summary.get("markdown_chars") or 0),
         int(summary.get("cleaned_body_char_count") or 0),
         int(summary.get("paper_text_char_count") or 0),
         experiment_series_count,
@@ -493,6 +556,16 @@ def _read_stage3_counts(
             process_steps_called=process_steps_count > 0,
             run_judge=bool(summary.get("run_judge", False)),
         )),
+        int(summary.get("estimated_llm_call_count") or _estimate_llm_call_count(
+            mode=str(summary.get("stage3_mode") or "full"),
+            experiment_series_count=experiment_series_count,
+            process_steps_called=process_steps_count > 0,
+            run_judge=bool(summary.get("run_judge", False)),
+        )),
+        _optional_int(summary.get("input_tokens")),
+        _optional_int(summary.get("output_tokens")),
+        _optional_int(summary.get("total_tokens")),
+        _optional_float(summary.get("estimated_cost_usd")),
     )
 
 
@@ -503,6 +576,24 @@ def _count_json_items(path: Path) -> int:
     if isinstance(payload, list):
         return len(payload)
     return 0
+
+
+def _optional_int(value: Any) -> int | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_float(value: Any) -> float | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _build_summary(
@@ -542,6 +633,7 @@ def _build_summary(
         if successful_rows
         else 0.0
     )
+    total_elapsed_seconds = round(sum(float(row.get("elapsed_seconds") or 0) for row in report_rows), 3)
     estimated_total_seconds_for_343 = round(average_seconds_per_success * 343, 3) if average_seconds_per_success else 0.0
     slowest_papers_top10 = [
         {
@@ -589,6 +681,7 @@ def _build_summary(
             int(row.get("estimated_llm_call_count") or 0) * int(row.get("paper_text_char_count") or 0)
             for row in report_rows
         ),
+        "total_elapsed_seconds": total_elapsed_seconds,
         "average_seconds_per_success": average_seconds_per_success,
         "estimated_total_seconds_for_343": estimated_total_seconds_for_343,
         "slowest_papers_top10": slowest_papers_top10,
@@ -624,6 +717,7 @@ def _build_markdown_report(summary: dict[str, Any], report_rows: list[dict[str, 
         f"- total_cleaned_body_char_count: {summary['total_cleaned_body_char_count']}",
         f"- total_estimated_llm_call_count: {summary['total_estimated_llm_call_count']}",
         f"- estimated_relative_cost: {summary['estimated_relative_cost']}",
+        f"- total_elapsed_seconds: {summary['total_elapsed_seconds']}",
         f"- average_seconds_per_success: {summary['average_seconds_per_success']}",
         f"- estimated_total_seconds_for_343: {summary['estimated_total_seconds_for_343']}",
         "",

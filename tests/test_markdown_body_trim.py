@@ -173,3 +173,21 @@ Fig. 2 SEM images of alumina fibers
     assert result.report["removed_image_markdown_line_count"] >= 2
     assert result.report["removed_html_img_line_count"] >= 1
     assert result.report["removed_image_path_line_count"] >= 1
+
+
+def test_trim_markdown_body_removes_details_image_metadata_blocks() -> None:
+    markdown = """# 2.2 实验部分
+![](figures_all/a.jpg)
+<details>
+<summary>naturalimage</summary>
+SEM preview
+</details>
+图3-2 纤维 XRD 谱图
+"""
+    result = trim_markdown_body(markdown)
+
+    assert "<details>" not in result.cleaned_text.lower()
+    assert "naturalimage" not in result.cleaned_text.lower()
+    assert "SEM preview" not in result.cleaned_text
+    assert "图3-2 纤维 XRD 谱图" in result.cleaned_text
+    assert result.report["removed_details_image_block_count"] >= 1
