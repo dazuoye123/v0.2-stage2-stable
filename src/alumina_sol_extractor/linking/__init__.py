@@ -1,16 +1,9 @@
-"""Stage 5.5 candidate-constrained linking layer plus legacy figure matching exports."""
+"""This module is kept for backward compatibility.
+New code should import from alumina_sol_extractor.stage5.linking.
+"""
 
-from .candidate_builder import build_deterministic_links, build_link_candidates, load_final_dataset_inputs
-from .figure_context_matcher import FigureContextMatcher, match_figure_contexts
-from .models import LinkCandidate, LinkRecord, LinkingSummary
+from importlib import import_module as _import_module
+import sys as _sys
 
-__all__ = [
-    "FigureContextMatcher",
-    "LinkCandidate",
-    "LinkRecord",
-    "LinkingSummary",
-    "build_link_candidates",
-    "build_deterministic_links",
-    "load_final_dataset_inputs",
-    "match_figure_contexts",
-]
+_impl = _import_module('alumina_sol_extractor.stage5.linking')
+_sys.modules[__name__] = _impl

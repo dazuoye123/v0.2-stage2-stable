@@ -1,5 +1,9 @@
-"""Compatibility exports for exact figure-reference matching."""
+"""This module is kept for backward compatibility.
+New code should import from alumina_sol_extractor.stage5.linking.reference_matcher.
+"""
 
-from .figure_context_matcher import FigureContextMatcher, match_figure_contexts
+from importlib import import_module as _import_module
+import sys as _sys
 
-__all__ = ["FigureContextMatcher", "match_figure_contexts"]
+_impl = _import_module('alumina_sol_extractor.stage5.linking.reference_matcher')
+_sys.modules[__name__] = _impl

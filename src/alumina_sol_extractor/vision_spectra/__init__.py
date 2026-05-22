@@ -1,35 +1,9 @@
-"""Stage 4 vision-spectra extraction helpers."""
+"""This module is kept for backward compatibility.
+New code should import from alumina_sol_extractor.stage4.
+"""
 
-from .extractor import Stage4VisionSpectraExtractor
-from .routing import get_schema_for_figure_type, normalize_figure_type, should_process_figure
-from .schemas import (
-    BaseFigureExtraction,
-    FerronCurveExtraction,
-    FerronSpeciesRecord,
-    MicroscopyExtraction,
-    NMRExtraction,
-    PeakRecord,
-    ThermalAnalysisExtraction,
-    ThermalEventRecord,
-    UnknownFigureExtraction,
-    VibrationalSpectrumExtraction,
-    XRDExtraction,
-)
+from importlib import import_module as _import_module
+import sys as _sys
 
-__all__ = [
-    "BaseFigureExtraction",
-    "FerronCurveExtraction",
-    "FerronSpeciesRecord",
-    "MicroscopyExtraction",
-    "NMRExtraction",
-    "PeakRecord",
-    "Stage4VisionSpectraExtractor",
-    "ThermalAnalysisExtraction",
-    "ThermalEventRecord",
-    "UnknownFigureExtraction",
-    "VibrationalSpectrumExtraction",
-    "XRDExtraction",
-    "get_schema_for_figure_type",
-    "normalize_figure_type",
-    "should_process_figure",
-]
+_impl = _import_module('alumina_sol_extractor.stage4')
+_sys.modules[__name__] = _impl

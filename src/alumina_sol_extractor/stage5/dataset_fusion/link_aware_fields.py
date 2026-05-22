@@ -1,0 +1,236 @@
+"""Shared field definitions for link-aware exports."""
+
+from __future__ import annotations
+
+CORE_SAMPLE_MATRIX_KEYS = [
+    "aluminum_source",
+    "peptizing_agent",
+    "pH",
+    "hydrolysis_temperature_C",
+    "hydrolysis_time_h",
+    "peptization_temperature_C",
+    "peptization_time_h",
+    "concentration_temperature_C",
+    "concentration_time_h",
+    "spinning_channel_temperature_C",
+    "spinneret_hole_diameter_mm",
+    "take_up_speed_m_min",
+    "drying_temperature_C",
+    "calcination_temperature_C",
+    "sintering_temperature_C",
+    "holding_time_h",
+    "average_fiber_diameter_um",
+    "tensile_strength_MPa",
+    "Al13_fraction_percent",
+    "nmr_27Al_peak_position_ppm",
+    "ftir_peak_position_cm_1",
+    "xrd_peak_position_2theta_deg",
+]
+
+FINAL_PARAMETERS_LINKED_FIELDS = [
+    "paper_id",
+    "title",
+    "parameter_id",
+    "canonical_key",
+    "zh_name",
+    "en_name",
+    "category",
+    "sample_id_original",
+    "linked_sample_ids",
+    "resolved_sample_id",
+    "sample_resolution_source",
+    "value_raw",
+    "value_num",
+    "value_text",
+    "unit",
+    "value_type",
+    "source_scope",
+    "evidence_refs_original",
+    "linked_evidence_ids",
+    "linked_figure_ids",
+    "linked_spectra_ids",
+    "linked_peak_positions",
+    "link_types",
+    "link_confidences",
+    "link_reasoning_preview",
+    "evidence_text_preview",
+    "link_count",
+    "strong_link_count",
+    "weak_link_count",
+    "evidence_status",
+    "quality_flags",
+    "normalization_note",
+]
+
+SAMPLE_PARAMETER_MATRIX_BASE_FIELDS = [
+    "paper_id",
+    "title",
+    "sample_id",
+    "sample_name",
+    "material_system",
+    "process_route",
+    "parameter_count",
+    "linked_parameter_count",
+    "matrix_parameter_field_count",
+    "sample_parameter_value_count",
+    "unique_linked_parameter_count",
+    "linked_parameter_edge_count",
+    "linked_evidence_edge_count",
+    "linked_spectra_edge_count",
+    "linked_process_step_edge_count",
+    "evidence_count",
+    "spectra_count",
+    "evidence_linked_parameter_count",
+    "process_step_linked_parameter_count",
+    "spectra_linked_parameter_count",
+    "linked_spectra_count",
+    "linked_spectra_ids",
+    "linked_spectra_figure_ids",
+    "linked_spectra_techniques",
+    "linked_figure_ids",
+]
+
+SAMPLE_PARAMETER_MATRIX_TRAILING_FIELDS = ["multi_value_flags"]
+
+
+def build_sample_parameter_matrix_fields(additional_keys: list[str] | tuple[str, ...] | set[str] | None = None) -> list[str]:
+    reserved = set(SAMPLE_PARAMETER_MATRIX_BASE_FIELDS) | set(SAMPLE_PARAMETER_MATRIX_TRAILING_FIELDS)
+    dynamic_keys: list[str] = []
+    seen_dynamic: set[str] = set()
+    for key in additional_keys or []:
+        if not key or key in CORE_SAMPLE_MATRIX_KEYS or key in reserved or key in seen_dynamic:
+            continue
+        seen_dynamic.add(key)
+        dynamic_keys.append(key)
+    return [
+        *SAMPLE_PARAMETER_MATRIX_BASE_FIELDS,
+        *CORE_SAMPLE_MATRIX_KEYS,
+        *dynamic_keys,
+        *SAMPLE_PARAMETER_MATRIX_TRAILING_FIELDS,
+    ]
+
+
+SAMPLE_PARAMETER_MATRIX_FIELDS = build_sample_parameter_matrix_fields()
+
+SAMPLE_PARAMETER_MATRIX_LONG_FIELDS = [
+    "paper_id",
+    "sample_id",
+    "sample_name",
+    "canonical_key",
+    "value",
+    "unit",
+    "parameter_id",
+    "value_origin",
+    "evidence_status",
+    "linked_evidence_ids",
+    "linked_spectra_ids",
+    "linked_process_step_ids",
+    "confidence",
+    "warning",
+]
+
+SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS = [
+    "sample_id",
+    "sample_name",
+    "canonical_key",
+    "matrix_value_present",
+    "final_parameter_exists",
+    "has_sample_link",
+    "has_global_value",
+    "missing_reason",
+    "recommended_action",
+]
+
+EVIDENCE_PARAMETER_LINK_FIELDS = [
+    "paper_id",
+    "source_type",
+    "source_id",
+    "evidence_text_preview",
+    "evidence_id",
+    "evidence_type",
+    "figure_id",
+    "table_id",
+    "figure_type",
+    "caption",
+    "parameter_id",
+    "canonical_key",
+    "parameter_value",
+    "unit",
+    "sample_id",
+    "link_type",
+    "confidence",
+    "reasoning",
+    "created_by",
+    "validation_status",
+]
+
+SPECTRA_PARAMETER_LINK_FIELDS = [
+    "paper_id",
+    "spectra_id",
+    "figure_id",
+    "figure_type",
+    "technique",
+    "peak_position",
+    "peak_unit",
+    "assignment",
+    "source",
+    "observed_value",
+    "observed_unit",
+    "parameter_id",
+    "canonical_key",
+    "parameter_value",
+    "unit",
+    "sample_id",
+    "link_type",
+    "confidence",
+    "reasoning",
+    "created_by",
+]
+
+FINAL_SHOWCASE_FIELDS = [
+    "paper_short",
+    "sample",
+    "parameter_zh",
+    "canonical_key",
+    "value_display",
+    "evidence_display",
+    "spectra_display",
+    "link_status",
+    "confidence",
+    "note",
+]
+
+PROCESS_STEPS_TABLE_FIELDS = [
+    "paper_id",
+    "title",
+    "step_id",
+    "step_order",
+    "section",
+    "action",
+    "action_zh",
+    "reagent_name",
+    "reagent_formula",
+    "reagent_amount",
+    "reagent_unit",
+    "reagent_role",
+    "condition_key",
+    "condition_value",
+    "condition_unit",
+    "equipment",
+    "duration_value",
+    "duration_unit",
+    "temperature_value",
+    "temperature_unit",
+    "heating_rate_value",
+    "heating_rate_unit",
+    "product_or_outcome",
+    "linked_parameter_keys",
+    "linked_parameter_ids",
+    "linked_canonical_keys",
+    "linked_values",
+    "linked_units",
+    "link_confidences",
+    "evidence_text",
+    "confidence",
+    "needs_manual_review",
+]

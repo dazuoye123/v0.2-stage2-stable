@@ -1,5 +1,9 @@
-"""Stage 5 dataset fusion pipeline."""
+"""This module is kept for backward compatibility.
+New code should import from alumina_sol_extractor.stage5.dataset_fusion.
+"""
 
-from .fusion import run_stage5_dataset_fusion
+from importlib import import_module as _import_module
+import sys as _sys
 
-__all__ = ["run_stage5_dataset_fusion"]
+_impl = _import_module('alumina_sol_extractor.stage5.dataset_fusion')
+_sys.modules[__name__] = _impl

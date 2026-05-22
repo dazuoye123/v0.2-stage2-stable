@@ -1,15 +1,9 @@
-"""Compatibility exports for caption extraction helpers."""
+"""This module is kept for backward compatibility.
+New code should import from alumina_sol_extractor.stage2.caption_extractor.
+"""
 
-from alumina_sol_extractor.utils.figure_utils import (
-    CaptionRecord,
-    extract_caption_near_image,
-    extract_caption_record,
-    split_caption_and_following_text,
-)
+from importlib import import_module as _import_module
+import sys as _sys
 
-__all__ = [
-    "CaptionRecord",
-    "extract_caption_near_image",
-    "extract_caption_record",
-    "split_caption_and_following_text",
-]
+_impl = _import_module('alumina_sol_extractor.stage2.caption_extractor')
+_sys.modules[__name__] = _impl
