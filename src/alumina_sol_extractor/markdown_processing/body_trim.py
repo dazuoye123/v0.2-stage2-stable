@@ -67,11 +67,21 @@ BODY_SECTION_HINTS = (
 
 TOC_DOT_PATTERN = re.compile(r"(?:\.{3,}|\u2026{2,}|\. ?\. ?\.)")
 TOC_PAGE_PATTERN = re.compile(r"(?:\.{3,}|\u2026{2,}|\s)\d+\s*$")
+MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*\]\([^)]+\)")
+HTML_IMG_PATTERN = re.compile(r"<img\b[^>]*>", flags=re.IGNORECASE)
 NUMBERED_TOC_LINE_PATTERN = re.compile(
     r"^\s*(?:#\s*)?(?:\d+(?:\.\d+)*|[一二三四五六七八九十]+(?:章|节)?)\s*.*?\s+\d+\s*$"
 )
 TITLE_PAGE_LINE_PATTERN = re.compile(
     r"(?:shandong\s+university|thesis\s+for\s+(?:master|doctoral)\s+degree|山东大学|作者姓名|培养单位|指导教师|合作导师|专业学位|专业名称)",
+    flags=re.IGNORECASE,
+)
+STANDALONE_IMAGE_PATH_PATTERN = re.compile(
+    r"^\s*(?:(?:[A-Za-z]:)?[\\/]|\.{0,2}[\\/])?.*(?:figures_all|figures_for_vision|images)[\\/].*\.(?:png|jpg|jpeg|webp|gif|bmp|tiff?)\s*$",
+    flags=re.IGNORECASE,
+)
+PLAIN_IMAGE_PATH_PATTERN = re.compile(
+    r"^\s*[^<>\s]+(?:figures_all|figures_for_vision|images)[^<>\s]*\.(?:png|jpg|jpeg|webp|gif|bmp|tiff?)\s*$",
     flags=re.IGNORECASE,
 )
 
@@ -103,7 +113,7 @@ def trim_markdown_body(markdown_text: str, *, input_markdown_path: Path | str | 
     sections = parse_markdown_sections(markdown_text)
     total_line_count = len(markdown_text.splitlines())
     if not sections:
-        cleaned_text = _cleanup_residual_lines(markdown_text)
+        cleaned_text, cleanup_stats = _cleanup_residual_lines(markdown_text)
         report = {
             "input_markdown_path": str(input_markdown_path) if input_markdown_path else None,
             "output_cleaned_body_path": None,
@@ -115,6 +125,7 @@ def trim_markdown_body(markdown_text: str, *, input_markdown_path: Path | str | 
             "cut_end_line": total_line_count,
             "reason": "parse_markdown_sections_empty_fallback_to_original",
             "warnings": ["parse_markdown_sections_returned_empty"],
+            **cleanup_stats,
         }
         return TrimResult(cleaned_text=cleaned_text, report=report)
 
@@ -152,13 +163,13 @@ def trim_markdown_body(markdown_text: str, *, input_markdown_path: Path | str | 
 
     if not kept_sections:
         warnings.append("no_trimmed_body_sections_kept_fallback_to_original")
-        cleaned_text = _cleanup_residual_lines(markdown_text)
+        cleaned_text, cleanup_stats = _cleanup_residual_lines(markdown_text)
         kept_titles: list[str] = []
         cut_start_line = 1
         cut_end_line = total_line_count
     else:
         cleaned_parts = [str(section.get("text") or "").strip() for section in kept_sections]
-        cleaned_text = _cleanup_residual_lines("\n\n".join(part for part in cleaned_parts if part))
+        cleaned_text, cleanup_stats = _cleanup_residual_lines("\n\n".join(part for part in cleaned_parts if part))
         kept_titles = [str(section.get("title") or "") for section in kept_sections if section.get("title")]
         cut_start_line = int(kept_sections[0].get("start_line") or 1)
         cut_end_line = int(kept_sections[-1].get("end_line") or total_line_count)
@@ -174,6 +185,7 @@ def trim_markdown_body(markdown_text: str, *, input_markdown_path: Path | str | 
         "cut_end_line": cut_end_line,
         "reason": "trim_obvious_front_matter_and_back_matter_only",
         "warnings": warnings,
+        **cleanup_stats,
     }
     return TrimResult(cleaned_text=cleaned_text, report=report)
 
@@ -324,10 +336,13 @@ def _looks_like_toc_residue_line(line: str) -> bool:
     return False
 
 
-def _cleanup_residual_lines(text: str) -> str:
+def _cleanup_residual_lines(text: str) -> tuple[str, dict[str, int]]:
     lines = text.splitlines()
     cleaned_lines: list[str] = []
     body_started = False
+    removed_image_markdown_line_count = 0
+    removed_html_img_line_count = 0
+    removed_image_path_line_count = 0
 
     for raw_line in lines:
         line = raw_line.rstrip()
@@ -352,6 +367,18 @@ def _cleanup_residual_lines(text: str) -> str:
         if not body_started and TITLE_PAGE_LINE_PATTERN.search(stripped):
             continue
 
+        line, markdown_removed, html_removed = _remove_inline_image_noise(line)
+        if markdown_removed:
+            removed_image_markdown_line_count += 1
+        if html_removed:
+            removed_html_img_line_count += 1
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _is_standalone_image_path_line(stripped):
+            removed_image_path_line_count += 1
+            continue
+
         cleaned_lines.append(line)
         if stripped.startswith("#"):
             body_started = True
@@ -360,4 +387,30 @@ def _cleanup_residual_lines(text: str) -> str:
         cleaned_lines.pop(0)
     while cleaned_lines and cleaned_lines[-1] == "":
         cleaned_lines.pop()
-    return "\n".join(cleaned_lines).strip()
+    return "\n".join(cleaned_lines).strip(), {
+        "removed_image_markdown_line_count": removed_image_markdown_line_count,
+        "removed_html_img_line_count": removed_html_img_line_count,
+        "removed_image_path_line_count": removed_image_path_line_count,
+    }
+
+
+def _remove_inline_image_noise(line: str) -> tuple[str, bool, bool]:
+    cleaned = line
+    markdown_removed = False
+    html_removed = False
+    if MARKDOWN_IMAGE_PATTERN.search(cleaned):
+        cleaned = MARKDOWN_IMAGE_PATTERN.sub("", cleaned)
+        markdown_removed = True
+    if "data:image" in cleaned.lower():
+        cleaned = re.sub(r"data:image/[^)\s>]+", "", cleaned, flags=re.IGNORECASE)
+        markdown_removed = True
+    if HTML_IMG_PATTERN.search(cleaned):
+        cleaned = HTML_IMG_PATTERN.sub("", cleaned)
+        html_removed = True
+    return cleaned.rstrip(), markdown_removed, html_removed
+
+
+def _is_standalone_image_path_line(line: str) -> bool:
+    if line.lower().startswith(("fig.", "figure ", "图")):
+        return False
+    return bool(STANDALONE_IMAGE_PATH_PATTERN.match(line) or PLAIN_IMAGE_PATH_PATTERN.match(line))

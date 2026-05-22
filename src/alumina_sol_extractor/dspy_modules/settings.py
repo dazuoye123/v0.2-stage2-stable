@@ -25,13 +25,18 @@ def load_project_dotenv(project_root: Path) -> Path | None:
     if not env_path.exists():
         return None
     try:
-        from dotenv import load_dotenv
+        from dotenv import dotenv_values, load_dotenv
     except ImportError as exc:  # pragma: no cover - dependency issue is rare and explicit
         raise RuntimeError(
             "Smoke test .env support requires python-dotenv. "
             "Install it with `pip install python-dotenv>=1.0.1`."
         ) from exc
     load_dotenv(env_path, override=False)
+    for key, value in dotenv_values(env_path).items():
+        if value is None:
+            continue
+        if (os.getenv(key) or "").strip() == "":
+            os.environ[key] = value
     return env_path
 
 
@@ -56,7 +61,7 @@ def resolve_dspy_runtime_config(dspy_settings: dict[str, Any]) -> dict[str, Any]
     if not base_url and api_key_source == "DASHSCOPE_API_KEY":
         base_url = DASHSCOPE_COMPATIBLE_BASE_URL
 
-    raw_model_name = os.getenv(model_name_env, "qwen3.6-max-preview")
+    raw_model_name = (os.getenv(model_name_env) or "").strip() or "qwen3.6-max-preview"
     model_name = normalize_openai_compatible_model_name(raw_model_name, base_url=base_url)
 
     return {

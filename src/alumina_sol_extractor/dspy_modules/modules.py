@@ -66,6 +66,21 @@ class ExtractEvidenceObjectsModule(_BaseDSPyModule):
     output_field = "evidence_objects_json"
 
 
+class ExtractUnifiedStage3Module(_BaseDSPyModule):
+    signature_name = "ExtractUnifiedStage3Signature"
+    output_field = "unified_stage3_json"
+
+
+class ExtractTwoPassCoreModule(_BaseDSPyModule):
+    signature_name = "ExtractTwoPassCoreSignature"
+    output_field = "stage3_core_json"
+
+
+class ExtractTwoPassDataEvidenceModule(_BaseDSPyModule):
+    signature_name = "ExtractTwoPassDataEvidenceSignature"
+    output_field = "stage3_data_evidence_json"
+
+
 class JudgeExtractionModule(_BaseDSPyModule):
     signature_name = "JudgeExtractionSignature"
     output_field = "judge_json"

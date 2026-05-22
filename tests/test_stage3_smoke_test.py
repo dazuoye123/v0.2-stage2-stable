@@ -111,6 +111,8 @@ def test_resolve_runtime_config_falls_back_to_dashscope(monkeypatch) -> None:
 
 def test_load_project_dotenv_uses_project_root(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("MODEL_NAME", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     env_path = tmp_path / ".env"
     env_path.write_text("OPENAI_API_KEY=from-dotenv\nMODEL_NAME=dotenv-model\n", encoding="utf-8")
 

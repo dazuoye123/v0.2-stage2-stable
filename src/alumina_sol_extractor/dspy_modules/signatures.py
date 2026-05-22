@@ -91,6 +91,59 @@ def get_signatures():
             desc="Return JSON only. Each key fact should keep evidence linkage."
         )
 
+    class ExtractUnifiedStage3Signature(dspy.Signature):
+        """Extract a compact PaperExtractionRecord-like payload in one call. Output JSON only."""
+
+        paper_text = dspy.InputField()
+        procedure_sections_json = dspy.InputField()
+        figure_summaries = dspy.InputField()
+        table_summaries = dspy.InputField()
+        captions_and_references = dspy.InputField()
+        ontology_keys = dspy.InputField()
+        source_file = dspy.InputField()
+        unified_stage3_json = dspy.OutputField(
+            desc=(
+                "Return JSON only as an object with keys: "
+                "paper_basic_info, global_constants, experiment_series, data_points, process_steps, evidence_objects. "
+                "Use null or [] when missing. Keep schema-compatible field names whenever possible. "
+                "Prefer concise but factual extraction grounded in the provided paper text, figure summaries, and tables."
+            )
+        )
+
+    class ExtractTwoPassCoreSignature(dspy.Signature):
+        """Extract core paper structure in pass 1. Output JSON only."""
+
+        paper_text = dspy.InputField()
+        procedure_text = dspy.InputField()
+        figure_summaries = dspy.InputField()
+        table_summaries = dspy.InputField()
+        ontology_keys = dspy.InputField()
+        source_file = dspy.InputField()
+        stage3_core_json = dspy.OutputField(
+            desc=(
+                "Return JSON only as an object with keys: "
+                "paper_basic_info, global_constants, experiment_series, process_steps. "
+                "Use [] instead of null for experiment_series and process_steps."
+            )
+        )
+
+    class ExtractTwoPassDataEvidenceSignature(dspy.Signature):
+        """Extract data points and evidence objects in pass 2. Output JSON only."""
+
+        paper_text = dspy.InputField()
+        stage3_core_json = dspy.InputField()
+        figure_summaries = dspy.InputField()
+        table_summaries = dspy.InputField()
+        captions_and_references = dspy.InputField()
+        ontology_keys = dspy.InputField()
+        stage3_data_evidence_json = dspy.OutputField(
+            desc=(
+                "Return JSON only as an object with keys: data_points, evidence_objects. "
+                "Use [] instead of null when no items are found. "
+                "Link data points to experiment series when series_id is known, and keep evidence_objects concise."
+            )
+        )
+
     class JudgeExtractionSignature(dspy.Signature):
         """Judge extraction quality against the paper text. Output JSON only."""
 
@@ -109,5 +162,8 @@ def get_signatures():
         "ExtractProcessStepsSignature": ExtractProcessStepsSignature,
         "ExtractDataPointsSignature": ExtractDataPointsSignature,
         "ExtractEvidenceObjectsSignature": ExtractEvidenceObjectsSignature,
+        "ExtractUnifiedStage3Signature": ExtractUnifiedStage3Signature,
+        "ExtractTwoPassCoreSignature": ExtractTwoPassCoreSignature,
+        "ExtractTwoPassDataEvidenceSignature": ExtractTwoPassDataEvidenceSignature,
         "JudgeExtractionSignature": JudgeExtractionSignature,
     }

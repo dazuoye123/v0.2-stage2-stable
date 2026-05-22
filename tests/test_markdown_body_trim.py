@@ -151,3 +151,25 @@ def test_ensure_cleaned_body_markdown_preserves_output_location_and_supports_for
     assert cleaned_body_path.read_text(encoding="utf-8").startswith("# 2.2 实验部分")
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["output_cleaned_body_path"] == str(cleaned_body_path)
+
+
+def test_trim_markdown_body_removes_image_lines_but_keeps_figure_captions() -> None:
+    markdown = """# 2.2 实验部分
+![](figures_all/a.png)
+<img src="figures_all/b.png" alt="sample" />
+data:image/png;base64,AAAA
+figures_for_vision/c.jpg
+Fig. 2 SEM images of alumina fibers
+图3-2 乙基纤维素分子式
+"""
+    result = trim_markdown_body(markdown)
+
+    assert "![](" not in result.cleaned_text
+    assert "<img" not in result.cleaned_text.lower()
+    assert "data:image" not in result.cleaned_text.lower()
+    assert "figures_for_vision/c.jpg" not in result.cleaned_text
+    assert "Fig. 2 SEM images of alumina fibers" in result.cleaned_text
+    assert "图3-2 乙基纤维素分子式" in result.cleaned_text
+    assert result.report["removed_image_markdown_line_count"] >= 2
+    assert result.report["removed_html_img_line_count"] >= 1
+    assert result.report["removed_image_path_line_count"] >= 1

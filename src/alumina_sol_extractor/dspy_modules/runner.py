@@ -62,6 +62,9 @@ from .modules import (
     ExtractGlobalConstantsModule,
     ExtractPaperBasicInfoModule,
     ExtractProcessStepsModule,
+    ExtractTwoPassCoreModule,
+    ExtractTwoPassDataEvidenceModule,
+    ExtractUnifiedStage3Module,
     to_json_text,
 )
 from .settings import configure_dspy_lm, load_dspy_settings
@@ -96,6 +99,9 @@ def run_stage3_dspy_schema_extraction(
     paper_id: str,
     cleaned_markdown_path: Path,
     output_dir: Path,
+    *,
+    mode: str = "full",
+    max_experiment_series: int | None = None,
 ) -> dict[str, Any]:
     """Run optional Stage 3 DSPy schema extraction or dry-run validator."""
     dspy_settings = load_dspy_settings(Path(project_root), settings)
@@ -114,6 +120,8 @@ def run_stage3_dspy_schema_extraction(
         stage3_dir_name="stage3",
         summary_filename=dspy_settings.get("outputs", {}).get("summary", "stage3_summary.json"),
         raw_outputs_filename=None,
+        extraction_mode=mode,
+        max_experiment_series=max_experiment_series,
     )
 
 
@@ -168,6 +176,7 @@ def _run_live_stage3_extraction(
     section_method: str = "rule",
     max_sections: int = 6,
     section_keywords: list[str] | None = None,
+    extraction_mode: str = "full",
 ) -> dict[str, Any]:
     configure_dspy_lm(dspy_settings)
 
@@ -237,6 +246,12 @@ def _run_live_stage3_extraction(
     if paper_text_limit_chars and paper_text_limit_chars > 0:
         paper_text = paper_text[:paper_text_limit_chars]
 
+    procedure_sections, procedure_text = select_procedure_sections(full_paper_text)
+    (stage3_dir / "stage3_procedure_sections.json").write_text(
+        json.dumps(procedure_sections, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
     scoped_inputs = _scope_stage2_evidence_inputs(
         figures=figures,
         vision_inputs=vision_inputs,
@@ -260,6 +275,34 @@ def _run_live_stage3_extraction(
         (stage3_dir / "stage3_evidence_scope_review.json").write_text(
             json.dumps(scoped_inputs["review"], ensure_ascii=False, indent=2),
             encoding="utf-8",
+        )
+
+    if extraction_mode in {"unified", "two-pass", "lite"}:
+        compact_mode = "two-pass" if extraction_mode == "lite" else extraction_mode
+        return _run_compact_stage3_extraction(
+            extraction_mode=compact_mode,
+            project_root=project_root,
+            dspy_settings=dspy_settings,
+            paper_id=paper_id,
+            paper_text=paper_text,
+            full_paper_text=full_paper_text,
+            effective_markdown_path=effective_markdown_path,
+            cleaned_body_path=cleaned_body_path,
+            stage3_dir=stage3_dir,
+            raw_outputs_filename=raw_outputs_filename,
+            summary_filename=summary_filename,
+            figures=figures,
+            figure_summaries=figure_summaries,
+            figure_metadata_map=figure_metadata_map,
+            vision_inputs=vision_inputs,
+            tables_summary=tables_summary,
+            captions_and_references=captions_and_references,
+            ontology_keys=ontology_keys,
+            procedure_sections=procedure_sections,
+            procedure_text=procedure_text,
+            max_experiment_series=max_experiment_series,
+            actual_section_aware=actual_section_aware,
+            stage3_warnings=stage3_warnings,
         )
 
     paper_basic_info_result = ExtractPaperBasicInfoModule().run(
@@ -296,11 +339,6 @@ def _run_live_stage3_extraction(
         step_name="experiment_series",
         module_name="ExtractExperimentSeriesModule",
         result=experiment_series_result,
-    )
-    procedure_sections, procedure_text = select_procedure_sections(full_paper_text)
-    (stage3_dir / "stage3_procedure_sections.json").write_text(
-        json.dumps(procedure_sections, ensure_ascii=False, indent=2),
-        encoding="utf-8",
     )
     process_steps_payload: list[dict[str, Any]] = []
     if procedure_text.strip():
@@ -440,75 +478,32 @@ def _run_live_stage3_extraction(
         cleaned_markdown_text=full_paper_text,
     )
     validated = _validate_stage3_record(paper_record, project_root, stage3_dir)
-
-    outputs = dspy_settings.get("outputs", {})
-    _write_json(stage3_dir / outputs.get("paper_basic_info", "paper_basic_info.json"), validated.paper_basic_info.model_dump() if validated.paper_basic_info else {})
-    _write_json(stage3_dir / outputs.get("global_constants", "global_constants.json"), validated.global_constants.model_dump() if validated.global_constants else {})
-    write_jsonl(
-        [series.model_dump() for series in validated.experiment_series],
-        stage3_dir / outputs.get("experiment_series", "experiment_series.jsonl"),
+    llm_call_count = _estimate_stage3_llm_call_count(
+        mode="full",
+        experiment_series_count=len(experiment_series_payload if isinstance(experiment_series_payload, list) else []),
+        process_steps_called=bool(procedure_text.strip()),
+        run_judge=bool(dspy_settings.get("run_judge", False)),
     )
-    write_jsonl(
-        [data_point.model_dump() for series in validated.experiment_series for data_point in series.data_points],
-        stage3_dir / outputs.get("data_points", "data_points.jsonl"),
+    return _finalize_stage3_outputs(
+        validated=validated,
+        project_root=project_root,
+        dspy_settings=dspy_settings,
+        stage3_dir=stage3_dir,
+        summary_filename=summary_filename,
+        raw_outputs=raw_outputs,
+        raw_outputs_filename=raw_outputs_filename,
+        paper_text=paper_text,
+        full_paper_text=full_paper_text,
+        cleaned_body_path=cleaned_body_path,
+        paper_id=paper_id,
+        paper_text_limit_chars=paper_text_limit_chars,
+        max_experiment_series=max_experiment_series,
+        actual_section_aware=actual_section_aware,
+        stage3_warnings=stage3_warnings,
+        stage3_mode="live_smoke_test" if raw_outputs_filename else "full",
+        llm_call_count=llm_call_count,
+        ontology_keys=ontology_keys,
     )
-    write_jsonl(
-        [item.model_dump() for item in validated.process_steps],
-        stage3_dir / outputs.get("process_steps", "process_steps.jsonl"),
-    )
-    write_jsonl(
-        [item.model_dump() for item in validated.evidence_objects],
-        stage3_dir / outputs.get("evidence_objects", "evidence_objects.jsonl"),
-    )
-    _write_json(
-        stage3_dir / outputs.get("paper_extraction", "paper_extraction.schema_v2.json"),
-        validated.model_dump(),
-    )
-    if raw_outputs_filename:
-        write_jsonl(raw_outputs, stage3_dir / raw_outputs_filename)
-
-    judge_payload: dict[str, Any] = {"stage3_judge": "disabled"}
-    if dspy_settings.get("run_judge", False):
-        schema_hint_path = Path(project_root) / "configs" / "schema_v2.json"
-        schema_hint = json.loads(schema_hint_path.read_text(encoding="utf-8"))
-        judge_result = run_judge(
-            paper_text=paper_text,
-            extraction_json=validated.model_dump(),
-            ontology_keys=ontology_keys,
-            schema_hint=schema_hint,
-        )
-        judge_payload = judge_result.payload if isinstance(judge_result.payload, dict) else {"raw_output": judge_result.raw_output}
-    _write_json(stage3_dir / outputs.get("judge", "dspy_judge.json"), judge_payload)
-
-    validation_summary = _build_validation_summary(
-        validated,
-        project_root,
-        stage3_dir / "stage3_validation_report.md",
-        schema_valid=True,
-    )
-    summary = {
-        "stage3_dspy": "enabled",
-        "stage3_mode": "live_smoke_test" if raw_outputs_filename else "live_pipeline",
-        "paper_id": paper_id,
-        "paper_basic_info_ok": validated.paper_basic_info is not None,
-        "experiment_series_count": len(validated.experiment_series),
-        "data_point_count": sum(len(series.data_points) for series in validated.experiment_series),
-        "process_steps_count": len(validated.process_steps),
-        "evidence_object_count": len(validated.evidence_objects),
-        "run_judge": bool(dspy_settings.get("run_judge", False)),
-        "stage3_dir": str(stage3_dir),
-        "raw_dspy_outputs_path": str(stage3_dir / raw_outputs_filename) if raw_outputs_filename else None,
-        "paper_text_limit_chars": paper_text_limit_chars,
-        "max_experiment_series": max_experiment_series,
-        "stage3_input_mode": "section_aware" if actual_section_aware else "full_cleaned_body",
-        "cleaned_body_char_count": len(full_paper_text),
-        "paper_text_char_count": len(paper_text),
-        "cleaned_body_path": str(cleaned_body_path) if cleaned_body_path.exists() else None,
-        "warnings": stage3_warnings,
-    }
-    summary.update(validation_summary)
-    _write_json(stage3_dir / summary_filename, summary)
-    return summary
 
 
 def _run_dry_run_validator(
@@ -544,6 +539,297 @@ def _run_dry_run_validator(
     )
     _write_json(stage3_dir / summary_name, summary)
     return summary
+
+
+def _run_compact_stage3_extraction(
+    *,
+    extraction_mode: str,
+    project_root: Path,
+    dspy_settings: dict[str, Any],
+    paper_id: str,
+    paper_text: str,
+    full_paper_text: str,
+    effective_markdown_path: Path,
+    cleaned_body_path: Path,
+    stage3_dir: Path,
+    raw_outputs_filename: str | None,
+    summary_filename: str,
+    figures: list[dict[str, Any]],
+    figure_summaries: list[dict[str, Any]],
+    figure_metadata_map: dict[str, dict[str, Any]],
+    vision_inputs: list[dict[str, Any]],
+    tables_summary: list[dict[str, Any]],
+    captions_and_references: list[dict[str, Any]],
+    ontology_keys: list[str],
+    procedure_sections: list[dict[str, Any]],
+    procedure_text: str,
+    max_experiment_series: int | None,
+    actual_section_aware: bool,
+    stage3_warnings: list[str],
+) -> dict[str, Any]:
+    raw_outputs: list[dict[str, Any]] = []
+    ontology_map = get_ontology_entry_map(project_root)
+
+    if extraction_mode == "unified":
+        unified_result = ExtractUnifiedStage3Module().run(
+            paper_text=paper_text,
+            procedure_sections_json=to_json_text(procedure_sections),
+            figure_summaries=to_json_text(vision_inputs or figure_summaries),
+            table_summaries=to_json_text(tables_summary),
+            captions_and_references=to_json_text(captions_and_references),
+            ontology_keys=to_json_text(ontology_keys),
+            source_file=str(effective_markdown_path),
+        )
+        _append_raw_output(
+            raw_outputs,
+            step_name="unified_stage3",
+            module_name="ExtractUnifiedStage3Module",
+            result=unified_result,
+        )
+        core_payload = unified_result.payload if isinstance(unified_result.payload, dict) else {}
+        secondary_payload: dict[str, Any] = {}
+        llm_call_count = 1
+    else:
+        core_result = ExtractTwoPassCoreModule().run(
+            paper_text=paper_text,
+            procedure_text=procedure_text[:12000],
+            figure_summaries=to_json_text(vision_inputs or figure_summaries),
+            table_summaries=to_json_text(tables_summary),
+            ontology_keys=to_json_text(ontology_keys),
+            source_file=str(effective_markdown_path),
+        )
+        _append_raw_output(
+            raw_outputs,
+            step_name="two_pass_core",
+            module_name="ExtractTwoPassCoreModule",
+            result=core_result,
+        )
+        core_payload = core_result.payload if isinstance(core_result.payload, dict) else {}
+
+        if max_experiment_series and max_experiment_series > 0 and isinstance(core_payload.get("experiment_series"), list):
+            core_payload = dict(core_payload)
+            core_payload["experiment_series"] = core_payload.get("experiment_series", [])[:max_experiment_series]
+
+        secondary_result = ExtractTwoPassDataEvidenceModule().run(
+            paper_text=paper_text,
+            stage3_core_json=to_json_text(core_payload),
+            figure_summaries=to_json_text(vision_inputs or figure_summaries),
+            table_summaries=to_json_text(tables_summary),
+            captions_and_references=to_json_text(captions_and_references),
+            ontology_keys=to_json_text(ontology_keys),
+        )
+        _append_raw_output(
+            raw_outputs,
+            step_name="two_pass_data_evidence",
+            module_name="ExtractTwoPassDataEvidenceModule",
+            result=secondary_result,
+        )
+        secondary_payload = secondary_result.payload if isinstance(secondary_result.payload, dict) else {}
+        llm_call_count = 2
+
+    experiment_series_payload = _coerce_list_payload(core_payload, "experiment_series")
+    if max_experiment_series and max_experiment_series > 0:
+        experiment_series_payload = experiment_series_payload[:max_experiment_series]
+
+    data_points_payload = _coerce_list_payload(core_payload, "data_points") or _coerce_list_payload(secondary_payload, "data_points")
+    data_point_records: list[dict[str, Any]] = []
+    for index, series in enumerate(experiment_series_payload):
+        series_payload = _select_compact_series_data_points(
+            data_points_payload,
+            series if isinstance(series, dict) else {},
+            series_index=index,
+            series_count=len(experiment_series_payload),
+        )
+        series_data_points, parse_issue = _coerce_data_points_payload(
+            payload=series_payload,
+            series=series if isinstance(series, dict) else {},
+            ontology=ontology_map,
+            series_index=index,
+        )
+        if parse_issue:
+            raw_outputs.append(parse_issue)
+        data_point_records.extend(series_data_points)
+
+    process_steps_payload = _normalize_process_steps_payload(_coerce_list_payload(core_payload, "process_steps"))
+    if not process_steps_payload and not procedure_text.strip():
+        stage3_warnings.append("procedure_text_not_found")
+
+    evidence_source_payload: object | None
+    if "evidence_objects" in secondary_payload:
+        evidence_source_payload = secondary_payload.get("evidence_objects")
+    else:
+        evidence_source_payload = core_payload.get("evidence_objects")
+    evidence_payload = _split_evidence_objects_payload(
+        payload=evidence_source_payload,
+        figure_metadata_map=figure_metadata_map,
+        tables_summary=tables_summary,
+    )
+
+    cleaned_paper_basic_info = _postprocess_paper_basic_info(
+        payload=core_payload.get("paper_basic_info"),
+        paper_text=paper_text,
+        source_file=effective_markdown_path,
+    )
+    cleaned_global_constants, moved_top_level_logs = move_top_level_core_keys_from_global_constants(
+        core_payload.get("global_constants"),
+        ontology_map,
+    )
+
+    quality_flags: list[str] = []
+    if _detect_mojibake(paper_text):
+        quality_flags.append("source_text_mojibake_suspected")
+    if any(_detect_mojibake(item.get("raw_output")) for item in raw_outputs):
+        quality_flags.append("dspy_output_mojibake_suspected")
+
+    paper_record = merge_stage_outputs_to_paper_record(
+        paper_basic_info=cleaned_paper_basic_info,
+        global_constants=cleaned_global_constants,
+        experiment_series=experiment_series_payload,
+        data_points=data_point_records,
+        process_steps=process_steps_payload,
+        evidence_objects=evidence_payload,
+        data_provenance=DataProvenance(
+            source_pipeline=f"stage3_dspy_{extraction_mode}",
+            quality_flags=quality_flags,
+            notes=[],
+            normalization_log=moved_top_level_logs,
+        ),
+    )
+    paper_record = _backfill_core_parameter_evidence(
+        record=paper_record,
+        ontology=ontology_map,
+        tables_summary=tables_summary,
+        cleaned_markdown_text=full_paper_text,
+    )
+    validated = _validate_stage3_record(paper_record, project_root, stage3_dir)
+    return _finalize_stage3_outputs(
+        validated=validated,
+        project_root=project_root,
+        dspy_settings=dspy_settings,
+        stage3_dir=stage3_dir,
+        summary_filename=summary_filename,
+        raw_outputs=raw_outputs,
+        raw_outputs_filename=raw_outputs_filename,
+        paper_text=paper_text,
+        full_paper_text=full_paper_text,
+        cleaned_body_path=cleaned_body_path,
+        paper_id=paper_id,
+        paper_text_limit_chars=None,
+        max_experiment_series=max_experiment_series,
+        actual_section_aware=actual_section_aware,
+        stage3_warnings=stage3_warnings,
+        stage3_mode=extraction_mode,
+        llm_call_count=llm_call_count + (1 if dspy_settings.get("run_judge", False) else 0),
+        ontology_keys=ontology_keys,
+    )
+
+
+def _finalize_stage3_outputs(
+    *,
+    validated: PaperExtractionRecord,
+    project_root: Path,
+    dspy_settings: dict[str, Any],
+    stage3_dir: Path,
+    summary_filename: str,
+    raw_outputs: list[dict[str, Any]],
+    raw_outputs_filename: str | None,
+    paper_text: str,
+    full_paper_text: str,
+    cleaned_body_path: Path,
+    paper_id: str,
+    paper_text_limit_chars: int | None,
+    max_experiment_series: int | None,
+    actual_section_aware: bool,
+    stage3_warnings: list[str],
+    stage3_mode: str,
+    llm_call_count: int,
+    ontology_keys: list[str],
+) -> dict[str, Any]:
+    outputs = dspy_settings.get("outputs", {})
+    _write_json(stage3_dir / outputs.get("paper_basic_info", "paper_basic_info.json"), validated.paper_basic_info.model_dump() if validated.paper_basic_info else {})
+    _write_json(stage3_dir / outputs.get("global_constants", "global_constants.json"), validated.global_constants.model_dump() if validated.global_constants else {})
+    write_jsonl(
+        [series.model_dump() for series in validated.experiment_series],
+        stage3_dir / outputs.get("experiment_series", "experiment_series.jsonl"),
+    )
+    write_jsonl(
+        [data_point.model_dump() for series in validated.experiment_series for data_point in series.data_points],
+        stage3_dir / outputs.get("data_points", "data_points.jsonl"),
+    )
+    write_jsonl(
+        [item.model_dump() for item in validated.process_steps],
+        stage3_dir / outputs.get("process_steps", "process_steps.jsonl"),
+    )
+    write_jsonl(
+        [item.model_dump() for item in validated.evidence_objects],
+        stage3_dir / outputs.get("evidence_objects", "evidence_objects.jsonl"),
+    )
+    _write_json(stage3_dir / outputs.get("paper_extraction", "paper_extraction.schema_v2.json"), validated.model_dump())
+    if raw_outputs_filename:
+        write_jsonl(raw_outputs, stage3_dir / raw_outputs_filename)
+
+    judge_payload: dict[str, Any] = {"stage3_judge": "disabled"}
+    if dspy_settings.get("run_judge", False):
+        schema_hint_path = Path(project_root) / "configs" / "schema_v2.json"
+        schema_hint = json.loads(schema_hint_path.read_text(encoding="utf-8"))
+        judge_result = run_judge(
+            paper_text=paper_text,
+            extraction_json=validated.model_dump(),
+            ontology_keys=ontology_keys,
+            schema_hint=schema_hint,
+        )
+        judge_payload = judge_result.payload if isinstance(judge_result.payload, dict) else {"raw_output": judge_result.raw_output}
+    _write_json(stage3_dir / outputs.get("judge", "dspy_judge.json"), judge_payload)
+
+    validation_summary = _build_validation_summary(
+        validated,
+        project_root,
+        stage3_dir / "stage3_validation_report.md",
+        schema_valid=True,
+    )
+    summary = {
+        "stage3_dspy": "enabled",
+        "stage3_mode": stage3_mode,
+        "paper_id": paper_id,
+        "paper_basic_info_ok": validated.paper_basic_info is not None,
+        "experiment_series_count": len(validated.experiment_series),
+        "data_point_count": sum(len(series.data_points) for series in validated.experiment_series),
+        "process_steps_count": len(validated.process_steps),
+        "evidence_object_count": len(validated.evidence_objects),
+        "run_judge": bool(dspy_settings.get("run_judge", False)),
+        "llm_call_count": llm_call_count,
+        "stage3_dir": str(stage3_dir),
+        "raw_dspy_outputs_path": str(stage3_dir / raw_outputs_filename) if raw_outputs_filename else None,
+        "paper_text_limit_chars": paper_text_limit_chars,
+        "max_experiment_series": max_experiment_series,
+        "stage3_input_mode": "section_aware" if actual_section_aware else "full_cleaned_body",
+        "cleaned_body_char_count": len(full_paper_text),
+        "paper_text_char_count": len(paper_text),
+        "cleaned_body_path": str(cleaned_body_path) if cleaned_body_path.exists() else None,
+        "warnings": stage3_warnings,
+    }
+    summary.update(validation_summary)
+    _write_json(stage3_dir / summary_filename, summary)
+    return summary
+
+
+def _estimate_stage3_llm_call_count(
+    *,
+    mode: str,
+    experiment_series_count: int,
+    process_steps_called: bool,
+    run_judge: bool,
+) -> int:
+    if mode == "full":
+        base = 5 if process_steps_called else 4
+        count = base + max(0, experiment_series_count)
+    elif mode == "unified":
+        count = 1
+    else:
+        count = 2
+    if run_judge:
+        count += 1
+    return count
 
 
 def _validate_stage3_record(record: PaperExtractionRecord, project_root: Path, stage3_dir: Path) -> PaperExtractionRecord:
@@ -1132,6 +1418,34 @@ def _coerce_data_points_payload(
         if isinstance(item, dict)
     ]
     return normalized, parse_issue
+
+
+def _select_compact_series_data_points(
+    payload: list[Any],
+    series: dict[str, Any],
+    *,
+    series_index: int,
+    series_count: int,
+) -> list[Any]:
+    if not isinstance(payload, list) or not payload:
+        return []
+    series_id = str(series.get("series_id") or "").strip()
+    if series_id:
+        matched = [
+            item
+            for item in payload
+            if isinstance(item, dict)
+            and (
+                str(item.get("series_id") or "").strip() == series_id
+                or str((item.get("extended_data") or {}).get("series_id") or "").strip() == series_id
+                or str((item.get("extended_data") or {}).get("parent_series_id") or "").strip() == series_id
+            )
+        ]
+        if matched:
+            return matched
+    if series_count == 1 or series_index == 0:
+        return payload
+    return []
 
 
 def _looks_like_datapoint_dict(payload: dict[str, Any]) -> bool:
