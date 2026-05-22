@@ -155,7 +155,7 @@ def run_stage3_batch(
     total_rows = len(selected_rows)
     for index, row in enumerate(selected_rows, start=1):
         paper_label = f"{normalize_batch_category(row.get('category'))}/{row.get('paper_id_guess') or ''}"
-        print(f"START [{index}/{total_rows}] {paper_label}")
+        _log_console(f"START [{index}/{total_rows}] {paper_label}")
         report_row = _process_manifest_row(
             row,
             markdown_dir=markdown_dir,
@@ -177,7 +177,7 @@ def run_stage3_batch(
             "dry_run_planned": "DRYRUN",
             "estimate_only": "ESTIMATE",
         }.get(report_row["status"], report_row["status"].upper())
-        print(
+        _log_console(
             f"{status_label} [{index}/{total_rows}] {paper_label} "
             f"elapsed={report_row['elapsed_seconds']}s mode={report_row['stage3_mode']} "
             f"llm_calls={report_row['estimated_llm_call_count']}"
@@ -406,6 +406,15 @@ def _process_manifest_row(
 
 def _resolve_stage3_mode(mode: str) -> str:
     return "two-pass" if mode == "lite" else mode
+
+
+def _log_console(message: str) -> None:
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        safe_message = message.encode(encoding, errors="replace").decode(encoding, errors="replace")
+        print(safe_message)
 
 
 def _settings_run_judge(settings_template: dict[str, Any] | None) -> bool:
