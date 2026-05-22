@@ -5,6 +5,7 @@ from __future__ import annotations
 from alumina_sol_extractor.models.figure import FigureInfo
 from alumina_sol_extractor.vision.taxonomy_config import (
     CAPTION_FTIR_KEYWORDS,
+    CAPTION_MECHANICAL_KEYWORDS,
     CAPTION_MICROSCOPY_KEYWORDS,
     CAPTION_PHOTO_KEYWORDS,
     CAPTION_RHEOLOGY_KEYWORDS,
@@ -12,7 +13,9 @@ from alumina_sol_extractor.vision.taxonomy_config import (
     CAPTION_SCIENTIFIC_KEYWORDS,
     CAPTION_THERMAL_KEYWORDS,
     CAPTION_XRD_KEYWORDS,
+    FORMULA_TEXT_KEYWORDS,
     KEYWORDS,
+    MICROSCOPY_MATERIAL_CONTEXT_KEYWORDS,
     NMR_QUANTIFICATION_KEYWORDS,
     NMR_SPECTRUM_KEYWORDS,
     RESNET_CHART_CLASSES,
@@ -36,10 +39,25 @@ def classification_text(figure: FigureInfo) -> str:
     ).lower()
 
 
+def _has_formula_text_context(text: str, caption_text: str) -> bool:
+    if not keyword_hits(text, FORMULA_TEXT_KEYWORDS):
+        return False
+    if keyword_hits(text, CAPTION_SCIENTIFIC_KEYWORDS):
+        return False
+    if keyword_hits(caption_text, KEYWORDS["schematic_or_flow"]) or keyword_hits(caption_text, CAPTION_SCHEMATIC_KEYWORDS):
+        return False
+    return True
+
+
+def _has_microscopy_material_context(text: str) -> bool:
+    return bool(keyword_hits(text, CAPTION_MICROSCOPY_KEYWORDS)) and bool(keyword_hits(text, MICROSCOPY_MATERIAL_CONTEXT_KEYWORDS))
+
+
 def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
     text = text if text is not None else classification_text(figure)
     caption_text = (figure.caption or "").lower()
     subfigure_label = (figure.subfigure_label or "").lower()
+    caption_looks_like_photo = bool(keyword_hits(caption_text, CAPTION_PHOTO_KEYWORDS))
 
     if keyword_hits(text, NMR_SPECTRUM_KEYWORDS):
         caption_has_quantification = bool(keyword_hits(caption_text, NMR_QUANTIFICATION_KEYWORDS))
@@ -49,8 +67,6 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "nmr_spectrum"
     if keyword_hits(caption_text, KEYWORDS["elemental_mapping"]):
         return "elemental_mapping"
-    if keyword_hits(caption_text, CAPTION_PHOTO_KEYWORDS):
-        return "photo_image"
     if keyword_hits(caption_text, CAPTION_XRD_KEYWORDS):
         return "xrd_pattern"
     if keyword_hits(caption_text, CAPTION_FTIR_KEYWORDS):
@@ -61,6 +77,18 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "thermal_analysis_plot"
     if keyword_hits(caption_text, CAPTION_MICROSCOPY_KEYWORDS):
         return "microscopy_image"
+    if keyword_hits(caption_text, CAPTION_MECHANICAL_KEYWORDS):
+        return "mechanical_property_plot"
+    if not caption_looks_like_photo and keyword_hits(text, CAPTION_XRD_KEYWORDS):
+        return "xrd_pattern"
+    if not caption_looks_like_photo and keyword_hits(text, CAPTION_FTIR_KEYWORDS):
+        return "ftir_spectrum"
+    if not caption_looks_like_photo and keyword_hits(text, CAPTION_THERMAL_KEYWORDS):
+        return "thermal_analysis_plot"
+    if _has_microscopy_material_context(text):
+        return "microscopy_image"
+    if not caption_looks_like_photo and keyword_hits(text, CAPTION_MECHANICAL_KEYWORDS):
+        return "mechanical_property_plot"
     if keyword_hits(text, KEYWORDS["elemental_mapping"]):
         return "elemental_mapping"
     if keyword_hits(caption_text, CAPTION_RHEOLOGY_KEYWORDS):
@@ -73,6 +101,8 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "mechanical_property_plot"
     if keyword_hits(text, KEYWORDS["mechanical_curve"]):
         return "mechanical_curve"
+    if caption_looks_like_photo:
+        return "photo_image"
     if keyword_hits(text, SPINNABILITY_PHOTO_KEYWORDS):
         return "photo_image"
     if keyword_hits(caption_text, KEYWORDS["schematic_or_flow"]) and not keyword_hits(caption_text, CAPTION_SCIENTIFIC_KEYWORDS):
@@ -81,6 +111,8 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "schematic_or_flow"
     if keyword_hits(text, STRUCTURE_SCHEMATIC_KEYWORDS) and not keyword_hits(caption_text, CAPTION_SCIENTIFIC_KEYWORDS):
         return "schematic_or_flow"
+    if _has_formula_text_context(text, caption_text):
+        return "formula_or_text"
 
     for class_name in [
         "nmr_quantification_plot",
