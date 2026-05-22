@@ -114,6 +114,32 @@ def test_formula_or_chemical_structure_hard_drops_from_vision() -> None:
     assert figure.send_to_vision_model is False
 
 
+def test_molecular_formula_caption_hard_drops_from_vision() -> None:
+    figure = _apply(
+        FigureInfo(
+            paper_id="p",
+            figure_id="图3-2",
+            caption="图3-2 乙基纤维素分子式",
+            caption_source="standard_caption",
+        )
+    )
+    assert figure.figure_class == "formula_or_text"
+    assert figure.send_to_vision_model is False
+
+
+def test_chemical_structure_caption_hard_drops_from_vision() -> None:
+    figure = _apply(
+        FigureInfo(
+            paper_id="p",
+            figure_id="Fig. 2",
+            caption="Fig. 2 Chemical structure of ethyl cellulose",
+            caption_source="standard_caption",
+        )
+    )
+    assert figure.figure_class == "formula_or_text"
+    assert figure.send_to_vision_model is False
+
+
 def test_mechanism_schematic_not_misclassified_as_formula() -> None:
     figure = _apply(
         FigureInfo(
@@ -126,6 +152,18 @@ def test_mechanism_schematic_not_misclassified_as_formula() -> None:
         )
     )
     assert figure.figure_class == "schematic_or_flow"
+    assert figure.figure_class != "formula_or_text"
+
+
+def test_microstructure_caption_not_misclassified_as_formula() -> None:
+    figure = _apply(
+        FigureInfo(
+            paper_id="p",
+            figure_id="图5",
+            caption="图5 纤维微观结构",
+            caption_source="standard_caption",
+        )
+    )
     assert figure.figure_class != "formula_or_text"
 
 
@@ -156,3 +194,52 @@ def test_resnet_graph_does_not_override_strong_xrd_text() -> None:
     )
     assert figure.figure_class == "xrd_pattern"
     assert figure.send_to_vision_model is True
+
+
+def test_weak_caption_sem_clip_with_material_context_promotes_to_microscopy() -> None:
+    figure = _apply(
+        FigureInfo(
+            paper_id="p",
+            figure_id="Unknown Figure",
+            caption="图2 相关测试结果图",
+            raw_caption="图2 相关测试结果图",
+            reference_sentences=["氧化铝纤维在烧结后形成连续陶瓷骨架。"],
+            description_text="氧化铝纤维在烧结后形成连续陶瓷骨架。",
+            caption_source="pseudo_caption",
+            clip_label="a SEM image",
+            clip_decision="positive",
+        )
+    )
+    assert figure.figure_class == "microscopy_image"
+    assert figure.send_to_vision_model is True
+
+
+def test_weak_caption_xrd_reference_promotes_to_xrd_pattern() -> None:
+    figure = _apply(
+        FigureInfo(
+            paper_id="p",
+            figure_id="Unknown Figure",
+            caption="Unknown Figure",
+            raw_caption="Unknown Figure",
+            reference_sentences=["XRD 衍射结果表明样品的物相发生转变。"],
+            caption_source="pseudo_caption",
+        )
+    )
+    assert figure.figure_class == "xrd_pattern"
+    assert figure.send_to_vision_model is True
+
+
+def test_weak_caption_formula_signal_still_hard_drops() -> None:
+    figure = _apply(
+        FigureInfo(
+            paper_id="p",
+            figure_id="Unknown Figure",
+            caption="Unknown Figure",
+            raw_caption="Chemical structure of ethyl cellulose",
+            caption_source="pseudo_caption",
+            clip_label="a SEM image",
+            clip_decision="positive",
+        )
+    )
+    assert figure.figure_class == "formula_or_text"
+    assert figure.send_to_vision_model is False

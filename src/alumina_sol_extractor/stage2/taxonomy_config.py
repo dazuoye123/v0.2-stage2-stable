@@ -137,6 +137,19 @@ MICROSCOPY_MATERIAL_CONTEXT_KEYWORDS = ["纤维", "陶瓷", "氧化铝", "凝胶
 CAPTION_OCR_SUSPECT_PHRASES = ["内确度下同种处理后的该酶的比值", "该酶的比值"]
 CAPTION_OCR_ANCHOR_KEYWORDS = ["内确度", "该酶", "同种处理"]
 
+for _keyword in [
+    "有机结构式",
+    "配位结构式",
+    "molecular structure",
+    "skeletal formula",
+    "constitutional formula",
+]:
+    if _keyword not in KEYWORDS["formula_or_text"]:
+        KEYWORDS["formula_or_text"].append(_keyword)
+    if _keyword not in FORMULA_TEXT_KEYWORDS:
+        FORMULA_TEXT_KEYWORDS.append(_keyword)
+
+
 RESNET_SCHEMATIC_CLASSES = {"Flow chart", "Block diagram", "Algorithm", "Tree Diagram", "Sketches"}
 RESNET_TABLE_CLASSES = {"Tables"}
 RESNET_CHART_CLASSES = {"Graph plots", "Scatter plot", "Bar plots", "Heat map", "Histogram", "Box plot", "Area chart", "Contour plot", "Surface plot", "Vector plot", "Line graph", "Confusion matrix"}

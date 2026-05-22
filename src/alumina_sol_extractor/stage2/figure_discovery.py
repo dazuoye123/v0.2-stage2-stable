@@ -32,6 +32,7 @@ DATA_IMAGE_PATTERN = re.compile(r"^data:image/[^;]+;base64,(?P<data>.+)$", re.DO
 TABLE_START_PATTERN = re.compile(r"^\s*(?:\u8868\s*\d+(?:\.\d+)*|Table\s*\d+(?:\.\d+)*|\[TableID:)", re.IGNORECASE)
 HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(?P<title>.+?)\s*$", re.MULTILINE)
 DETAILS_BLOCK_PATTERN = re.compile(r"<details\b.*?</details>", re.IGNORECASE | re.DOTALL)
+HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 REFERENCE_SECTION_PATTERN = re.compile(
     r"^\s*(?:references|bibliography|\u53c2\u8003\u6587\u732e|\u81f4\u8c22|\u5b66\u4f4d\u8bba\u6587\u8bc4\u9605\u53ca\u7b54\u8fa9\u60c5\u51b5\u8868)\b",
     re.IGNORECASE,
@@ -65,6 +66,16 @@ PSEUDO_REFERENCE_PATTERN = re.compile(
     r"\u56fe)\s*(?P<number>\d+(?:\.\d+)*)",
     re.IGNORECASE,
 )
+INVALID_SUBFIGURE_LABELS = {
+    "details",
+    "summary",
+    "naturalimage",
+    "natural image",
+    "html",
+    "markdown",
+    "image",
+    "figure",
+}
 
 
 def rewrite_mineru_image_paths(
@@ -191,7 +202,7 @@ def find_figures_in_markdown_any(
 
             section_title = find_section_title_for_position(headings, position)
 
-            subfigure_label = caption_assignment.subfigure_label
+            subfigure_label = _clean_subfigure_label(caption_assignment.subfigure_label)
             if not subfigure_label and subfigure_labels:
                 local_index = caption_assignment.subfigure_index or index_in_group
                 subfigure_label = _label_for_index(subfigure_labels, local_index)
@@ -771,15 +782,25 @@ def build_description_text(
 ) -> str | None:
     """Merge caption and reference sentences into compact prompt text."""
     parts: list[str] = []
+    clean_subfigure_label = _clean_subfigure_label(subfigure_label)
+    cleaned_caption = _clean_description_fragment(caption)
     if caption:
-        if figure_id and subfigure_label:
-            parts.append(f"{figure_id}({subfigure_label}): {caption}")
-        else:
-            parts.append(caption)
-    parts.extend(sentence for sentence in reference_sentences if sentence)
+        if figure_id and clean_subfigure_label and cleaned_caption:
+            parts.append(f"{figure_id}({clean_subfigure_label}): {cleaned_caption}")
+        elif cleaned_caption:
+            parts.append(cleaned_caption)
+    parts.extend(
+        cleaned_sentence
+        for sentence in reference_sentences
+        if (cleaned_sentence := _clean_description_fragment(sentence))
+    )
     if not parts and fallback_context:
-        parts = extract_complete_sentences(fallback_context)[:2]
-    merged = " ".join(_dedupe_texts(parts)).strip()
+        parts = [
+            cleaned_sentence
+            for sentence in extract_complete_sentences(fallback_context)[:2]
+            if (cleaned_sentence := _clean_description_fragment(sentence))
+        ]
+    merged = _clean_description_fragment(" ".join(_dedupe_texts(parts)).strip())
     return merged[:max_chars].rstrip() or None
 
 
@@ -893,7 +914,7 @@ def _is_soft_gap_between_group_images(text: str) -> bool:
 def _extract_group_labels(markdown_text: str, group: list[re.Match[str]]) -> list[str]:
     labels: list[str] = []
     for index, match in enumerate(group):
-        alt_text = _compact_spaces(match.group(1))
+        alt_text = _clean_subfigure_label(_compact_spaces(match.group(1)))
         if alt_text:
             labels.append(alt_text)
             continue
@@ -909,7 +930,7 @@ def _extract_short_label(text: str) -> str | None:
         if CAPTION_START_PATTERN.match(line) or HEADING_PATTERN.match(line):
             return None
         if len(line) <= 30 and not any(char in line for char in SENTENCE_END_CHARS):
-            return line
+            return _clean_subfigure_label(line)
     return None
 
 
@@ -935,13 +956,39 @@ def _extract_subfigure_labels(caption: str | None) -> list[str]:
     labels = re.findall(r"[（(]\s*([A-Za-z][A-Za-z0-9_-]{0,20})\s*[）)]", caption)
     result: list[str] = []
     for label in labels:
-        if label not in result:
-            result.append(label)
+        cleaned = _clean_subfigure_label(label)
+        if cleaned and cleaned not in result:
+            result.append(cleaned)
     return result
 
 
 def _label_for_index(labels: list[str], index: int) -> str | None:
-    return labels[index - 1] if index <= len(labels) else None
+    return _clean_subfigure_label(labels[index - 1]) if index <= len(labels) else None
+
+
+def _clean_subfigure_label(label: str | None) -> str | None:
+    if not label:
+        return None
+    cleaned = _compact_spaces(label)
+    if not cleaned:
+        return None
+    if "<" in cleaned or ">" in cleaned or HTML_TAG_PATTERN.search(cleaned):
+        return None
+    normalized = re.sub(r"[\s_-]+", " ", cleaned).strip().lower()
+    if normalized in INVALID_SUBFIGURE_LABELS:
+        return None
+    return cleaned
+
+
+def _clean_description_fragment(text: str | None) -> str:
+    if not text:
+        return ""
+    cleaned = DETAILS_BLOCK_PATTERN.sub(" ", text)
+    cleaned = re.sub(r"</?summary\b[^>]*>", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = HTML_TAG_PATTERN.sub(" ", cleaned)
+    cleaned = re.sub(r"\bnatural\s*image\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:details|summary)\b", " ", cleaned, flags=re.IGNORECASE)
+    return _compact_spaces(cleaned)
 
 
 def _assign_same_id_caption_subfigure_indices(figures: list[FigureInfo]) -> None:

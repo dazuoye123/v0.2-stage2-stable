@@ -167,6 +167,10 @@ Fig.5 SEM images of alumina fibers
     assert figures[0].caption_source == "standard_caption"
     assert figures[0].raw_caption == "Fig.5 SEM images of alumina fibers"
     assert figures[0].figure_class == "microscopy_image"
+    assert figures[0].subfigure_label is None
+    assert "<details>" not in (figures[0].description_text or "").lower()
+    assert "summary" not in (figures[0].description_text or "").lower()
+    assert "naturalimage" not in (figures[0].description_text or "").lower()
 
     shutil.rmtree(work_dir)
 
@@ -214,6 +218,50 @@ Fig.6 SEM images of the surfaces(a) and the cross sections(b) of xerogel fibers
     assert all(figure.caption == "Fig.6 SEM images of the surfaces(a) and the cross sections(b) of xerogel fibers" for figure in figures)
     assert all(figure.figure_class == "microscopy_image" for figure in figures)
     assert [figure.subfigure_label for figure in figures] == ["a", "b"]
+    assert all("<details>" not in (figure.description_text or "").lower() for figure in figures)
+    assert all("summary" not in (figure.description_text or "").lower() for figure in figures)
+    assert all("naturalimage" not in (figure.description_text or "").lower() for figure in figures)
+
+    shutil.rmtree(work_dir)
+
+
+def test_details_summary_noise_does_not_become_subfigure_label() -> None:
+    paper_id = "_figure_details_label_noise_test"
+    work_dir = PROJECT_ROOT / "data" / "outputs" / paper_id
+    markdown_dir = work_dir / "markdown"
+    images_dir = markdown_dir / "images"
+    figures_all_dir = work_dir / "figures_all"
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
+    images_dir.mkdir(parents=True, exist_ok=True)
+    figures_all_dir.mkdir(parents=True, exist_ok=True)
+
+    Image.new("RGB", (18, 18), (110, 110, 110)).save(images_dir / "sample.png")
+
+    markdown_path = markdown_dir / "paper.md"
+    markdown = """![naturalimage](images/sample.png)
+<details>
+<summary>naturalimage</summary>
+surface morphology
+</details>
+Fig.2 Surface morphology of alumina fibers
+"""
+    markdown_path.write_text(markdown, encoding="utf-8")
+
+    figures = find_figures_in_markdown_any(
+        markdown,
+        markdown_path,
+        PROJECT_ROOT,
+        paper_id,
+        figures_all_dir=figures_all_dir,
+    )
+    figures = FigureFilter().apply(figures)
+
+    assert len(figures) == 1
+    assert figures[0].subfigure_label is None
+    assert "<details>" not in (figures[0].description_text or "").lower()
+    assert "summary" not in (figures[0].description_text or "").lower()
+    assert "naturalimage" not in (figures[0].description_text or "").lower()
 
     shutil.rmtree(work_dir)
 

@@ -28,6 +28,13 @@ from alumina_sol_extractor.vision.taxonomy_config import (
     keyword_hits,
 )
 
+WEAK_CAPTION_MICROSCOPY_CLIP_LABELS = {
+    "a sem image",
+    "an electron microscope image",
+    "a microscopy image",
+    "a micrograph",
+}
+
 
 def classification_text(figure: FigureInfo) -> str:
     return " ".join(
@@ -35,6 +42,15 @@ def classification_text(figure: FigureInfo) -> str:
             figure.caption or "",
             " ".join(figure.reference_sentences),
             figure.description_text or "",
+        ]
+    ).lower()
+
+
+def _supplemental_classification_text(figure: FigureInfo) -> str:
+    return " ".join(
+        [
+            figure.raw_caption or "",
+            figure.alt_text or "",
         ]
     ).lower()
 
@@ -49,15 +65,22 @@ def _has_formula_text_context(text: str, caption_text: str) -> bool:
     return True
 
 
+def _has_material_context(text: str) -> bool:
+    return bool(keyword_hits(text, MICROSCOPY_MATERIAL_CONTEXT_KEYWORDS))
+
+
 def _has_microscopy_material_context(text: str) -> bool:
-    return bool(keyword_hits(text, CAPTION_MICROSCOPY_KEYWORDS)) and bool(keyword_hits(text, MICROSCOPY_MATERIAL_CONTEXT_KEYWORDS))
+    return bool(keyword_hits(text, CAPTION_MICROSCOPY_KEYWORDS)) and _has_material_context(text)
 
 
 def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
     text = text if text is not None else classification_text(figure)
+    supplemental_text = _supplemental_classification_text(figure)
+    full_text = " ".join(part for part in [text, supplemental_text] if part).strip()
     caption_text = (figure.caption or "").lower()
     subfigure_label = (figure.subfigure_label or "").lower()
     caption_looks_like_photo = bool(keyword_hits(caption_text, CAPTION_PHOTO_KEYWORDS))
+    weak_caption_source = (figure.caption_source or "none") in {"pseudo_caption", "none"}
 
     if keyword_hits(text, NMR_SPECTRUM_KEYWORDS):
         caption_has_quantification = bool(keyword_hits(caption_text, NMR_QUANTIFICATION_KEYWORDS))
@@ -85,7 +108,7 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "ftir_spectrum"
     if not caption_looks_like_photo and keyword_hits(text, CAPTION_THERMAL_KEYWORDS):
         return "thermal_analysis_plot"
-    if _has_microscopy_material_context(text):
+    if _has_microscopy_material_context(full_text):
         return "microscopy_image"
     if not caption_looks_like_photo and keyword_hits(text, CAPTION_MECHANICAL_KEYWORDS):
         return "mechanical_property_plot"
@@ -111,8 +134,16 @@ def classify_figure(figure: FigureInfo, text: str | None = None) -> str:
         return "schematic_or_flow"
     if keyword_hits(text, STRUCTURE_SCHEMATIC_KEYWORDS) and not keyword_hits(caption_text, CAPTION_SCIENTIFIC_KEYWORDS):
         return "schematic_or_flow"
-    if _has_formula_text_context(text, caption_text):
+    if _has_formula_text_context(full_text, caption_text):
         return "formula_or_text"
+    if weak_caption_source:
+        clip_label = (figure.clip_label or "").lower()
+        if clip_label in WEAK_CAPTION_MICROSCOPY_CLIP_LABELS and _has_material_context(full_text):
+            return "microscopy_image"
+        if keyword_hits(full_text, CAPTION_MICROSCOPY_KEYWORDS) and _has_material_context(full_text):
+            return "microscopy_image"
+        if keyword_hits(full_text, CAPTION_XRD_KEYWORDS):
+            return "xrd_pattern"
 
     for class_name in [
         "nmr_quantification_plot",
