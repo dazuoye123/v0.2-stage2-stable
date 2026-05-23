@@ -657,18 +657,29 @@ def _run_compact_stage3_extraction(
 
     data_points_payload = _coerce_list_payload(core_payload, "data_points") or _coerce_list_payload(secondary_payload, "data_points")
     data_point_records: list[dict[str, Any]] = []
-    for index, series in enumerate(experiment_series_payload):
-        series_payload = _select_compact_series_data_points(
-            data_points_payload,
-            series if isinstance(series, dict) else {},
-            series_index=index,
-            series_count=len(experiment_series_payload),
-        )
+    if experiment_series_payload:
+        for index, series in enumerate(experiment_series_payload):
+            series_payload = _select_compact_series_data_points(
+                data_points_payload,
+                series if isinstance(series, dict) else {},
+                series_index=index,
+                series_count=len(experiment_series_payload),
+            )
+            series_data_points, parse_issue = _coerce_data_points_payload(
+                payload=series_payload,
+                series=series if isinstance(series, dict) else {},
+                ontology=ontology_map,
+                series_index=index,
+            )
+            if parse_issue:
+                raw_outputs.append(parse_issue)
+            data_point_records.extend(series_data_points)
+    elif data_points_payload:
         series_data_points, parse_issue = _coerce_data_points_payload(
-            payload=series_payload,
-            series=series if isinstance(series, dict) else {},
+            payload=data_points_payload,
+            series={"series_id": "series-1"},
             ontology=ontology_map,
-            series_index=index,
+            series_index=0,
         )
         if parse_issue:
             raw_outputs.append(parse_issue)

@@ -221,3 +221,21 @@ def test_two_pass_split_key_value_rows_merge_sample_and_series_name_aliases() ->
     merged = records[0]["additional_parameter_records"]
     assert len(merged) == 1
     assert merged[0]["raw_name"] == "viscosity_Pa_s"
+
+
+def test_data_points_payload_without_series_is_still_coerced() -> None:
+    ontology = {
+        "ph": {"standard_unit": "dimensionless", "category": "precursor_solution"},
+    }
+    payload = [{"key": "ph", "value": 3.5, "unit": "dimensionless", "context": "pH = 3.5"}]
+
+    records, parse_issue = _coerce_data_points_payload(
+        payload=payload,
+        series={"series_id": "series-1"},
+        ontology=ontology,
+        series_index=0,
+    )
+
+    assert parse_issue is None
+    assert len(records) == 1
+    assert records[0]["additional_parameter_records"][0]["raw_name"] == "ph"
