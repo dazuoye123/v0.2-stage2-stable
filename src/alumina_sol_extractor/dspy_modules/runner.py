@@ -108,6 +108,7 @@ FLAT_PARAMETER_BUNDLE_KEYS = {
     "context",
     "source_text",
     "evidence_id",
+    "evidence_ref",
     "series_id",
 }
 
@@ -1885,7 +1886,7 @@ def _coerce_flat_parameter_bundle_to_record(
     raw_key = str(item.get("key") or "").strip()
     canonical_key = raw_key if raw_key in ontology else None
     source_text = str(item.get("context") or item.get("source_text") or "").strip() or None
-    evidence_id = str(item.get("evidence_id") or "").strip() or None
+    evidence_id = str(item.get("evidence_id") or item.get("evidence_ref") or "").strip() or None
     record: dict[str, Any] = {
         "canonical_key": canonical_key,
         "raw_name": raw_key or None,

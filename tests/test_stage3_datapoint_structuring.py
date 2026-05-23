@@ -151,3 +151,37 @@ def test_two_pass_split_key_value_rows_are_merged_into_one_parameter_record() ->
     assert merged[0]["value"] == 26.4
     assert merged[0]["unit"] == "deg"
     assert merged[0]["raw_text"] == "2θ = 26.4°"
+
+
+def test_two_pass_split_key_value_rows_support_evidence_ref_alias() -> None:
+    ontology = {
+        "ftir_peak_position_cm_1": {"standard_unit": "cm^-1", "category": "structure"},
+    }
+    payload = {
+        "sample_id": "dp-5",
+        "additional_parameter_records": [
+            {"raw_name": "key", "value": "ftir_peak_position_cm_1"},
+            {"raw_name": "value", "value": 203},
+            {"raw_name": "unit", "value": "cm^-1"},
+            {"raw_name": "context", "value": "Δν = 203 cm^-1"},
+            {"raw_name": "evidence_ref", "value": "图2.8"},
+        ],
+        "process_parameters": {},
+        "results": {},
+        "independent_variable_values": [],
+        "evidence_refs": [],
+        "extended_data": {},
+    }
+
+    records, parse_issue = _coerce_data_points_payload(
+        payload=payload,
+        series={"series_id": "ES-05"},
+        ontology=ontology,
+        series_index=0,
+    )
+
+    assert parse_issue is None
+    merged = records[0]["additional_parameter_records"]
+    assert len(merged) == 1
+    assert merged[0]["canonical_key"] == "ftir_peak_position_cm_1"
+    assert merged[0]["evidence_refs"][0]["figure_id"] == "图2.8"
