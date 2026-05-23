@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from alumina_sol_extractor.dspy_modules.runner import _scope_stage2_evidence_inputs
+from alumina_sol_extractor.dspy_modules.runner import (
+    _ensure_scientific_figure_evidence_candidates,
+    _scope_stage2_evidence_inputs,
+)
 
 
 def test_section_scoped_evidence_keeps_selected_chapter_figures_only() -> None:
@@ -45,3 +48,52 @@ def test_full_text_mode_keeps_original_evidence_pool() -> None:
     assert len(scoped["vision_inputs"]) == 2
     assert len(scoped["tables_summary"]) == 1
     assert scoped["scope"]["mode"] == "full_text"
+
+
+def test_section_scoped_evidence_keeps_scientific_figure_candidates_even_outside_selected_chapter() -> None:
+    scoped = _scope_stage2_evidence_inputs(
+        figures=[
+            {
+                "figure_id": "图3.7",
+                "caption": "图3.7 XRD 谱图",
+                "description_text": "样品 XRD 图谱",
+                "reference_sentences": [],
+                "figure_class": "xrd_pattern",
+            }
+        ],
+        vision_inputs=[{"figure_id": "图3.7", "figure_class": "xrd_pattern"}],
+        tables_summary=[],
+        selected_sections_text="第二章 实验部分 这里只选中了图2.12",
+        selected_section_titles=["第二章 实验部分"],
+        selected_chapter_numbers={"2"},
+        section_keywords=["实验"],
+    )
+
+    assert [item["figure_id"] for item in scoped["figures"]] == ["图3.7"]
+    assert [item["figure_id"] for item in scoped["vision_inputs"]] == ["图3.7"]
+    assert any(item["reason"] == "force_keep_scientific_figure_candidate" for item in scoped["review"])
+
+
+def test_scientific_figures_are_promoted_into_evidence_candidates_when_payload_is_empty() -> None:
+    evidence = _ensure_scientific_figure_evidence_candidates(
+        [],
+        figures=[
+            {
+                "figure_id": "图2-1",
+                "figure_class": "xrd_pattern",
+                "caption": "图2-1 XRD 谱图",
+                "reference_sentences": ["如图2-1所示，样品出现 α-Al2O3 衍射峰。"],
+                "description_text": "样品的 XRD 图谱",
+            },
+            {
+                "figure_id": "图2-2",
+                "figure_class": "microscopy_image",
+                "caption": "图2-2 SEM 照片",
+                "reference_sentences": ["图2-2 显示纤维截面微观结构。"],
+                "description_text": "纤维截面微观结构",
+            },
+        ],
+    )
+
+    assert {item["figure_id"] for item in evidence} == {"图2-1", "图2-2"}
+    assert all(item["figure_type"] in {"xrd_pattern", "microscopy_image"} for item in evidence)

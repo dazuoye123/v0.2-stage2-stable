@@ -92,6 +92,25 @@ PROCESS_STEP_SECTION_KEYWORDS = (
     "fabrication",
 )
 
+SCIENTIFIC_EVIDENCE_FIGURE_CLASSES = {
+    "xrd_pattern",
+    "ftir_spectrum",
+    "raman_spectrum",
+    "thermal_analysis_plot",
+    "microscopy_image",
+    "mechanical_property_plot",
+}
+
+FLAT_PARAMETER_BUNDLE_KEYS = {
+    "key",
+    "value",
+    "unit",
+    "context",
+    "source_text",
+    "evidence_id",
+    "series_id",
+}
+
 
 def run_stage3_dspy_schema_extraction(
     project_root: Path,
@@ -650,8 +669,22 @@ def _run_compact_stage3_extraction(
             raw_outputs.append(parse_issue)
         data_point_records.extend(series_data_points)
 
+    procedure_text_for_steps = procedure_text.strip() or _extract_procedure_text(full_paper_text)
     process_steps_payload = _normalize_process_steps_payload(_coerce_list_payload(core_payload, "process_steps"))
-    if not process_steps_payload and not procedure_text.strip():
+    if not process_steps_payload and procedure_text_for_steps:
+        process_steps_payload = _build_rule_based_process_steps(procedure_text_for_steps)
+        if process_steps_payload:
+            raw_outputs.append(
+                {
+                    "step_name": "process_steps",
+                    "module_name": "rule_based_procedure_fallback",
+                    "json_parse_ok": True,
+                    "json_parse_error": None,
+                    "raw_output": json.dumps(process_steps_payload, ensure_ascii=False),
+                    "warning": "compact_process_steps_empty_used_rule_based_fallback",
+                }
+            )
+    if not process_steps_payload and not procedure_text_for_steps:
         stage3_warnings.append("procedure_text_not_found")
 
     evidence_source_payload: object | None
@@ -664,14 +697,22 @@ def _run_compact_stage3_extraction(
         figure_metadata_map=figure_metadata_map,
         tables_summary=tables_summary,
     )
+    evidence_payload = _ensure_scientific_figure_evidence_candidates(
+        evidence_payload,
+        figures=figures,
+    )
 
     cleaned_paper_basic_info = _postprocess_paper_basic_info(
         payload=core_payload.get("paper_basic_info"),
         paper_text=paper_text,
         source_file=effective_markdown_path,
     )
-    cleaned_global_constants, moved_top_level_logs = move_top_level_core_keys_from_global_constants(
+    compact_global_constants_payload = _coerce_compact_global_constants_payload(
         core_payload.get("global_constants"),
+        ontology_map,
+    )
+    cleaned_global_constants, moved_top_level_logs = move_top_level_core_keys_from_global_constants(
+        compact_global_constants_payload,
         ontology_map,
     )
 
@@ -1082,16 +1123,27 @@ def _scope_stage2_evidence_inputs(
         if not figure_id:
             continue
         scoped_figure_ids.add(figure_id)
-        if _figure_is_in_selected_scope(
+        scientific_class = str(figure.get("figure_class") or "").strip()
+        in_scope = _figure_is_in_selected_scope(
             figure,
             normalized_selected_text=normalized_selected_text,
             normalized_titles=normalized_titles,
             normalized_keywords=normalized_keywords,
             selected_chapter_numbers=selected_chapter_numbers,
-        ):
+        )
+        if in_scope or scientific_class in SCIENTIFIC_EVIDENCE_FIGURE_CLASSES:
             scoped_figures.append(figure)
             included_figure_ids.append(figure_id)
             figure_ids_in_scope.add(figure_id)
+            if not in_scope and scientific_class in SCIENTIFIC_EVIDENCE_FIGURE_CLASSES:
+                review_entries.append(
+                    {
+                        "source_type": "figure",
+                        "source_id": figure_id,
+                        "reason": "force_keep_scientific_figure_candidate",
+                        "figure_class": scientific_class,
+                    }
+                )
             continue
         review_entries.append(
             {
@@ -1295,6 +1347,55 @@ def _postprocess_paper_basic_info(
     return result
 
 
+def _coerce_compact_global_constants_payload(
+    payload: object | None,
+    ontology: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    result = dict(payload) if isinstance(payload, dict) else {}
+    raw_materials = result.get("raw_materials")
+    if isinstance(raw_materials, dict):
+        result["raw_materials"] = [
+            {
+                "material_id": f"raw-material-{index + 1}",
+                "role": str(key),
+                "name": str(value) if value not in (None, "") else str(key),
+                "note": None if value in (None, "") else f"{key}: {value}",
+            }
+            for index, (key, value) in enumerate(raw_materials.items())
+        ]
+    elif isinstance(raw_materials, list):
+        normalized_raw_materials = []
+        for index, item in enumerate(raw_materials, start=1):
+            if isinstance(item, dict):
+                normalized_raw_materials.append(item)
+            elif item not in (None, ""):
+                normalized_raw_materials.append({"material_id": f"raw-material-{index}", "name": str(item)})
+        result["raw_materials"] = normalized_raw_materials
+
+    characterization_methods = result.get("characterization_methods")
+    if isinstance(characterization_methods, list):
+        normalized_methods = []
+        for item in characterization_methods:
+            if isinstance(item, dict):
+                normalized_methods.append(item)
+            elif item not in (None, ""):
+                normalized_methods.append({"method": str(item)})
+        result["characterization_methods"] = normalized_methods
+
+    nominal_composition = result.get("nominal_composition")
+    if isinstance(nominal_composition, dict):
+        result["nominal_composition"] = [
+            {"component": str(key), "value": value}
+            for key, value in nominal_composition.items()
+        ]
+
+    result["additional_parameter_records"] = _coerce_parameter_record_list(
+        result.get("additional_parameter_records"),
+        ontology,
+    )
+    return result
+
+
 def _ensure_list(value: Any, field_name: str, warnings: list[str]) -> list[Any]:
     if value is None:
         warnings.append(f"{field_name}:normalized_none_to_empty_list")
@@ -1398,6 +1499,8 @@ def _coerce_data_points_payload(
     elif isinstance(payload, dict):
         if isinstance(payload.get("data_points"), list):
             datapoint_items = payload.get("data_points") or []
+        elif _is_structured_datapoint_payload(payload):
+            datapoint_items = [payload]
         elif _looks_like_datapoint_dict(payload):
             datapoint_items = _explode_flat_datapoint_dict(payload)
         else:
@@ -1464,6 +1567,17 @@ def _looks_like_datapoint_dict(payload: dict[str, Any]) -> bool:
     return any(not str(key).startswith("_") for key in payload.keys())
 
 
+def _is_structured_datapoint_payload(payload: dict[str, Any]) -> bool:
+    structured_keys = {
+        "independent_variable_values",
+        "process_parameters",
+        "results",
+        "additional_parameter_records",
+        "extended_data",
+    }
+    return any(key in payload for key in structured_keys)
+
+
 def _explode_flat_datapoint_dict(payload: dict[str, Any]) -> list[dict[str, Any]]:
     list_lengths = [len(value) for value in payload.values() if isinstance(value, list) and value]
     count = max(list_lengths) if list_lengths else 1
@@ -1491,6 +1605,13 @@ def _normalize_datapoint_item(
     ontology: dict[str, dict[str, Any]],
     item_index: int,
 ) -> dict[str, Any]:
+    if _looks_like_flat_parameter_bundle_dict(item):
+        return _build_datapoint_from_flat_parameter_bundle(
+            item,
+            series=series,
+            ontology=ontology,
+            item_index=item_index,
+        )
     if any(
         key in item
         for key in (
@@ -1699,6 +1820,9 @@ def _coerce_parameter_record_list(
     if value is None:
         return []
     if isinstance(value, list):
+        merged = _merge_split_parameter_record_rows(value, ontology)
+        if merged is not None:
+            return merged
         records: list[dict[str, Any]] = []
         for item in value:
             if not isinstance(item, dict):
@@ -1706,6 +1830,8 @@ def _coerce_parameter_record_list(
             records.extend(_split_parameter_record_dict(item, ontology))
         return records
     if isinstance(value, dict):
+        if _looks_like_flat_parameter_bundle_dict(value):
+            return [_coerce_flat_parameter_bundle_to_record(value, ontology)]
         if {"canonical_key", "raw_name", "value"} & set(value.keys()):
             return _split_parameter_record_dict(value, ontology)
         coerced: list[dict[str, Any]] = []
@@ -1745,6 +1871,125 @@ def _extract_procedure_text(markdown_text: str) -> str:
     if marker_index >= 0:
         return markdown_text[marker_index : marker_index + 6000].strip()
     return ""
+
+
+def _looks_like_flat_parameter_bundle_dict(item: dict[str, Any]) -> bool:
+    keys = {str(key).strip().lower() for key in item.keys()}
+    return "key" in keys and "value" in keys and keys.issubset(FLAT_PARAMETER_BUNDLE_KEYS | {"sample_id", "sample_label", "extended_data"})
+
+
+def _coerce_flat_parameter_bundle_to_record(
+    item: dict[str, Any],
+    ontology: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    raw_key = str(item.get("key") or "").strip()
+    canonical_key = raw_key if raw_key in ontology else None
+    source_text = str(item.get("context") or item.get("source_text") or "").strip() or None
+    evidence_id = str(item.get("evidence_id") or "").strip() or None
+    record: dict[str, Any] = {
+        "canonical_key": canonical_key,
+        "raw_name": raw_key or None,
+        "value": item.get("value"),
+        "unit": item.get("unit") or ((ontology.get(raw_key) or {}).get("standard_unit") if raw_key else None),
+        "raw_text": source_text,
+        "evidence_refs": _build_evidence_refs_from_flat_bundle(evidence_id, source_text),
+    }
+    if raw_key and canonical_key is None:
+        record["needs_ontology_extension"] = True
+        record["normalization_note"] = "two_pass_flat_bundle_unknown_key"
+    return record
+
+
+def _build_evidence_refs_from_flat_bundle(
+    evidence_id: str | None,
+    source_text: str | None,
+) -> list[dict[str, Any]]:
+    if not evidence_id and not source_text:
+        return []
+    ref: dict[str, Any] = {}
+    if evidence_id:
+        ref["source_id"] = evidence_id
+        lowered = evidence_id.lower()
+        if lowered.startswith("fig") or "图" in evidence_id:
+            ref["figure_id"] = evidence_id
+        elif lowered.startswith("table") or "表" in evidence_id:
+            ref["table_id"] = evidence_id
+    if source_text:
+        ref["quote_or_context"] = source_text
+    return [ref]
+
+
+def _merge_split_parameter_record_rows(
+    value: list[Any],
+    ontology: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]] | None:
+    rows = [item for item in value if isinstance(item, dict)]
+    if not rows:
+        return None
+    raw_names = [str(item.get("raw_name") or "").strip().lower() for item in rows]
+    if not raw_names or not any(name == "key" for name in raw_names):
+        return None
+    if not all(name in FLAT_PARAMETER_BUNDLE_KEYS for name in raw_names):
+        return None
+
+    merged_records: list[dict[str, Any]] = []
+    current: dict[str, Any] = {}
+    for item in rows:
+        raw_name = str(item.get("raw_name") or "").strip().lower()
+        if raw_name == "key" and current.get("key"):
+            merged_records.append(_coerce_flat_parameter_bundle_to_record(current, ontology))
+            current = {}
+        current[raw_name] = item.get("value")
+    if current.get("key"):
+        merged_records.append(_coerce_flat_parameter_bundle_to_record(current, ontology))
+    return merged_records
+
+
+def _build_datapoint_from_flat_parameter_bundle(
+    item: dict[str, Any],
+    *,
+    series: dict[str, Any],
+    ontology: dict[str, dict[str, Any]],
+    item_index: int,
+) -> dict[str, Any]:
+    sample_id = item.get("sample_id") or f"{series.get('series_id') or 'series'}-dp-{item_index + 1}"
+    parameter_record = _coerce_flat_parameter_bundle_to_record(item, ontology)
+    canonical_key = str(parameter_record.get("canonical_key") or parameter_record.get("raw_name") or "").strip()
+    value = parameter_record.get("value")
+    process_parameters: dict[str, Any] = {}
+    results: dict[str, Any] = {}
+    entry = ontology.get(canonical_key) if canonical_key else None
+    category = str((entry or {}).get("category") or "").lower()
+    if canonical_key in _formability_keys():
+        results[canonical_key] = value
+    elif category in {
+        "processing",
+        "composition",
+        "solution",
+        "sol_process",
+        "sol_property",
+        "precursor_solution",
+        "forming",
+        "heat_treatment",
+    }:
+        process_parameters[canonical_key or str(parameter_record.get("raw_name") or "unknown_parameter")] = value
+    else:
+        results[canonical_key or str(parameter_record.get("raw_name") or "unknown_parameter")] = value
+
+    normalized = {
+        "sample_id": sample_id,
+        "sample_label": item.get("sample_label") or sample_id,
+        "independent_variable_values": [],
+        "process_parameters": process_parameters,
+        "results": results,
+        "evidence_refs": parameter_record.get("evidence_refs") or [],
+        "additional_parameter_records": [parameter_record],
+        "extended_data": {
+            **dict(item.get("extended_data") or {}),
+            "parent_series_id": series.get("series_id"),
+        },
+    }
+    return _structure_data_point_sections(normalized, ontology)
 
 
 def _read_int_env(name: str, default: int, warnings: list[str]) -> int:
@@ -2332,6 +2577,37 @@ def _split_evidence_objects_payload(
         for target in ids:
             split_payload.append(_finalize_evidence_item(item, target, figure_metadata_map))
     return _ensure_unique_evidence_ids(split_payload)
+
+
+def _ensure_scientific_figure_evidence_candidates(
+    evidence_payload: list[dict[str, Any]],
+    *,
+    figures: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    existing_figure_ids = {str(item.get("figure_id") or "").strip() for item in evidence_payload if item.get("figure_id")}
+    augmented = list(evidence_payload)
+    for figure in figures:
+        figure_id = str(figure.get("figure_id") or "").strip()
+        figure_class = str(figure.get("figure_class") or "").strip()
+        if not figure_id or figure_id in existing_figure_ids:
+            continue
+        if figure_class not in SCIENTIFIC_EVIDENCE_FIGURE_CLASSES:
+            continue
+        references = [str(text).strip() for text in (figure.get("reference_sentences") or []) if str(text).strip()]
+        source_text = " ".join(references[:2]) or str(figure.get("description_text") or "").strip() or str(figure.get("caption") or "").strip()
+        augmented.append(
+            {
+                "evidence_id": figure_id,
+                "figure_id": figure_id,
+                "figure_type": figure_class,
+                "object_type": "figure",
+                "caption": figure.get("caption"),
+                "source_text": source_text or None,
+                "note": "fallback_stage2_scientific_figure_candidate",
+            }
+        )
+        existing_figure_ids.add(figure_id)
+    return _ensure_unique_evidence_ids(augmented)
 
 
 def _flatten_raw_evidence_payload(

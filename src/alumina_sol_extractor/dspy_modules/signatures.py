@@ -123,7 +123,9 @@ def get_signatures():
             desc=(
                 "Return JSON only as an object with keys: "
                 "paper_basic_info, global_constants, experiment_series, process_steps. "
-                "Use [] instead of null for experiment_series and process_steps."
+                "Use [] instead of null for experiment_series and process_steps. "
+                "For global_constants.raw_materials always return a JSON list, not a single dict. "
+                "For global_constants.characterization_methods always return a JSON list of objects with method fields, not plain strings."
             )
         )
 
@@ -140,7 +142,11 @@ def get_signatures():
             desc=(
                 "Return JSON only as an object with keys: data_points, evidence_objects. "
                 "Use [] instead of null when no items are found. "
-                "Link data points to experiment series when series_id is known, and keep evidence_objects concise."
+                "Each data point must already be a structured object; never emit pseudo-rows like "
+                "{raw_name:'key', value:'viscosity_Pa_s'} or separate key/value/unit/context rows. "
+                "If you have a parameter tuple, emit it as one object with canonical key, value, unit, source_text/context, and evidence reference together. "
+                "Link data points to experiment series when series_id is known, and keep evidence_objects concise. "
+                "When scientific figures exist (XRD, FTIR, Raman, TG/DSC, SEM/TEM, mechanical plots), emit evidence_objects with figure_id, caption, figure_type, and source_text whenever possible."
             )
         )
 
