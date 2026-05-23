@@ -110,6 +110,10 @@ FLAT_PARAMETER_BUNDLE_KEYS = {
     "evidence_id",
     "evidence_ref",
     "series_id",
+    "series_name",
+    "sample",
+    "sample_id",
+    "sample_label",
 }
 
 
@@ -1302,6 +1306,12 @@ def _postprocess_paper_basic_info(
         result["authors"] = [str(result.get("author")).strip()]
 
     year = result.get("year")
+    if isinstance(year, str):
+        year_text = year.strip()
+        if not year_text:
+            result["year"] = None
+        elif re.fullmatch(r"(19|20)\d{2}", year_text):
+            result["year"] = int(year_text)
     if year is None:
         date_text = str(result.get("date") or "").strip()
         date_match = re.match(r"((?:19|20)\d{2})", date_text)
@@ -1876,7 +1886,7 @@ def _extract_procedure_text(markdown_text: str) -> str:
 
 def _looks_like_flat_parameter_bundle_dict(item: dict[str, Any]) -> bool:
     keys = {str(key).strip().lower() for key in item.keys()}
-    return "key" in keys and "value" in keys and keys.issubset(FLAT_PARAMETER_BUNDLE_KEYS | {"sample_id", "sample_label", "extended_data"})
+    return "key" in keys and "value" in keys and keys.issubset(FLAT_PARAMETER_BUNDLE_KEYS | {"extended_data"})
 
 
 def _coerce_flat_parameter_bundle_to_record(
@@ -1954,6 +1964,7 @@ def _build_datapoint_from_flat_parameter_bundle(
     item_index: int,
 ) -> dict[str, Any]:
     sample_id = item.get("sample_id") or f"{series.get('series_id') or 'series'}-dp-{item_index + 1}"
+    sample_label = item.get("sample_label") or item.get("sample") or sample_id
     parameter_record = _coerce_flat_parameter_bundle_to_record(item, ontology)
     canonical_key = str(parameter_record.get("canonical_key") or parameter_record.get("raw_name") or "").strip()
     value = parameter_record.get("value")
@@ -1979,7 +1990,7 @@ def _build_datapoint_from_flat_parameter_bundle(
 
     normalized = {
         "sample_id": sample_id,
-        "sample_label": item.get("sample_label") or sample_id,
+        "sample_label": sample_label,
         "independent_variable_values": [],
         "process_parameters": process_parameters,
         "results": results,
@@ -1988,6 +1999,7 @@ def _build_datapoint_from_flat_parameter_bundle(
         "extended_data": {
             **dict(item.get("extended_data") or {}),
             "parent_series_id": series.get("series_id"),
+            **({"series_name": item.get("series_name")} if item.get("series_name") else {}),
         },
     }
     return _structure_data_point_sections(normalized, ontology)

@@ -78,6 +78,8 @@ def merge_stage_outputs_to_paper_record(
     series_models = [_coerce_model(item, ExperimentSeries) for item in (experiment_series or [])]
     data_point_models = [_coerce_model(item, DataPoint) for item in (data_points or [])]
     process_step_models = [_coerce_model(item, ProcessStepRecord) for item in (process_steps or [])]
+    if not series_models and data_point_models:
+        series_models = _synthesize_series_from_data_points(data_point_models)
     series_models = _attach_data_points_to_series(series_models, data_point_models)
 
     payload = ensure_required_top_level_sections(
@@ -293,6 +295,40 @@ def _attach_data_points_to_series(
             merged_points = merged_points + leftovers
         rebuilt.append(series.model_copy(update={"data_points": merged_points}))
     return rebuilt
+
+
+def _synthesize_series_from_data_points(
+    data_points: list[DataPoint],
+) -> list[ExperimentSeries]:
+    grouped: dict[str, list[DataPoint]] = {}
+    series_names: dict[str, str] = {}
+    fallback_counter = 1
+    for data_point in data_points:
+        extended = dict(data_point.extended_data or {})
+        series_id = (
+            getattr(data_point, "series_id", None)
+            or extended.get("series_id")
+            or extended.get("parent_series_id")
+        )
+        if not series_id:
+            series_id = f"series-{fallback_counter}"
+            fallback_counter += 1
+        series_id = str(series_id)
+        grouped.setdefault(series_id, []).append(data_point)
+        series_name = extended.get("series_name")
+        if series_name:
+            series_names.setdefault(series_id, str(series_name))
+
+    synthesized: list[ExperimentSeries] = []
+    for index, (series_id, points) in enumerate(grouped.items(), start=1):
+        synthesized.append(
+            ExperimentSeries(
+                series_id=series_id,
+                series_name=series_names.get(series_id) or f"Series {index}",
+                extended_data={"synthetic_series_from_data_points": True},
+            )
+        )
+    return synthesized
 
 
 def _sanitize_model_payload(payload: Any, model_cls: type[SchemaBaseModel] | None = None) -> Any:

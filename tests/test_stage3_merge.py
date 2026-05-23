@@ -50,3 +50,18 @@ def test_merge_coerces_numeric_identifier_fields_to_strings() -> None:
     )
     assert record.experiment_series[0].series_id == "1"
     assert record.experiment_series[0].data_points[0].sample_id == "7"
+
+
+def test_merge_synthesizes_series_when_data_points_exist_without_series() -> None:
+    record = merge_stage_outputs_to_paper_record(
+        data_points=[
+            {"sample_id": "dp-1", "extended_data": {"parent_series_id": "1", "series_name": "Series A"}},
+            {"sample_id": "dp-2", "extended_data": {"parent_series_id": "2"}},
+        ],
+    )
+    assert len(record.experiment_series) == 2
+    assert record.experiment_series[0].series_id == "1"
+    assert record.experiment_series[0].series_name == "Series A"
+    assert len(record.experiment_series[0].data_points) == 1
+    assert record.experiment_series[1].series_id == "2"
+    assert len(record.experiment_series[1].data_points) == 1

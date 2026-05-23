@@ -185,3 +185,39 @@ def test_two_pass_split_key_value_rows_support_evidence_ref_alias() -> None:
     assert len(merged) == 1
     assert merged[0]["canonical_key"] == "ftir_peak_position_cm_1"
     assert merged[0]["evidence_refs"][0]["figure_id"] == "图2.8"
+
+
+def test_two_pass_split_key_value_rows_merge_sample_and_series_name_aliases() -> None:
+    ontology = {
+        "viscosity_Pa_s": {"standard_unit": "Pa*s", "category": "precursor_solution"},
+    }
+    payload = {
+        "sample_id": "dp-6",
+        "additional_parameter_records": [
+            {"raw_name": "key", "value": "viscosity_Pa_s"},
+            {"raw_name": "value", "value": 0.8},
+            {"raw_name": "unit", "value": "Pa*s"},
+            {"raw_name": "context", "value": "黏度约 0.8 Pa*s"},
+            {"raw_name": "sample", "value": "S1"},
+            {"raw_name": "series_name", "value": "Series Alpha"},
+            {"raw_name": "evidence_ref", "value": "Fig. 2"},
+        ],
+        "process_parameters": {},
+        "results": {},
+        "independent_variable_values": [],
+        "evidence_refs": [],
+        "extended_data": {},
+    }
+
+    records, parse_issue = _coerce_data_points_payload(
+        payload=payload,
+        series={"series_id": "ES-06"},
+        ontology=ontology,
+        series_index=0,
+    )
+
+    assert parse_issue is None
+    assert len(records) == 1
+    merged = records[0]["additional_parameter_records"]
+    assert len(merged) == 1
+    assert merged[0]["raw_name"] == "viscosity_Pa_s"
