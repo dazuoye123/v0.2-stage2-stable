@@ -107,6 +107,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--mode", choices=MODE_CHOICES, default="full")
+    parser.add_argument("--stage3-subdir", default="stage3")
     parser.add_argument("--max-experiment-series", type=int, default=None)
     parser.add_argument("--estimate-only", action="store_true")
     parser.add_argument("--continue-on-error", dest="continue_on_error", action="store_true", default=True)
@@ -127,6 +128,7 @@ def run_stage3_batch(
     dry_run: bool = False,
     continue_on_error: bool = True,
     mode: str = "full",
+    stage3_subdir: str = "stage3",
     max_experiment_series: int | None = None,
     estimate_only: bool = False,
 ) -> dict[str, Any]:
@@ -165,6 +167,7 @@ def run_stage3_batch(
             dry_run=dry_run,
             estimate_only=estimate_only,
             mode=resolved_mode,
+            stage3_subdir=stage3_subdir,
             max_experiment_series=max_experiment_series,
             run_id=run_id,
         )
@@ -199,6 +202,7 @@ def run_stage3_batch(
         dry_run=dry_run,
         estimate_only=estimate_only,
         mode=resolved_mode,
+        stage3_subdir=stage3_subdir,
         max_experiment_series=max_experiment_series,
         started_at=run_started,
         finished_at=run_finished,
@@ -231,6 +235,7 @@ def _process_manifest_row(
     dry_run: bool,
     estimate_only: bool,
     mode: str,
+    stage3_subdir: str,
     max_experiment_series: int | None,
     run_id: str,
 ) -> dict[str, Any]:
@@ -240,7 +245,7 @@ def _process_manifest_row(
     paper_id_guess = row.get("paper_id_guess") or ""
     markdown_path = _resolve_markdown_path(row, markdown_dir=markdown_dir)
     paper_output_dir = outputs_dir / category / paper_id_guess
-    stage3_dir = paper_output_dir / "stage3"
+    stage3_dir = paper_output_dir / stage3_subdir
     stage3_summary_path = stage3_dir / "stage3_summary.json"
 
     status = ""
@@ -330,6 +335,7 @@ def _process_manifest_row(
                     output_dir=paper_output_dir,
                     mode=mode,
                     max_experiment_series=max_experiment_series,
+                    stage3_subdir=stage3_subdir,
                 )
                 stage3_dir = result.output_dir
                 stage3_summary_path = stage3_dir / "stage3_summary.json"
@@ -619,6 +625,7 @@ def _build_summary(
     dry_run: bool,
     estimate_only: bool,
     mode: str,
+    stage3_subdir: str,
     max_experiment_series: int | None,
     started_at: str,
     finished_at: str,
@@ -674,6 +681,7 @@ def _build_summary(
         "dry_run": dry_run,
         "estimate_only": estimate_only,
         "mode": mode,
+        "stage3_subdir": stage3_subdir,
         "max_experiment_series": max_experiment_series,
         "total_candidates": len(report_rows),
         "paper_count": len(report_rows),
@@ -716,6 +724,7 @@ def _build_markdown_report(summary: dict[str, Any], report_rows: list[dict[str, 
         "## Summary",
         "",
         f"- mode: {summary['mode']}",
+        f"- stage3_subdir: {summary['stage3_subdir']}",
         f"- estimate_only: {summary['estimate_only']}",
         f"- total_candidates: {summary['total_candidates']}",
         f"- attempted_count: {summary['attempted_count']}",
@@ -816,6 +825,7 @@ def main() -> None:
         dry_run=args.dry_run,
         continue_on_error=args.continue_on_error,
         mode=args.mode,
+        stage3_subdir=args.stage3_subdir,
         max_experiment_series=args.max_experiment_series,
         estimate_only=args.estimate_only,
     )

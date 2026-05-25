@@ -26,6 +26,7 @@ def run_stage3_dspy_pipeline(
     *,
     mode: str = "full",
     max_experiment_series: int | None = None,
+    stage3_subdir: str = "stage3",
 ) -> Stage3Result:
     """Run optional Stage 3 without affecting Stage 1/2 defaults."""
     summary = run_stage3_dspy_schema_extraction(
@@ -36,5 +37,6 @@ def run_stage3_dspy_pipeline(
         output_dir=output_dir,
         mode=mode,
         max_experiment_series=max_experiment_series,
+        stage3_subdir=stage3_subdir,
     )
-    return Stage3Result(output_dir=Path(output_dir) / "stage3", summary=summary)
+    return Stage3Result(output_dir=Path(output_dir) / stage3_subdir, summary=summary)

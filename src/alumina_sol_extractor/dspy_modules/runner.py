@@ -150,6 +150,7 @@ def run_stage3_dspy_schema_extraction(
     *,
     mode: str = "full",
     max_experiment_series: int | None = None,
+    stage3_subdir: str = "stage3",
 ) -> dict[str, Any]:
     """Run optional Stage 3 DSPy schema extraction or dry-run validator."""
     dspy_settings = load_dspy_settings(Path(project_root), settings)
@@ -165,7 +166,7 @@ def run_stage3_dspy_schema_extraction(
         paper_id=paper_id,
         cleaned_markdown_path=Path(cleaned_markdown_path),
         output_dir=Path(output_dir),
-        stage3_dir_name="stage3",
+        stage3_dir_name=stage3_subdir,
         summary_filename=dspy_settings.get("outputs", {}).get("summary", "stage3_summary.json"),
         raw_outputs_filename=None,
         extraction_mode=mode,
