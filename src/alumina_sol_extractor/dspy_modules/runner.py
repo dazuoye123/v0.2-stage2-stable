@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from alumina_sol_extractor.models.schema_v2 import (
     ExperimentSeries,
     GlobalConstants,
     EvidenceRef,
+    JsonScalar,
     ParameterRecord,
     PaperBasicInfo,
     PaperExtractionRecord,
@@ -28,6 +30,7 @@ from alumina_sol_extractor.stage3.merge import (
 from alumina_sol_extractor.stage3.normalization import (
     collect_parameter_records,
     normalize_parameter_records,
+    prune_rejected_parameter_records,
     reject_noncanonical_records,
     validate_canonical_keys,
 )
@@ -99,6 +102,8 @@ SCIENTIFIC_EVIDENCE_FIGURE_CLASSES = {
     "thermal_analysis_plot",
     "microscopy_image",
     "mechanical_property_plot",
+    "ferron_curve",
+    "rheology_curve",
 }
 
 FLAT_PARAMETER_BUNDLE_KEYS = {
@@ -114,6 +119,25 @@ FLAT_PARAMETER_BUNDLE_KEYS = {
     "sample",
     "sample_id",
     "sample_label",
+    "parameters",
+}
+
+MANUAL_PARAMETER_KEY_ALIASES = {
+    "spinning pressure": "feed_pressure_MPa",
+    "spinning pressure mpa": "feed_pressure_MPa",
+    "feed pressure": "feed_pressure_MPa",
+    "calcination temperature": "calcination_temperature_C",
+    "calcination temp": "calcination_temperature_C",
+    "calcined temperature": "calcination_temperature_C",
+    "peo content": "peo_content_wt_percent",
+    "polyethylene oxide content": "peo_content_wt_percent",
+    "pva content": "pva_content_wt_percent",
+    "polyvinyl alcohol content": "pva_content_wt_percent",
+    "mg/al ratio": "Mg_to_Al_molar_ratio",
+    "mg:al ratio": "Mg_to_Al_molar_ratio",
+    "mg to al molar ratio": "Mg_to_Al_molar_ratio",
+    "magnesium to aluminum molar ratio": "Mg_to_Al_molar_ratio",
+    "mg_to_al_molar_ratio": "Mg_to_Al_molar_ratio",
 }
 
 
@@ -893,6 +917,7 @@ def _validate_stage3_record(record: PaperExtractionRecord, project_root: Path, s
     ontology = get_ontology_entry_map(project_root)
     parameter_records = collect_parameter_records(record)
     accepted_records, rejected_records = reject_noncanonical_records(parameter_records, ontology)
+    record = prune_rejected_parameter_records(record, ontology)
     normalized_records, normalization_log = normalize_parameter_records(accepted_records, ontology)
     canonical_key_errors = [
         {**issue, "type": "canonical_key_error"}
@@ -1514,6 +1539,16 @@ def _coerce_data_points_payload(
     ontology: dict[str, dict[str, Any]],
     series_index: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Coerce two-pass/full data point payloads into legal DataPoint dicts.
+
+    Accepted compact shapes:
+    A. Standard parameter record dicts with canonical_key/raw_name/value/unit/source_text/evidence_refs
+    B. Flat compact bundles: key/value/unit/context/evidence_id
+    C. Dicts with ``parameters=[...]`` containing compact bundles
+
+    This helper must never materialize pseudo records such as
+    raw_name=key/value/unit/context/evidence_ref.
+    """
     datapoint_items: list[object] = []
     parse_issue: dict[str, Any] | None = None
     if isinstance(payload, list):
@@ -1521,6 +1556,8 @@ def _coerce_data_points_payload(
     elif isinstance(payload, dict):
         if isinstance(payload.get("data_points"), list):
             datapoint_items = payload.get("data_points") or []
+        elif isinstance(payload.get("parameters"), list):
+            datapoint_items = _expand_compact_parameter_bundle_list(payload)
         elif _is_structured_datapoint_payload(payload):
             datapoint_items = [payload]
         elif _looks_like_datapoint_dict(payload):
@@ -1618,6 +1655,22 @@ def _explode_flat_datapoint_dict(payload: dict[str, Any]) -> list[dict[str, Any]
                 item[key] = value
         exploded.append(item)
     return exploded
+
+
+def _expand_compact_parameter_bundle_list(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    shared_fields = {
+        key: deepcopy(value)
+        for key, value in payload.items()
+        if key not in {"parameters"} and not str(key).startswith("_")
+    }
+    expanded: list[dict[str, Any]] = []
+    for item in payload.get("parameters") or []:
+        if not isinstance(item, dict):
+            continue
+        merged = dict(shared_fields)
+        merged.update(item)
+        expanded.append(merged)
+    return expanded
 
 
 def _normalize_datapoint_item(
@@ -1900,25 +1953,85 @@ def _looks_like_flat_parameter_bundle_dict(item: dict[str, Any]) -> bool:
     return "key" in keys and "value" in keys and keys.issubset(FLAT_PARAMETER_BUNDLE_KEYS | {"extended_data"})
 
 
+def _normalize_alias_token(value: str) -> str:
+    text = re.sub(r"[\s_\-]+", " ", str(value or "").strip().casefold())
+    text = re.sub(r"[^\w/%:+\. ]+", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _resolve_canonical_key(raw_key: str | None, ontology: dict[str, dict[str, Any]]) -> str | None:
+    candidate = str(raw_key or "").strip()
+    if not candidate:
+        return None
+    if candidate in ontology:
+        return candidate
+
+    normalized_candidate = _normalize_alias_token(candidate)
+    manual = MANUAL_PARAMETER_KEY_ALIASES.get(normalized_candidate)
+    if manual and manual in ontology:
+        return manual
+
+    for canonical_key, entry in ontology.items():
+        if normalized_candidate == _normalize_alias_token(canonical_key):
+            return canonical_key
+        aliases: list[str] = [canonical_key]
+        for field_name in ("aliases_en", "aliases_zh", "en_aliases", "zh_aliases"):
+            aliases.extend(str(alias) for alias in (entry.get(field_name) or []) if alias)
+        for field_name in ("zh_name", "en_name"):
+            alias = entry.get(field_name)
+            if alias:
+                aliases.append(str(alias))
+        if any(normalized_candidate == _normalize_alias_token(alias) for alias in aliases):
+            return canonical_key
+    return None
+
+
+def _normalize_bundle_scalar_value(
+    *,
+    canonical_key: str | None,
+    value: Any,
+    source_text: str | None,
+) -> tuple[JsonScalar, str | None, str | None]:
+    if isinstance(value, list) and _is_list_valued_spectral_key(str(canonical_key or "")):
+        return None, json.dumps(value, ensure_ascii=False), "raw_list_value_preserved_unmaterialized; split_required_for_spectral_series"
+    if isinstance(value, list):
+        return None, json.dumps(value, ensure_ascii=False), "raw_list_value_preserved_unmaterialized; needs_manual_review"
+    if isinstance(value, dict):
+        return None, json.dumps(value, ensure_ascii=False, sort_keys=True), "raw_dict_value_preserved_unmaterialized; needs_manual_review"
+    if source_text:
+        return value, source_text, None
+    return value, (str(value) if value is not None else None), None
+
+
 def _coerce_flat_parameter_bundle_to_record(
     item: dict[str, Any],
     ontology: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     raw_key = str(item.get("key") or "").strip()
-    canonical_key = raw_key if raw_key in ontology else None
+    canonical_key = _resolve_canonical_key(raw_key, ontology)
     source_text = str(item.get("context") or item.get("source_text") or "").strip() or None
     evidence_id = str(item.get("evidence_id") or item.get("evidence_ref") or "").strip() or None
+    normalized_value, normalized_raw_text, normalization_note = _normalize_bundle_scalar_value(
+        canonical_key=canonical_key,
+        value=item.get("value"),
+        source_text=source_text,
+    )
     record: dict[str, Any] = {
         "canonical_key": canonical_key,
         "raw_name": raw_key or None,
-        "value": item.get("value"),
-        "unit": item.get("unit") or ((ontology.get(raw_key) or {}).get("standard_unit") if raw_key else None),
-        "raw_text": source_text,
+        "value": normalized_value,
+        "unit": item.get("unit") or ((ontology.get(canonical_key or raw_key) or {}).get("standard_unit") if (canonical_key or raw_key) else None),
+        "raw_text": normalized_raw_text,
         "evidence_refs": _build_evidence_refs_from_flat_bundle(evidence_id, source_text),
     }
+    if normalization_note:
+        record["normalization_note"] = normalization_note
     if raw_key and canonical_key is None:
         record["needs_ontology_extension"] = True
-        record["normalization_note"] = "two_pass_flat_bundle_unknown_key"
+        record["normalization_note"] = _append_normalization_note(
+            record.get("normalization_note"),
+            "two_pass_flat_bundle_unknown_key",
+        )
     return record
 
 
@@ -2532,6 +2645,12 @@ def _split_parameter_record_dict(
     ontology: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     record = dict(item)
+    resolved_key = _resolve_canonical_key(
+        str(record.get("canonical_key") or record.get("raw_name") or "").strip(),
+        ontology,
+    )
+    if resolved_key:
+        record["canonical_key"] = resolved_key
     canonical_key = str(record.get("canonical_key") or record.get("raw_name") or "").strip()
     value = record.get("value")
     if isinstance(value, list) and _is_list_valued_spectral_key(canonical_key):

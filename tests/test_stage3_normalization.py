@@ -6,6 +6,7 @@ from alumina_sol_extractor.models.schema_v2 import ParameterRecord
 from alumina_sol_extractor.ontology import get_ontology_entry_map
 from alumina_sol_extractor.stage3.normalization import (
     normalize_parameter_records,
+    prune_rejected_parameter_records,
     reject_noncanonical_records,
     validate_canonical_keys,
 )
@@ -45,3 +46,30 @@ def test_unit_normalization_converts_supported_units() -> None:
     assert normalized[2].value == 2
     assert normalized[2].unit == "h"
     assert len(logs) == 3
+
+
+def test_prune_rejected_parameter_records_removes_unknown_keys_from_output_record() -> None:
+    ontology = get_ontology_entry_map(PROJECT_ROOT)
+    from alumina_sol_extractor.models.schema_v2 import DataPoint, ExperimentSeries, PaperExtractionRecord
+
+    record = PaperExtractionRecord(
+        experiment_series=[
+            ExperimentSeries(
+                series_id="S1",
+                data_points=[
+                    DataPoint(
+                        sample_id="dp-1",
+                        additional_parameter_records=[
+                            ParameterRecord(canonical_key="mystery_key", raw_name="mystery key", value=1),
+                            ParameterRecord(canonical_key="pH", raw_name="pH", value=3.5, unit="dimensionless"),
+                        ],
+                    )
+                ],
+            )
+        ]
+    )
+
+    pruned = prune_rejected_parameter_records(record, ontology)
+    records = pruned.experiment_series[0].data_points[0].additional_parameter_records
+    assert len(records) == 1
+    assert records[0].canonical_key == "pH"

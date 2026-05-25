@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from alumina_sol_extractor.dspy_modules.runner import _coerce_data_points_payload
+from alumina_sol_extractor.ontology import get_ontology_entry_map
 
 
 def test_flat_datapoint_fields_are_structured_into_sections() -> None:
@@ -239,3 +242,85 @@ def test_data_points_payload_without_series_is_still_coerced() -> None:
     assert parse_issue is None
     assert len(records) == 1
     assert records[0]["additional_parameter_records"][0]["raw_name"] == "ph"
+
+
+def test_compact_bundle_list_is_expanded_into_multiple_legal_datapoints() -> None:
+    ontology = {
+        "feed_pressure_MPa": {"standard_unit": "MPa", "category": "forming"},
+        "calcination_temperature_C": {"standard_unit": "C", "category": "heat_treatment"},
+    }
+    payload = {
+        "sample_label": "S1",
+        "parameters": [
+            {"key": "spinning pressure", "value": 0.3, "unit": "MPa", "context": "spinning pressure = 0.3 MPa"},
+            {"key": "calcination temperature", "value": 1200, "unit": "C", "context": "calcination at 1200 C"},
+        ],
+    }
+
+    records, parse_issue = _coerce_data_points_payload(
+        payload=payload,
+        series={"series_id": "ES-07"},
+        ontology=ontology,
+        series_index=0,
+    )
+
+    assert parse_issue is None
+    assert len(records) == 2
+    assert records[0]["additional_parameter_records"][0]["canonical_key"] == "feed_pressure_MPa"
+    assert records[1]["additional_parameter_records"][0]["canonical_key"] == "calcination_temperature_C"
+
+
+def test_list_valued_bundle_value_is_materialized_without_validation_break() -> None:
+    ontology = {
+        "calcination_temperature_C": {"standard_unit": "C", "category": "heat_treatment"},
+    }
+    payload = {
+        "key": "calcination temperature",
+        "value": [600, 800, 1000],
+        "unit": "C",
+        "context": "calcined at 600, 800, and 1000 C",
+    }
+
+    records, parse_issue = _coerce_data_points_payload(
+        payload=payload,
+        series={"series_id": "ES-08"},
+        ontology=ontology,
+        series_index=0,
+    )
+
+    assert parse_issue is None
+    assert len(records) == 3
+    values = [record["additional_parameter_records"][0]["value"] for record in records]
+    assert values == [600, 800, 1000]
+    assert all(
+        record["additional_parameter_records"][0]["canonical_key"] == "calcination_temperature_C"
+        for record in records
+    )
+
+
+def test_alias_normalization_supports_common_two_pass_parameter_names() -> None:
+    ontology = get_ontology_entry_map(Path(__file__).resolve().parents[1])
+    payload = {
+        "parameters": [
+            {"key": "PVA content", "value": 1.0, "unit": "wt%", "context": "PVA content = 1 wt%"},
+            {"key": "PEO content", "value": 3.5, "unit": "wt%", "context": "PEO content = 3.5 wt%"},
+            {"key": "spinning pressure", "value": 0.4, "unit": "MPa", "context": "spinning pressure = 0.4 MPa"},
+            {"key": "Mg/Al ratio", "value": "1:2", "unit": "ratio", "context": "Mg/Al ratio = 1:2"},
+        ]
+    }
+
+    records, parse_issue = _coerce_data_points_payload(
+        payload=payload,
+        series={"series_id": "ES-09"},
+        ontology=ontology,
+        series_index=0,
+    )
+
+    assert parse_issue is None
+    canonical_keys = [record["additional_parameter_records"][0]["canonical_key"] for record in records]
+    assert canonical_keys == [
+        "pva_content_wt_percent",
+        "peo_content_wt_percent",
+        "feed_pressure_MPa",
+        "Mg_to_Al_molar_ratio",
+    ]

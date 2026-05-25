@@ -97,3 +97,28 @@ def test_scientific_figures_are_promoted_into_evidence_candidates_when_payload_i
 
     assert {item["figure_id"] for item in evidence} == {"图2-1", "图2-2"}
     assert all(item["figure_type"] in {"xrd_pattern", "microscopy_image"} for item in evidence)
+
+
+def test_deterministic_evidence_fallback_includes_ferron_and_rheology_curves() -> None:
+    evidence = _ensure_scientific_figure_evidence_candidates(
+        [],
+        figures=[
+            {
+                "figure_id": "fig-ferron",
+                "figure_class": "ferron_curve",
+                "caption": "Ferron curve",
+                "reference_sentences": ["Ferron results are shown in fig-ferron."],
+                "description_text": "Ferron species distribution curve",
+            },
+            {
+                "figure_id": "fig-rheology",
+                "figure_class": "rheology_curve",
+                "caption": "Rheology curve",
+                "reference_sentences": ["Rheology behavior is shown in fig-rheology."],
+                "description_text": "Viscosity-shear-rate curve",
+            },
+        ],
+    )
+
+    assert {item["figure_id"] for item in evidence} == {"fig-ferron", "fig-rheology"}
+    assert {item["figure_type"] for item in evidence} == {"ferron_curve", "rheology_curve"}

@@ -82,9 +82,7 @@ def reject_noncanonical_records(
     accepted: list[ParameterRecord] = []
     rejected: list[dict[str, Any]] = []
     for index, record in enumerate(records):
-        if (record.canonical_key and record.canonical_key in ontology_map) or (
-            not record.canonical_key and bool(getattr(record, "needs_ontology_extension", False))
-        ):
+        if record.canonical_key and record.canonical_key in ontology_map:
             accepted.append(record)
         else:
             rejected.append(
@@ -94,9 +92,70 @@ def reject_noncanonical_records(
                     "raw_name": record.raw_name,
                     "raw_text": record.raw_text,
                     "reason": "noncanonical_parameter_record",
+                    "needs_manual_review": True,
                 }
             )
     return accepted, rejected
+
+
+def prune_rejected_parameter_records(
+    record: PaperExtractionRecord,
+    ontology: OntologyMap | None,
+) -> PaperExtractionRecord:
+    """Drop noncanonical parameter records from the output record.
+
+    Rejected records are still surfaced in validation summaries/reports, but they
+    should not remain inside accepted `data_points` / `global_constants` payloads.
+    """
+
+    ontology_map = _coerce_ontology_map(ontology)
+
+    def _keep(items: list[ParameterRecord]) -> list[ParameterRecord]:
+        accepted, _ = reject_noncanonical_records(items, ontology_map)
+        return accepted
+
+    updated_global = None
+    if record.global_constants:
+        updated_global = record.global_constants.model_copy(
+            update={
+                "additional_parameter_records": _keep(list(record.global_constants.additional_parameter_records or []))
+            }
+        )
+
+    updated_series: list[ExperimentSeries] = []
+    for series in record.experiment_series:
+        updated_constants = None
+        if series.series_constants:
+            updated_constants = series.series_constants.model_copy(
+                update={
+                    "parameter_records": _keep(list(series.series_constants.parameter_records or []))
+                }
+            )
+        updated_data_points: list[DataPoint] = []
+        for data_point in series.data_points:
+            updated_data_points.append(
+                data_point.model_copy(
+                    update={
+                        "independent_variable_values": _keep(list(data_point.independent_variable_values or [])),
+                        "additional_parameter_records": _keep(list(data_point.additional_parameter_records or [])),
+                    }
+                )
+            )
+        updated_series.append(
+            series.model_copy(
+                update={
+                    "series_constants": updated_constants,
+                    "data_points": updated_data_points,
+                }
+            )
+        )
+
+    return record.model_copy(
+        update={
+            "global_constants": updated_global,
+            "experiment_series": updated_series,
+        }
+    )
 
 
 def normalize_parameter_records(

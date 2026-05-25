@@ -1093,6 +1093,22 @@ parameters:
   - Al:NO3 ratio
   is_core_statistical_field: true
   description: Molar ratio between total aluminum species and nitrate species.
+- canonical_key: Mg_to_Al_molar_ratio
+  category: composition
+  standard_unit: ratio
+  zh_name: magnesium to aluminum molar ratio
+  en_name: magnesium to aluminum molar ratio
+  aliases_zh:
+  - Mg/Al molar ratio
+  - Mg:Al molar ratio
+  aliases_en:
+  - magnesium to aluminum molar ratio
+  - Mg/Al ratio
+  - Mg:Al ratio
+  - Mg_to_Al_molar_ratio
+  - MgAl2O4 ratio
+  is_core_statistical_field: true
+  description: Molar ratio between magnesium and aluminum species in precursor composition.
 - canonical_key: acid_type
   category: composition
   standard_unit: text

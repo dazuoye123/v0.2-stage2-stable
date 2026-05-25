@@ -19,3 +19,13 @@ def test_rule_based_process_step_fallback_builds_steps_from_procedure_sentences(
     assert any(step["action_zh"] == "加入" for step in steps)
     assert any(step["action_zh"] == "加热" for step in steps)
     assert any(step["action_zh"] == "冷却" for step in steps)
+
+
+def test_rule_based_process_step_fallback_does_not_materialize_review_statements() -> None:
+    review_text = (
+        "本文研究了氧化铝纤维的性能。"
+        "分析了热演化行为和研究意义。"
+        "综述了相关研究进展。"
+    )
+    steps = _build_rule_based_process_steps(review_text)
+    assert steps == []
