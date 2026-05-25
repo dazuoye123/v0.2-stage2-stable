@@ -115,3 +115,26 @@ def test_process_step_enrichment_extracts_reagents_conditions_and_heat_steps() -
     assert any(step["temperature_value"] == 800.0 and step["product_or_outcome"] == "γ-Al2O3 纤维" for step in steps)
     assert any(step["action"] == "calcine" and step["temperature_value"] == 1200.0 for step in steps)
     assert any(step["action"] == "obtain_product" and step["product_or_outcome"] == "α-Al2O3 纳米结构纤维" for step in steps)
+
+
+def test_process_step_normalization_repairs_weak_llm_steps_from_description() -> None:
+    payload = [
+        {
+            "step_order": 1,
+            "action": "other",
+            "description": "PVA was dissolved in water at 80 °C and stirred for 2 h.",
+            "evidence_text": "",
+        },
+        {
+            "step_order": 2,
+            "action": "other",
+            "description": "The sol was electrospun at 15 kV and 0.5 mL/h.",
+        },
+    ]
+
+    steps = _normalize_process_steps_payload(payload)
+
+    assert any(step["action"] == "dissolve" and step.get("temperature_value") == 80.0 for step in steps)
+    assert any(step["action"] == "stir" and step.get("duration_value") == 2.0 for step in steps)
+    assert any(step["action"] == "electrospin" and step.get("condition_key") == "applied_voltage_kV" and step.get("condition_value") == 15.0 for step in steps)
+    assert all(step.get("evidence_text") for step in steps)

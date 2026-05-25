@@ -49,3 +49,46 @@ def test_procedure_selector_skips_research_progress_when_real_methods_exist() ->
     assert "1.3 研究进展" not in selected_titles
     assert "称取硝酸铝" in selected_text
     assert "研究了样品的力学性能" not in selected_text
+
+
+def test_procedure_selector_prefers_english_experimental_methods_over_summary() -> None:
+    markdown = """# 1 Introduction
+This section reviews prior work.
+
+# 2 Experimental
+This section describes the sample preparation workflow.
+
+# 2.1 Materials and methods
+PVA was dissolved in water and the solution was stirred for 2 h.
+
+# 4 Summary
+This chapter summarizes the findings.
+"""
+    sections, selected_text = select_procedure_sections(markdown)
+    selected_titles = [item["title"] for item in sections if item.get("selected_for_process_steps")]
+    assert any(title in selected_titles for title in ("2 Experimental", "2.1 Materials and methods"))
+    assert "1 Introduction" not in selected_titles
+    assert "4 Summary" not in selected_titles
+    assert "PVA was dissolved in water" in selected_text
+
+
+def test_procedure_selector_keeps_late_experimental_chapters_in_long_thesis() -> None:
+    markdown = """# 第一章 绪论
+这里是文献综述。
+
+# 2.3 测试与表征
+这里是表征方法。
+
+# 3.2 样品制备
+称取样品，加入去离子水，搅拌后纺丝。
+
+# 4.2 热处理
+以 5 ℃/min 升温至 1000 ℃并保温 2 h。
+"""
+    sections, selected_text = select_procedure_sections(markdown)
+    selected_titles = [item["title"] for item in sections if item.get("selected_for_process_steps")]
+    assert "3.2 样品制备" in selected_titles
+    assert "4.2 热处理" in selected_titles
+    assert "第一章 绪论" not in selected_titles
+    assert "称取样品" in selected_text
+    assert "升温至 1000 ℃" in selected_text

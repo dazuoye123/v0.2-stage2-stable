@@ -86,13 +86,33 @@ SPECTRAL_LIST_CANONICAL_KEYS = {
 PROCESS_STEP_SECTION_KEYWORDS = (
     "实验过程",
     "实验部分",
+    "实验方法",
+    "实验材料",
+    "样品制备",
     "制备过程",
     "制备",
+    "制备方法",
+    "溶胶制备",
+    "前驱体制备",
+    "纺丝",
+    "静电纺丝",
+    "干法纺丝",
+    "热处理",
+    "煅烧",
+    "烧结",
     "实验",
     "synthesis",
+    "experimental",
     "experimental procedure",
+    "materials and methods",
+    "methods",
     "preparation",
+    "sample preparation",
     "fabrication",
+    "electrospinning",
+    "calcination",
+    "heat treatment",
+    "characterization",
 )
 
 SCIENTIFIC_EVIDENCE_FIGURE_CLASSES = {
@@ -417,7 +437,7 @@ def _run_live_stage3_extraction(
             _coerce_list_payload(process_steps_result.payload, "process_steps")
         )
         if not process_steps_payload:
-            process_steps_payload = _build_rule_based_process_steps_v2(procedure_text)
+            process_steps_payload = _build_rule_based_process_steps_v3(procedure_text)
             if process_steps_payload:
                 raw_outputs.append(
                     {
@@ -750,10 +770,14 @@ def _run_compact_stage3_extraction(
 
     procedure_text_for_steps = procedure_text.strip() or _extract_procedure_text(full_paper_text)
     process_steps_payload = _normalize_process_steps_payload(_coerce_list_payload(core_payload, "process_steps"))
+    process_steps_repaired_count = _count_process_step_repairs(process_steps_payload)
+    process_steps_fallback_used = False
     if (_process_steps_are_too_generic(process_steps_payload) or not process_steps_payload) and procedure_text_for_steps:
-        fallback_steps = _build_rule_based_process_steps_v2(procedure_text_for_steps)
+        fallback_steps = _build_rule_based_process_steps_v3(procedure_text_for_steps)
         if _fallback_process_steps_are_better(process_steps_payload, fallback_steps):
             process_steps_payload = fallback_steps
+            process_steps_repaired_count = _count_process_step_repairs(process_steps_payload)
+            process_steps_fallback_used = True
             raw_outputs.append(
                 {
                     "step_name": "process_steps",
@@ -765,8 +789,10 @@ def _run_compact_stage3_extraction(
                 }
             )
     elif not process_steps_payload and procedure_text_for_steps:
-        process_steps_payload = _build_rule_based_process_steps_v2(procedure_text_for_steps)
+        process_steps_payload = _build_rule_based_process_steps_v3(procedure_text_for_steps)
         if process_steps_payload:
+            process_steps_repaired_count = _count_process_step_repairs(process_steps_payload)
+            process_steps_fallback_used = True
             raw_outputs.append(
                 {
                     "step_name": "process_steps",
@@ -779,6 +805,10 @@ def _run_compact_stage3_extraction(
             )
     if not process_steps_payload and not procedure_text_for_steps:
         stage3_warnings.append("procedure_text_not_found")
+
+    process_steps_other_action_ratio = _process_steps_other_action_ratio(process_steps_payload)
+    process_steps_missing_evidence_ratio = _process_steps_missing_evidence_ratio(process_steps_payload)
+    process_steps_warning_count = _count_process_step_warnings(process_steps_payload)
 
     evidence_source_payload: object | None
     if "evidence_objects" in secondary_payload:
@@ -867,6 +897,11 @@ def _run_compact_stage3_extraction(
                 ]
                 if part
             ) or None,
+            "process_steps_repaired_count": process_steps_repaired_count,
+            "process_steps_fallback_used": process_steps_fallback_used,
+            "process_steps_other_action_ratio": process_steps_other_action_ratio,
+            "process_steps_missing_evidence_ratio": process_steps_missing_evidence_ratio,
+            "process_steps_warning_count": process_steps_warning_count,
         },
     )
 
@@ -2010,7 +2045,19 @@ def _extract_procedure_text(markdown_text: str) -> str:
         return "\n\n".join(selected_blocks).strip()
 
     lowered = markdown_text.lower()
-    fallback_markers = ["实验过程", "experimental procedure", "preparation", "fabrication"]
+    fallback_markers = [
+        "实验过程",
+        "实验部分",
+        "实验方法",
+        "样品制备",
+        "制备方法",
+        "experimental procedure",
+        "experimental",
+        "materials and methods",
+        "preparation",
+        "fabrication",
+        "electrospinning",
+    ]
     marker_index = next((lowered.find(marker.lower()) for marker in fallback_markers if lowered.find(marker.lower()) >= 0), -1)
     if marker_index >= 0:
         return markdown_text[marker_index : marker_index + 6000].strip()
@@ -2685,6 +2732,103 @@ def _build_rule_based_process_steps_v2(procedure_text: str) -> list[dict[str, An
     return _normalize_process_steps_payload(steps) if steps else []
 
 
+def _build_rule_based_process_steps_v3(procedure_text: str) -> list[dict[str, Any]]:
+    action_hints = (
+        "称取", "加入", "滴加", "溶解", "混合", "搅拌", "陈化", "老化", "水解", "缩聚", "调节ph",
+        "过滤", "洗涤", "干燥", "纺丝", "静电纺丝", "干法纺丝", "离心甩丝", "预烧结", "煅烧", "升温",
+        "保温", "烧结", "冷却", "浸渍", "负载", "还原", "weigh", "add", "dropwise", "dissolve",
+        "mix", "stir", "age", "hydroly", "reflux", "filter", "wash", "dry", "prepare", "synthes",
+        "spin", "electrospin", "calcine", "heat", "heat treat", "sinter", "cool", "impregnate",
+        "load", "reduce",
+    )
+    steps: list[dict[str, Any]] = []
+    for sentence in _split_procedure_sentences(procedure_text):
+        lowered = sentence.lower()
+        if _is_generic_process_statement(sentence):
+            continue
+        inferred_action = _infer_process_action_v2(sentence)
+        if not inferred_action and not any(hint in sentence or hint in lowered for hint in action_hints):
+            continue
+        temperature_value, temperature_unit = _extract_temperature(sentence)
+        duration_value, duration_unit = _extract_duration(sentence)
+        heating_rate_value, heating_rate_unit = _extract_heating_rate(sentence)
+        step = {
+            "step_id": f"fallback-step-{len(steps) + 1:02d}",
+            "step_order": len(steps) + 1,
+            "action": inferred_action[0] if inferred_action else "other",
+            "action_zh": inferred_action[1] if inferred_action else "其他",
+            "reagent_name": _extract_reagent_name_v2(sentence),
+            "duration_value": duration_value,
+            "duration_unit": duration_unit,
+            "temperature_value": temperature_value,
+            "temperature_unit": temperature_unit,
+            "heating_rate_value": heating_rate_value,
+            "heating_rate_unit": heating_rate_unit,
+            "evidence_text": sentence,
+            "description": sentence,
+            "confidence": "low",
+            "needs_manual_review": True,
+            "linked_parameter_keys": [],
+            "created_by": "rule_based_procedure_fallback_v3",
+            "normalization_note": "rule_based_procedure_fallback_v3",
+        }
+        step = _fill_condition_from_text(step, sentence)
+        steps.append(step)
+    normalized = _normalize_process_steps_payload(steps) if steps else []
+    return [step for step in normalized if not _is_overly_generic_step(step)]
+
+
+def _split_procedure_sentences(procedure_text: str) -> list[str]:
+    base_fragments = re.split(r"[。；;]+|(?<=[.!?])\s+|\n+", procedure_text)
+    expanded: list[str] = []
+    for fragment in base_fragments:
+        sentence = fragment.strip()
+        if not sentence:
+            continue
+        sentence = re.sub(
+            r"(?i)\b(?:and|then)\s+(?=(?:electrospun|calcined|heated|stirred|washed|filtered|dried|cooled|aged))",
+            " || ",
+            sentence,
+        )
+        sentence = re.sub(
+            r"(?:，|,)\s*(?=(?:将|把|再|然后|随后|继续|并|接着|After|Then|Subsequently|The solution|The fibers|Samples? were|PVA was|Nitric acid was|The mixture was))",
+            " || ",
+            sentence,
+            flags=re.IGNORECASE,
+        )
+        for part in sentence.split("||"):
+            cleaned = part.strip(" ，,")
+            if cleaned:
+                expanded.append(cleaned)
+    return expanded
+
+
+def _is_generic_process_statement(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return True
+    reject_markers = (
+        "研究了", "分析了", "表征了", "测试了性能", "讨论了", "研究意义", "研究进展", "结果与讨论",
+        "性能研究", "thermal evolution was studied", "thermal evolution", "characterization was performed",
+        "properties were investigated", "results show", "as shown in fig", "it can be seen", "it was observed",
+    )
+    return any(marker in lowered for marker in reject_markers)
+
+
+def _is_overly_generic_step(step: dict[str, Any]) -> bool:
+    action = str(step.get("action") or "").strip().lower()
+    evidence_text = str(step.get("evidence_text") or "").strip()
+    description = str(step.get("description") or "").strip()
+    has_support = bool(evidence_text or description)
+    has_conditions = any(
+        step.get(name) is not None
+        for name in ("temperature_value", "duration_value", "heating_rate_value", "condition_value", "reagent_name")
+    )
+    generic_action = action in {"", "other", "analyze", "study", "test", "characterize", "measure"}
+    if _is_generic_process_statement(evidence_text or description):
+        return True
+    return generic_action and not has_conditions and not has_support
+
 def _normalize_process_steps_payload(payload: list[Any]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for index, item in enumerate(payload, start=1):
@@ -2708,6 +2852,8 @@ def _normalize_process_steps_payload(payload: list[Any]) -> list[dict[str, Any]]
             or item.get("source_text")
             or item.get("evidence")
             or item.get("text")
+            or item.get("description")
+            or item.get("details")
         )
         linked_parameter_keys = item.get("linked_parameter_keys")
         if linked_parameter_keys is None:
@@ -2722,7 +2868,8 @@ def _normalize_process_steps_payload(payload: list[Any]) -> list[dict[str, Any]]
                 "linked_parameter_keys:coerced_scalar_to_list",
             )
         normalized.append(
-            {
+            _repair_process_step_fields(
+                {
                 **item,
                 "step_id": item.get("step_id") or f"step-{index:02d}",
                 "step_order": item.get("step_order") or index,
@@ -2740,9 +2887,104 @@ def _normalize_process_steps_payload(payload: list[Any]) -> list[dict[str, Any]]
                 "linked_parameter_keys": [str(value) for value in linked_parameter_keys if value not in (None, "")],
                 "needs_manual_review": bool(item.get("needs_manual_review")) if item.get("needs_manual_review") is not None else False,
                 "normalization_note": normalization_note,
-            }
+                }
+            )
         )
     return _enrich_process_steps(normalized)
+
+
+def _repair_process_step_fields(step: dict[str, Any]) -> dict[str, Any]:
+    repaired = dict(step)
+    text = str(
+        repaired.get("evidence_text")
+        or repaired.get("description")
+        or repaired.get("source_text")
+        or repaired.get("details")
+        or ""
+    ).strip()
+    if text and not repaired.get("evidence_text"):
+        repaired["evidence_text"] = text
+        repaired["normalization_note"] = _append_normalization_note(
+            repaired.get("normalization_note"),
+            "process_step_repair:evidence_text_from_description",
+        )
+
+    inferred_action = _infer_process_action_v2(text) if text else None
+    if inferred_action and str(repaired.get("action") or "").strip().lower() in {"", "other"}:
+        repaired["action"] = inferred_action[0]
+        repaired["action_zh"] = inferred_action[1]
+        repaired["normalization_note"] = _append_normalization_note(
+            repaired.get("normalization_note"),
+            "process_step_repair:action_inferred_from_text",
+        )
+    elif not repaired.get("action_zh") and inferred_action:
+        repaired["action_zh"] = inferred_action[1]
+
+    if text:
+        if not repaired.get("reagent_name"):
+            reagent_name = _extract_reagent_name_v2(text)
+            if reagent_name:
+                repaired["reagent_name"] = reagent_name
+                repaired["normalization_note"] = _append_normalization_note(
+                    repaired.get("normalization_note"),
+                    "process_step_repair:reagent_name_from_text",
+                )
+        if repaired.get("duration_value") is None:
+            duration_value, duration_unit = _extract_duration(text)
+            if duration_value is not None:
+                repaired["duration_value"] = duration_value
+                repaired["duration_unit"] = duration_unit
+                repaired["normalization_note"] = _append_normalization_note(
+                    repaired.get("normalization_note"),
+                    "process_step_repair:duration_from_text",
+                )
+        if repaired.get("temperature_value") is None:
+            temp_value, temp_unit = _extract_temperature(text)
+            if temp_value is not None:
+                repaired["temperature_value"] = temp_value
+                repaired["temperature_unit"] = temp_unit
+                repaired["normalization_note"] = _append_normalization_note(
+                    repaired.get("normalization_note"),
+                    "process_step_repair:temperature_from_text",
+                )
+        if repaired.get("heating_rate_value") is None:
+            heating_value, heating_unit = _extract_heating_rate(text)
+            if heating_value is not None:
+                repaired["heating_rate_value"] = heating_value
+                repaired["heating_rate_unit"] = heating_unit
+                repaired["normalization_note"] = _append_normalization_note(
+                    repaired.get("normalization_note"),
+                    "process_step_repair:heating_rate_from_text",
+                )
+
+        repaired = _fill_condition_from_text(repaired, text)
+
+    return repaired
+
+
+def _fill_condition_from_text(step: dict[str, Any], text: str) -> dict[str, Any]:
+    repaired = dict(step)
+    if repaired.get("condition_key") and repaired.get("condition_value") is not None:
+        return repaired
+    candidates = [
+        ("feed_pressure_MPa", *_extract_pressure(text)),
+        ("concentration", *_extract_concentration(text)),
+        ("pH", *_extract_ph_value(text)),
+        ("applied_voltage_kV", *_extract_voltage(text)),
+        ("feed_rate_ml_h", *_extract_feed_rate(text)),
+    ]
+    for key, value, unit in candidates:
+        if value is None:
+            continue
+        repaired["condition_key"] = key
+        repaired["condition_value"] = value
+        repaired["condition_unit"] = unit
+        repaired["normalization_note"] = _append_normalization_note(
+            repaired.get("normalization_note"),
+            f"process_step_repair:{key}_from_text",
+        )
+        break
+    return repaired
 
 
 def _enrich_process_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2761,6 +3003,54 @@ def _expand_process_step(step: dict[str, Any]) -> list[dict[str, Any]]:
         return [step]
     normalized_text = _normalize_step_text(text)
     lowered = normalized_text.lower()
+
+    if (("dissolved" in lowered and "stirred" in lowered) or ("溶于" in normalized_text and "搅拌" in normalized_text)):
+        records = [
+            _make_process_step_variant(
+                step,
+                action="dissolve",
+                action_zh="溶解",
+                reagent_name=_extract_reagent_name_v2(normalized_text),
+                temperature_value=_extract_temperature(normalized_text)[0],
+                temperature_unit=_extract_temperature(normalized_text)[1],
+            ),
+            _make_process_step_variant(
+                step,
+                action="stir",
+                action_zh="搅拌",
+                duration_value=_extract_duration(normalized_text)[0],
+                duration_unit=_extract_duration(normalized_text)[1],
+            ),
+        ]
+        return records
+
+    if ("electrospun" in lowered or "electrospin" in lowered or "静电纺丝" in normalized_text) and "注射器" not in normalized_text and (
+        "kv" in lowered or "kV" in normalized_text
+    ):
+        voltage_value, voltage_unit = _extract_voltage(normalized_text)
+        feed_rate_value, feed_rate_unit = _extract_feed_rate(normalized_text)
+        records = [
+            _make_process_step_variant(
+                step,
+                action="electrospin",
+                action_zh="静电纺丝",
+                condition_key="applied_voltage_kV",
+                condition_value=voltage_value,
+                condition_unit=voltage_unit,
+            )
+        ]
+        if feed_rate_value is not None:
+            records.append(
+                _make_process_step_variant(
+                    step,
+                    action="electrospin",
+                    action_zh="静电纺丝",
+                    condition_key="feed_rate_ml_h",
+                    condition_value=feed_rate_value,
+                    condition_unit=feed_rate_unit,
+                )
+            )
+        return records
 
     if "alcl3" in lowered and ("去离子水" in normalized_text or "deionized water" in lowered):
         records = [
@@ -3057,6 +3347,65 @@ def _normalize_step_text(text: str) -> str:
     return normalized
 
 
+def _extract_temperature(text: str) -> tuple[float | None, str | None]:
+    value = (
+        _extract_numeric_value(text, r"(?:升温至|加热至|heated to|calcined at|at)\s*([0-9]+(?:\.[0-9]+)?)\s*(?:℃|°C|C)")
+        or _extract_numeric_value(text, r"([0-9]+(?:\.[0-9]+)?)\s*(?:℃|°C|C)(?!\s*/\s*min)")
+    )
+    if value is None:
+        return None, None
+    return value, _extract_unit_value_v2(text, r"(℃|°C|C)") or "℃"
+
+
+def _extract_duration(text: str) -> tuple[float | None, str | None]:
+    value = _extract_numeric_value(text, r"([0-9]+(?:\.[0-9]+)?)\s*(?:h|hr|hrs|hour|hours|min|mins|minutes)")
+    if value is None:
+        return None, None
+    return value, _extract_unit_value_v2(text, r"(h|hr|hrs|hour|hours|min|mins|minutes)")
+
+
+def _extract_heating_rate(text: str) -> tuple[float | None, str | None]:
+    value = _extract_heating_rate_value_v2(text)
+    if value is None:
+        return None, None
+    return value, "℃/min"
+
+
+def _extract_pressure(text: str) -> tuple[float | None, str | None]:
+    value = _extract_numeric_value(text, r"([0-9]+(?:\.[0-9]+)?)\s*(?:MPa|kPa)")
+    if value is None:
+        return None, None
+    return value, _extract_unit_value_v2(text, r"(MPa|kPa)")
+
+
+def _extract_concentration(text: str) -> tuple[float | None, str | None]:
+    value = _extract_numeric_value(text, r"([0-9]+(?:\.[0-9]+)?)\s*(?:wt%|mol/L|M|%)")
+    if value is None:
+        return None, None
+    return value, _extract_unit_value_v2(text, r"(wt%|mol/L|M|%)")
+
+
+def _extract_ph_value(text: str) -> tuple[float | None, str | None]:
+    value = _extract_numeric_value(text, r"pH\s*(?:=|为|至)?\s*([0-9]+(?:\.[0-9]+)?)")
+    if value is None:
+        return None, None
+    return value, None
+
+
+def _extract_voltage(text: str) -> tuple[float | None, str | None]:
+    value = _extract_numeric_value(text, r"([0-9]+(?:\.[0-9]+)?)\s*kV")
+    if value is None:
+        return None, None
+    return value, "kV"
+
+
+def _extract_feed_rate(text: str) -> tuple[float | None, str | None]:
+    value = _extract_numeric_value(text, r"([0-9]+(?:\.[0-9]+)?)\s*mL\s*/\s*h")
+    if value is None:
+        return None, None
+    return value, "mL/h"
+
+
 def _extract_numeric_value(text: str, pattern: str) -> float | None:
     match = re.search(pattern, text, flags=re.IGNORECASE)
     if not match:
@@ -3102,16 +3451,26 @@ def _infer_process_action_v2(text: str) -> tuple[str, str] | None:
         return inferred
     if "称取" in text:
         return ("weigh", "称取")
+    if "混合" in text:
+        return ("mix", "混合")
     if "加入" in text:
         return ("add", "加入")
     if "滴加" in text:
         return ("add", "滴加")
+    if "调节pH" in text or "调节ph" in text.lower():
+        return ("adjust_ph", "调节pH")
     if "搅拌" in text:
         return ("stir", "搅拌")
+    if "老化" in text or "陈化" in text:
+        return ("age", "老化")
     if "静电纺丝" in text or "纺丝" in text:
         return ("electrospin", "静电纺丝")
     if "煅烧" in text:
         return ("calcine", "煅烧")
+    if "预烧结" in text or "烧结" in text:
+        return ("sinter", "烧结")
+    if "干燥" in text:
+        return ("dry", "干燥")
     if "烧结" in text:
         return ("sinter", "烧结")
     if "加热" in text or "升温" in text or "保温" in text:
@@ -3124,35 +3483,57 @@ def _infer_process_action_v2(text: str) -> tuple[str, str] | None:
         return ("cool", "冷却")
     if "溶解" in text:
         return ("dissolve", "溶解")
+    if "水解" in text:
+        return ("hydrolyze", "水解")
+    if "缩聚" in text:
+        return ("polycondense", "缩聚")
+    if "浸渍" in text:
+        return ("impregnate", "浸渍")
+    if "负载" in text:
+        return ("load", "负载")
+    if "还原" in text:
+        return ("reduce", "还原")
     if "配制" in text:
         return ("prepare", "制备")
     lowered = text.lower()
     if "dropwise" in lowered:
-        return ("add", "婊村姞")
+        return ("add", "滴加")
     if "electrospin" in lowered or "electrospun" in lowered:
-        return ("electrospin", "闈欑數绾轰笣")
+        return ("electrospin", "静电纺丝")
     if "calcine" in lowered or "calcined" in lowered:
-        return ("calcine", "鐓呯儳")
+        return ("calcine", "煅烧")
     if "sinter" in lowered or "sintered" in lowered:
-        return ("sinter", "鐑х粨")
+        return ("sinter", "烧结")
     if "dissolve" in lowered or "dissolved" in lowered:
-        return ("dissolve", "婧惰В")
+        return ("dissolve", "溶解")
+    if "weigh" in lowered:
+        return ("weigh", "称取")
     if "stir" in lowered or "mixed" in lowered or "mix " in lowered:
-        return ("stir", "鎼呮媽")
+        return ("stir", "搅拌")
     if "add " in lowered or "added" in lowered:
-        return ("add", "鍔犲叆")
+        return ("add", "加入")
     if "dry" in lowered or "dried" in lowered:
-        return ("dry", "骞茬嚗")
+        return ("dry", "干燥")
     if "heat" in lowered or "heated" in lowered or "reflux" in lowered:
-        return ("heat", "鍗囨俯淇濇俯")
+        return ("heat", "升温保温")
     if "filter" in lowered or "filtered" in lowered:
-        return ("filter", "杩囨护")
+        return ("filter", "过滤")
     if "wash" in lowered or "washed" in lowered:
-        return ("wash", "娲楁钉")
+        return ("wash", "洗涤")
     if "cool" in lowered or "cooled" in lowered:
-        return ("cool", "鍐峰嵈")
+        return ("cool", "冷却")
+    if "age" in lowered or "aged" in lowered:
+        return ("age", "老化")
+    if "hydroly" in lowered:
+        return ("hydrolyze", "水解")
+    if "impregnat" in lowered:
+        return ("impregnate", "浸渍")
+    if "load" in lowered:
+        return ("load", "负载")
+    if "reduce" in lowered:
+        return ("reduce", "还原")
     if "prepare" in lowered or "prepared" in lowered or "synthes" in lowered:
-        return ("prepare", "鍒跺")
+        return ("prepare", "制备")
     return None
 
 
@@ -3202,15 +3583,13 @@ def _extract_heating_rate_value_v2(text: str) -> float | None:
 def _process_steps_are_too_generic(steps: list[dict[str, Any]]) -> bool:
     if not steps:
         return True
-    generic_count = 0
-    empty_evidence_count = 0
-    for step in steps:
-        action = str(step.get("action") or "").strip().lower()
-        if action in {"", "other", "analyze", "study", "test", "characterize", "measure"}:
-            generic_count += 1
-        if not str(step.get("evidence_text") or "").strip():
-            empty_evidence_count += 1
-    return generic_count == len(steps) or empty_evidence_count == len(steps)
+    generic_count = sum(1 for step in steps if _is_overly_generic_step(step))
+    missing_evidence_count = sum(
+        1
+        for step in steps
+        if not str(step.get("evidence_text") or step.get("description") or "").strip()
+    )
+    return generic_count / len(steps) >= 0.6 or missing_evidence_count / len(steps) >= 0.75
 
 
 def _fallback_process_steps_are_better(
@@ -3229,7 +3608,53 @@ def _fallback_process_steps_are_better(
     fallback_meaningful = sum(
         1 for step in fallback_steps if str(step.get("action") or "").strip().lower() not in {"", "other"}
     )
-    return fallback_meaningful > current_meaningful
+    current_support = _process_steps_support_score(current_steps)
+    fallback_support = _process_steps_support_score(fallback_steps)
+    return fallback_meaningful > current_meaningful or fallback_support > current_support
+
+
+def _process_steps_support_score(steps: list[dict[str, Any]]) -> int:
+    score = 0
+    for step in steps:
+        action = str(step.get("action") or "").strip().lower()
+        if action and action not in {"other", "analyze", "study", "test", "characterize", "measure"}:
+            score += 2
+        if str(step.get("evidence_text") or "").strip():
+            score += 2
+        if step.get("description"):
+            score += 1
+        if any(step.get(name) is not None for name in ("temperature_value", "duration_value", "heating_rate_value", "condition_value")):
+            score += 1
+        if step.get("reagent_name"):
+            score += 1
+    return score
+
+
+def _count_process_step_repairs(steps: list[dict[str, Any]]) -> int:
+    count = 0
+    for step in steps:
+        note = str(step.get("normalization_note") or "")
+        if "process_step_repair:" in note or "rule_based_procedure_fallback_v3" in note:
+            count += 1
+    return count
+
+
+def _process_steps_other_action_ratio(steps: list[dict[str, Any]]) -> float:
+    if not steps:
+        return 0.0
+    other_count = sum(1 for step in steps if str(step.get("action") or "").strip().lower() in {"", "other"})
+    return round(other_count / len(steps), 4)
+
+
+def _process_steps_missing_evidence_ratio(steps: list[dict[str, Any]]) -> float:
+    if not steps:
+        return 0.0
+    missing = sum(1 for step in steps if not str(step.get("evidence_text") or "").strip())
+    return round(missing / len(steps), 4)
+
+
+def _count_process_step_warnings(steps: list[dict[str, Any]]) -> int:
+    return sum(1 for step in steps if _is_overly_generic_step(step) or not str(step.get("evidence_text") or "").strip())
 
 
 def _normalize_step_confidence(value: Any) -> str | None:
