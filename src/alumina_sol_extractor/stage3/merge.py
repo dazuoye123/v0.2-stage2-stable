@@ -75,9 +75,18 @@ def merge_stage_outputs_to_paper_record(
 ) -> PaperExtractionRecord:
     """Merge intermediate stage outputs into a validated paper extraction record."""
 
-    series_models = [_coerce_model(item, ExperimentSeries) for item in (experiment_series or [])]
-    data_point_models = [_coerce_model(item, DataPoint) for item in (data_points or [])]
-    process_step_models = [_coerce_model(item, ProcessStepRecord) for item in (process_steps or [])]
+    series_models = [
+        _coerce_model(item, ExperimentSeries)
+        for item in _iter_model_payloads(experiment_series or [], ExperimentSeries)
+    ]
+    data_point_models = [
+        _coerce_model(item, DataPoint)
+        for item in _iter_model_payloads(data_points or [], DataPoint)
+    ]
+    process_step_models = [
+        _coerce_model(item, ProcessStepRecord)
+        for item in _iter_model_payloads(process_steps or [], ProcessStepRecord)
+    ]
     if not series_models and data_point_models:
         series_models = _synthesize_series_from_data_points(data_point_models)
     series_models = _attach_data_points_to_series(series_models, data_point_models)
@@ -243,6 +252,19 @@ def _coerce_model(item: dict[str, Any] | SchemaBaseModel, model_cls: type[Schema
         return item
     payload = _sanitize_model_payload(_normalize_identifier_fields(item or {}, model_cls), model_cls)
     return model_cls.model_validate(payload)
+
+
+def _iter_model_payloads(
+    items: list[dict[str, Any] | SchemaBaseModel | Any],
+    model_cls: type[SchemaBaseModel],
+) -> list[dict[str, Any] | SchemaBaseModel]:
+    result: list[dict[str, Any] | SchemaBaseModel] = []
+    for item in items:
+        if isinstance(item, model_cls):
+            result.append(item)
+        elif isinstance(item, dict):
+            result.append(item)
+    return result
 
 
 def _normalize_identifier_fields(

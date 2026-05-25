@@ -80,11 +80,15 @@ TITLE_PAGE_LINE_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 STANDALONE_IMAGE_PATH_PATTERN = re.compile(
-    r"^\s*(?:(?:[A-Za-z]:)?[\\/]|\.{0,2}[\\/])?.*(?:figures_all|figures_for_vision|images)[\\/].*\.(?:png|jpg|jpeg|webp|gif|bmp|tiff?)\s*$",
+    r"^\s*(?:(?:[A-Za-z]:)?[\\/]|\.{0,2}[\\/])?.*(?:figures_all|figures_for_vision|images)[\\/].*\.(?:png|jpg|jpeg|webp|gif|bmp|tiff?)\)?\s*$",
     flags=re.IGNORECASE,
 )
 PLAIN_IMAGE_PATH_PATTERN = re.compile(
-    r"^\s*[^<>\s]+(?:figures_all|figures_for_vision|images)[^<>\s]*\.(?:png|jpg|jpeg|webp|gif|bmp|tiff?)\s*$",
+    r"^\s*[^<>\s]+(?:figures_all|figures_for_vision|images)[^<>\s]*\.(?:png|jpg|jpeg|webp|gif|bmp|tiff?)\)?\s*$",
+    flags=re.IGNORECASE,
+)
+INLINE_TRAILING_IMAGE_PATH_PATTERN = re.compile(
+    r"\s*[^<>\s]*?(?:figures_all|figures_for_vision|images)[\\/][^<>\s]+\.(?:png|jpg|jpeg|webp|gif|bmp|tiff?)\)?\s*$",
     flags=re.IGNORECASE,
 )
 
@@ -384,6 +388,9 @@ def _cleanup_residual_lines(text: str) -> tuple[str, dict[str, int]]:
         if not body_started and TITLE_PAGE_LINE_PATTERN.search(stripped):
             continue
 
+        if _is_standalone_image_path_line(stripped):
+            removed_image_path_line_count += 1
+            continue
         line, markdown_removed, html_removed = _remove_inline_image_noise(line)
         if markdown_removed:
             removed_image_markdown_line_count += 1
@@ -425,6 +432,9 @@ def _remove_inline_image_noise(line: str) -> tuple[str, bool, bool]:
     if HTML_IMG_PATTERN.search(cleaned):
         cleaned = HTML_IMG_PATTERN.sub("", cleaned)
         html_removed = True
+    if INLINE_TRAILING_IMAGE_PATH_PATTERN.search(cleaned):
+        cleaned = INLINE_TRAILING_IMAGE_PATH_PATTERN.sub("", cleaned)
+        markdown_removed = True
     return cleaned.rstrip(), markdown_removed, html_removed
 
 

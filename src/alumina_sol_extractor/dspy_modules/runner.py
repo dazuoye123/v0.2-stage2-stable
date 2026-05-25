@@ -140,6 +140,18 @@ MANUAL_PARAMETER_KEY_ALIASES = {
     "mg_to_al_molar_ratio": "Mg_to_Al_molar_ratio",
 }
 
+COMPACT_STAGE3_PROMPT_LIMITS = {
+    "pass1_total_chars": 180000,
+    "pass2_total_chars": 180000,
+    "paper_text_chars": 18000,
+    "procedure_sections_chars": 12000,
+    "figure_summaries_chars": 12000,
+    "table_summaries_chars": 8000,
+    "captions_and_references_chars": 12000,
+    "ontology_keys_chars": 6000,
+    "stage3_core_json_chars": 24000,
+}
+
 
 def run_stage3_dspy_schema_extraction(
     project_root: Path,
@@ -405,7 +417,7 @@ def _run_live_stage3_extraction(
             _coerce_list_payload(process_steps_result.payload, "process_steps")
         )
         if not process_steps_payload:
-            process_steps_payload = _build_rule_based_process_steps(procedure_text)
+            process_steps_payload = _build_rule_based_process_steps_v2(procedure_text)
             if process_steps_payload:
                 raw_outputs.append(
                     {
@@ -552,6 +564,7 @@ def _run_live_stage3_extraction(
         stage3_mode="live_smoke_test" if raw_outputs_filename else "full",
         llm_call_count=llm_call_count,
         ontology_keys=ontology_keys,
+        extra_summary_fields=None,
     )
 
 
@@ -618,15 +631,26 @@ def _run_compact_stage3_extraction(
 ) -> dict[str, Any]:
     raw_outputs: list[dict[str, Any]] = []
     ontology_map = get_ontology_entry_map(project_root)
+    pass1_inputs = _build_compact_stage3_prompt_inputs(
+        paper_text=paper_text,
+        procedure_sections=procedure_sections,
+        figures=figures,
+        figure_summaries=vision_inputs or figure_summaries,
+        tables_summary=tables_summary,
+        captions_and_references=captions_and_references,
+        ontology_keys=ontology_keys,
+        stage3_core_payload=None,
+        pass_name="pass1",
+    )
 
     if extraction_mode == "unified":
         unified_result = ExtractUnifiedStage3Module().run(
-            paper_text=paper_text,
-            procedure_sections_json=to_json_text(procedure_sections),
-            figure_summaries=to_json_text(vision_inputs or figure_summaries),
-            table_summaries=to_json_text(tables_summary),
-            captions_and_references=to_json_text(captions_and_references),
-            ontology_keys=to_json_text(ontology_keys),
+            paper_text=pass1_inputs["paper_text"],
+            procedure_sections_json=pass1_inputs["procedure_sections_json"],
+            figure_summaries=pass1_inputs["figure_summaries_json"],
+            table_summaries=pass1_inputs["table_summaries_json"],
+            captions_and_references=pass1_inputs["captions_and_references_json"],
+            ontology_keys=pass1_inputs["ontology_keys_json"],
             source_file=str(effective_markdown_path),
         )
         _append_raw_output(
@@ -640,11 +664,11 @@ def _run_compact_stage3_extraction(
         llm_call_count = 1
     else:
         core_result = ExtractTwoPassCoreModule().run(
-            paper_text=paper_text,
-            procedure_text=procedure_text[:12000],
-            figure_summaries=to_json_text(vision_inputs or figure_summaries),
-            table_summaries=to_json_text(tables_summary),
-            ontology_keys=to_json_text(ontology_keys),
+            paper_text=pass1_inputs["paper_text"],
+            procedure_text=pass1_inputs["procedure_text"],
+            figure_summaries=pass1_inputs["figure_summaries_json"],
+            table_summaries=pass1_inputs["table_summaries_json"],
+            ontology_keys=pass1_inputs["ontology_keys_json"],
             source_file=str(effective_markdown_path),
         )
         _append_raw_output(
@@ -659,13 +683,25 @@ def _run_compact_stage3_extraction(
             core_payload = dict(core_payload)
             core_payload["experiment_series"] = core_payload.get("experiment_series", [])[:max_experiment_series]
 
-        secondary_result = ExtractTwoPassDataEvidenceModule().run(
+        pass2_inputs = _build_compact_stage3_prompt_inputs(
             paper_text=paper_text,
-            stage3_core_json=to_json_text(core_payload),
-            figure_summaries=to_json_text(vision_inputs or figure_summaries),
-            table_summaries=to_json_text(tables_summary),
-            captions_and_references=to_json_text(captions_and_references),
-            ontology_keys=to_json_text(ontology_keys),
+            procedure_sections=procedure_sections,
+            figures=figures,
+            figure_summaries=vision_inputs or figure_summaries,
+            tables_summary=tables_summary,
+            captions_and_references=captions_and_references,
+            ontology_keys=ontology_keys,
+            stage3_core_payload=core_payload,
+            pass_name="pass2",
+        )
+
+        secondary_result = ExtractTwoPassDataEvidenceModule().run(
+            paper_text=pass2_inputs["paper_text"],
+            stage3_core_json=pass2_inputs["stage3_core_json"],
+            figure_summaries=pass2_inputs["figure_summaries_json"],
+            table_summaries=pass2_inputs["table_summaries_json"],
+            captions_and_references=pass2_inputs["captions_and_references_json"],
+            ontology_keys=pass2_inputs["ontology_keys_json"],
         )
         _append_raw_output(
             raw_outputs,
@@ -675,6 +711,8 @@ def _run_compact_stage3_extraction(
         )
         secondary_payload = secondary_result.payload if isinstance(secondary_result.payload, dict) else {}
         llm_call_count = 2
+    if extraction_mode == "unified":
+        pass2_inputs = None
 
     experiment_series_payload = _coerce_list_payload(core_payload, "experiment_series")
     if max_experiment_series and max_experiment_series > 0:
@@ -712,8 +750,22 @@ def _run_compact_stage3_extraction(
 
     procedure_text_for_steps = procedure_text.strip() or _extract_procedure_text(full_paper_text)
     process_steps_payload = _normalize_process_steps_payload(_coerce_list_payload(core_payload, "process_steps"))
-    if not process_steps_payload and procedure_text_for_steps:
-        process_steps_payload = _build_rule_based_process_steps(procedure_text_for_steps)
+    if (_process_steps_are_too_generic(process_steps_payload) or not process_steps_payload) and procedure_text_for_steps:
+        fallback_steps = _build_rule_based_process_steps_v2(procedure_text_for_steps)
+        if _fallback_process_steps_are_better(process_steps_payload, fallback_steps):
+            process_steps_payload = fallback_steps
+            raw_outputs.append(
+                {
+                    "step_name": "process_steps",
+                    "module_name": "rule_based_procedure_fallback",
+                    "json_parse_ok": True,
+                    "json_parse_error": None,
+                    "raw_output": json.dumps(process_steps_payload, ensure_ascii=False),
+                    "warning": "compact_process_steps_generic_used_rule_based_fallback",
+                }
+            )
+    elif not process_steps_payload and procedure_text_for_steps:
+        process_steps_payload = _build_rule_based_process_steps_v2(procedure_text_for_steps)
         if process_steps_payload:
             raw_outputs.append(
                 {
@@ -803,6 +855,19 @@ def _run_compact_stage3_extraction(
         stage3_mode=extraction_mode,
         llm_call_count=llm_call_count + (1 if dspy_settings.get("run_judge", False) else 0),
         ontology_keys=ontology_keys,
+        extra_summary_fields={
+            "pass1_input_chars": int(pass1_inputs["total_chars"]),
+            "pass2_input_chars": int((pass2_inputs or {}).get("total_chars") or 0),
+            "input_truncated": bool(pass1_inputs["input_truncated"] or ((pass2_inputs or {}).get("input_truncated") or False)),
+            "truncation_reason": "; ".join(
+                part
+                for part in [
+                    pass1_inputs.get("truncation_reason") or "",
+                    (pass2_inputs or {}).get("truncation_reason") or "",
+                ]
+                if part
+            ) or None,
+        },
     )
 
 
@@ -826,6 +891,7 @@ def _finalize_stage3_outputs(
     stage3_mode: str,
     llm_call_count: int,
     ontology_keys: list[str],
+    extra_summary_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     outputs = dspy_settings.get("outputs", {})
     _write_json(stage3_dir / outputs.get("paper_basic_info", "paper_basic_info.json"), validated.paper_basic_info.model_dump() if validated.paper_basic_info else {})
@@ -891,6 +957,8 @@ def _finalize_stage3_outputs(
         "warnings": stage3_warnings,
     }
     summary.update(validation_summary)
+    if extra_summary_fields:
+        summary.update(extra_summary_fields)
     _write_json(stage3_dir / summary_filename, summary)
     return summary
 
@@ -2130,6 +2198,274 @@ def _build_datapoint_from_flat_parameter_bundle(
     return _structure_data_point_sections(normalized, ontology)
 
 
+def _build_compact_stage3_prompt_inputs(
+    *,
+    paper_text: str,
+    procedure_sections: list[dict[str, Any]],
+    figures: list[dict[str, Any]],
+    figure_summaries: list[dict[str, Any]],
+    tables_summary: list[dict[str, Any]],
+    captions_and_references: list[dict[str, Any]],
+    ontology_keys: list[str],
+    stage3_core_payload: dict[str, Any] | None,
+    pass_name: str,
+) -> dict[str, Any]:
+    limits = COMPACT_STAGE3_PROMPT_LIMITS
+    reasons: list[str] = []
+
+    paper_text_limited, paper_trimmed = _truncate_prompt_text(paper_text, limits["paper_text_chars"])
+    if paper_trimmed:
+        reasons.append("paper_text")
+
+    procedure_sections_json, procedure_trimmed = _serialize_trimmed_json(
+        _compact_procedure_sections_for_prompt(procedure_sections),
+        limits["procedure_sections_chars"],
+    )
+    if procedure_trimmed:
+        reasons.append("procedure_sections")
+
+    figure_summaries_json, figures_trimmed = _serialize_trimmed_json(
+        _compact_figure_summaries_for_prompt(figures or figure_summaries),
+        limits["figure_summaries_chars"],
+    )
+    if figures_trimmed:
+        reasons.append("figure_summaries")
+
+    table_summaries_json, tables_trimmed = _serialize_trimmed_json(
+        _compact_tables_for_prompt(tables_summary),
+        limits["table_summaries_chars"],
+    )
+    if tables_trimmed:
+        reasons.append("table_summaries")
+
+    captions_and_references_json, captions_trimmed = _serialize_trimmed_json(
+        _compact_captions_for_prompt(captions_and_references),
+        limits["captions_and_references_chars"],
+    )
+    if captions_trimmed:
+        reasons.append("captions_and_references")
+
+    ontology_keys_json, ontology_trimmed = _serialize_trimmed_json(
+        _compact_ontology_keys_for_prompt(ontology_keys),
+        limits["ontology_keys_chars"],
+    )
+    if ontology_trimmed:
+        reasons.append("ontology_keys")
+
+    stage3_core_json = ""
+    core_trimmed = False
+    if stage3_core_payload is not None:
+        stage3_core_json, core_trimmed = _serialize_trimmed_json(
+            _compact_stage3_core_payload_for_prompt(stage3_core_payload),
+            limits["stage3_core_json_chars"],
+        )
+        if core_trimmed:
+            reasons.append("stage3_core_json")
+
+    total_chars = sum(
+        len(value)
+        for value in [
+            paper_text_limited,
+            procedure_sections_json,
+            figure_summaries_json,
+            table_summaries_json,
+            captions_and_references_json,
+            ontology_keys_json,
+            stage3_core_json,
+        ]
+    )
+    total_limit = limits["pass1_total_chars"] if pass_name == "pass1" else limits["pass2_total_chars"]
+    if total_chars > total_limit:
+        overflow = total_chars - total_limit
+        # Prefer trimming evidence context first, then figures, then core json.
+        fields = {
+            "captions_and_references": captions_and_references_json,
+            "figure_summaries": figure_summaries_json,
+            "stage3_core_json": stage3_core_json,
+            "table_summaries": table_summaries_json,
+            "procedure_sections": procedure_sections_json,
+        }
+        for field_name in ("captions_and_references", "figure_summaries", "stage3_core_json", "table_summaries", "procedure_sections"):
+            value = fields[field_name]
+            if not value:
+                continue
+            shrink_by = min(len(value) // 2, overflow)
+            if shrink_by <= 0:
+                continue
+            trimmed_value, _ = _truncate_prompt_text(value, max(2000, len(value) - shrink_by))
+            fields[field_name] = trimmed_value
+            overflow -= len(value) - len(trimmed_value)
+            if field_name not in reasons:
+                reasons.append(field_name)
+            if overflow <= 0:
+                break
+        procedure_sections_json = fields["procedure_sections"]
+        figure_summaries_json = fields["figure_summaries"]
+        table_summaries_json = fields["table_summaries"]
+        captions_and_references_json = fields["captions_and_references"]
+        stage3_core_json = fields["stage3_core_json"]
+        total_chars = sum(
+            len(value)
+            for value in [
+                paper_text_limited,
+                procedure_sections_json,
+                figure_summaries_json,
+                table_summaries_json,
+                captions_and_references_json,
+                ontology_keys_json,
+                stage3_core_json,
+            ]
+        )
+
+    procedure_text = _truncate_prompt_text(_compact_procedure_text_for_prompt(procedure_sections), limits["procedure_sections_chars"])[0]
+    return {
+        "paper_text": paper_text_limited,
+        "procedure_text": procedure_text,
+        "procedure_sections_json": procedure_sections_json,
+        "figure_summaries_json": figure_summaries_json,
+        "table_summaries_json": table_summaries_json,
+        "captions_and_references_json": captions_and_references_json,
+        "ontology_keys_json": ontology_keys_json,
+        "stage3_core_json": stage3_core_json,
+        "total_chars": total_chars,
+        "input_truncated": bool(reasons),
+        "truncation_reason": ",".join(reasons),
+    }
+
+
+def _compact_procedure_sections_for_prompt(procedure_sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for item in procedure_sections:
+        if not isinstance(item, dict):
+            continue
+        compact.append(
+            {
+                "title": item.get("title"),
+                "score": item.get("score"),
+                "selected_for_process_steps": item.get("selected_for_process_steps"),
+                "text_preview": str(item.get("text_preview") or item.get("text") or "")[:400],
+            }
+        )
+    return compact
+
+
+def _compact_procedure_text_for_prompt(procedure_sections: list[dict[str, Any]]) -> str:
+    selected = []
+    for item in procedure_sections:
+        if not isinstance(item, dict):
+            continue
+        if item.get("selected_for_process_steps"):
+            text = str(item.get("text") or item.get("text_preview") or "").strip()
+            if text:
+                selected.append(text[:1200])
+    return "\n\n".join(selected).strip()
+
+
+def _compact_figure_summaries_for_prompt(figures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for item in figures:
+        if not isinstance(item, dict):
+            continue
+        compact.append(
+            {
+                "figure_id": item.get("figure_id"),
+                "figure_class": item.get("figure_class"),
+                "caption": str(item.get("caption") or "")[:220],
+                "reference_sentences": [str(text)[:180] for text in (item.get("reference_sentences") or [])[:1] if text],
+            }
+        )
+    return compact
+
+
+def _compact_tables_for_prompt(tables_summary: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for item in tables_summary:
+        if not isinstance(item, dict):
+            continue
+        compact.append(
+            {
+                "table_id": item.get("table_id"),
+                "row_preview": " ".join(_table_row_to_text(row) for row in (item.get("rows") or [])[:2])[:240],
+            }
+        )
+    return compact
+
+
+def _compact_captions_for_prompt(captions_and_references: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for item in captions_and_references:
+        if not isinstance(item, dict):
+            continue
+        compact.append(
+            {
+                "figure_id": item.get("figure_id"),
+                "caption": str(item.get("caption") or "")[:220],
+                "reference_sentences": [str(text)[:180] for text in (item.get("reference_sentences") or [])[:2] if text],
+            }
+        )
+    return compact
+
+
+def _compact_ontology_keys_for_prompt(ontology_keys: list[str]) -> list[str]:
+    return [str(key)[:80] for key in ontology_keys[:400]]
+
+
+def _compact_stage3_core_payload_for_prompt(core_payload: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(core_payload or {})
+    experiment_series = []
+    for item in _coerce_list_payload(payload, "experiment_series")[:12]:
+        if not isinstance(item, dict):
+            continue
+        experiment_series.append(
+            {
+                "series_id": item.get("series_id"),
+                "series_name": item.get("series_name"),
+                "relevant_source_sections": (item.get("relevant_source_sections") or [])[:4],
+                "relevant_figure_ids": (item.get("relevant_figure_ids") or [])[:8],
+            }
+        )
+    process_steps = []
+    for item in _coerce_list_payload(payload, "process_steps")[:12]:
+        if not isinstance(item, dict):
+            continue
+        process_steps.append(
+            {
+                "step_id": item.get("step_id"),
+                "action": item.get("action"),
+                "action_zh": item.get("action_zh"),
+                "evidence_text": str(item.get("evidence_text") or item.get("source_text") or "")[:180],
+            }
+        )
+    return {
+        "paper_basic_info": payload.get("paper_basic_info"),
+        "global_constants": payload.get("global_constants"),
+        "experiment_series": experiment_series,
+        "process_steps": process_steps,
+    }
+
+
+def _serialize_trimmed_json(payload: Any, max_chars: int) -> tuple[str, bool]:
+    text = to_json_text(payload)
+    if len(text) <= max_chars:
+        return text, False
+    if isinstance(payload, list):
+        working = list(payload)
+        while len(working) > 1:
+            candidate = to_json_text(working)
+            if len(candidate) <= max_chars:
+                return candidate, True
+            working = working[:-1]
+        text = to_json_text(working[:1])
+        return _truncate_prompt_text(text, max_chars)[0], True
+    return _truncate_prompt_text(text, max_chars)[0], True
+
+
+def _truncate_prompt_text(text: str, max_chars: int) -> tuple[str, bool]:
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text, False
+    return text[:max_chars], True
+
+
 def _read_int_env(name: str, default: int, warnings: list[str]) -> int:
     raw_value = os.environ.get(name)
     if raw_value in (None, ""):
@@ -2209,6 +2545,141 @@ def _build_rule_based_process_steps(procedure_text: str) -> list[dict[str, Any]]
                 "linked_parameter_keys": [],
                 "created_by": "rule_based_procedure_fallback",
                 "normalization_note": "rule_based_procedure_fallback",
+            }
+        )
+    return _normalize_process_steps_payload(steps) if steps else []
+
+
+def _build_rule_based_process_steps_v2(procedure_text: str) -> list[dict[str, Any]]:
+    action_hints = (
+        "称取",
+        "加入",
+        "滴加",
+        "搅拌",
+        "加热",
+        "升温",
+        "保温",
+        "冷却",
+        "过滤",
+        "洗涤",
+        "干燥",
+        "煅烧",
+        "烧结",
+        "研磨",
+        "溶解",
+        "配制",
+        "注入",
+        "纺丝",
+        "静电纺丝",
+        "收集",
+        "绉板彇",
+        "鍔犲叆",
+        "婊村姞",
+        "鎼呮媽",
+        "鍔犵儹",
+        "鍗囨俯",
+        "淇濇俯",
+        "鍐峰嵈",
+        "杩囨护",
+        "娲楁钉",
+        "骞茬嚗",
+        "鐓呯儳",
+        "鐑х粨",
+        "鐮旂（",
+        "婧惰В",
+        "閰嶅埗",
+        "娉ㄥ叆",
+        "绾轰笣",
+        "闈欑數绾轰笣",
+        "鏀堕泦",
+        "add",
+        "added",
+        "mix",
+        "mixed",
+        "stir",
+        "stirred",
+        "dissolve",
+        "dissolved",
+        "dropwise",
+        "age",
+        "aged",
+        "dry",
+        "dried",
+        "calcine",
+        "calcined",
+        "heat",
+        "heated",
+        "sinter",
+        "sintered",
+        "electrospin",
+        "electrospun",
+        "inject",
+        "injected",
+        "prepare",
+        "prepared",
+        "synthes",
+        "reflux",
+        "wash",
+        "washed",
+        "filter",
+        "filtered",
+        "cool",
+        "cooled",
+        "collect",
+        "collected",
+    )
+    reject_markers = (
+        "研究了性能",
+        "分析了结构",
+        "研究意义",
+        "研究进展",
+        "结果与讨论",
+        "性能研究",
+        "研究了性能",
+        "分析了结构",
+        "研究意义",
+        "thermal evolution",
+        "results and discussion",
+        "characterization was performed",
+        "the results show",
+        "it was observed",
+        "研究进展",
+        "结果与讨论",
+        "性能研究",
+    )
+    fragments = re.split(r"[。；;]+|(?<=[.!?])\s+|\n+", procedure_text)
+    steps: list[dict[str, Any]] = []
+    for fragment in fragments:
+        sentence = fragment.strip()
+        if not sentence:
+            continue
+        lowered = sentence.lower()
+        if any(marker.lower() in lowered for marker in reject_markers):
+            continue
+        if not any(hint in sentence or hint in lowered for hint in action_hints):
+            continue
+        inferred_action = _infer_process_action_v2(sentence)
+        steps.append(
+            {
+                "step_id": f"fallback-step-{len(steps) + 1:02d}",
+                "step_order": len(steps) + 1,
+                "action": inferred_action[0] if inferred_action else "other",
+                "action_zh": inferred_action[1] if inferred_action else "鍏朵粬",
+                "reagent_name": _extract_reagent_name_v2(sentence),
+                "condition_value": _extract_numeric_value(sentence, r"([0-9]+(?:\.[0-9]+)?)\s*(?:wt%|mol/L|M|%)"),
+                "condition_unit": _extract_unit_value_v2(sentence, r"(wt%|mol/L|M|%)"),
+                "duration_value": _extract_numeric_value(sentence, r"([0-9]+(?:\.[0-9]+)?)\s*(?:h|hr|hrs|hour|hours|min|mins|minutes)"),
+                "duration_unit": _extract_unit_value_v2(sentence, r"(h|hr|hrs|hour|hours|min|mins|minutes)"),
+                "temperature_value": _extract_numeric_value(sentence, r"([0-9]+(?:\.[0-9]+)?)\s*(?:℃|°C|C)"),
+                "temperature_unit": _extract_unit_value_v2(sentence, r"(℃|°C|C)"),
+                "heating_rate_value": _extract_heating_rate_value_v2(sentence),
+                "heating_rate_unit": "℃/min" if _extract_heating_rate_value_v2(sentence) is not None else None,
+                "evidence_text": sentence,
+                "confidence": "low",
+                "needs_manual_review": True,
+                "linked_parameter_keys": [],
+                "created_by": "rule_based_procedure_fallback_v2",
+                "normalization_note": "rule_based_procedure_fallback_v2",
             }
         )
     return _normalize_process_steps_payload(steps) if steps else []
@@ -2492,7 +2963,9 @@ def _expand_process_step(step: dict[str, Any]) -> list[dict[str, Any]]:
                 temperature_unit="℃",
                 duration_value=_extract_numeric_value(normalized_text, r"([0-9]+(?:\.[0-9]+)?)\s*h"),
                 duration_unit="h",
-                linked_parameter_keys=["target_temperature_C", "holding_time_h"],
+                heating_rate_value=_extract_heating_rate_value_v2(normalized_text),
+                heating_rate_unit="℃/min" if _extract_heating_rate_value_v2(normalized_text) is not None else None,
+                linked_parameter_keys=["target_temperature_C", "holding_time_h", "heating_rate_C_min"],
             )
         ]
 
@@ -2621,6 +3094,142 @@ def _infer_process_action(text: str) -> tuple[str, str] | None:
     if "室温" in text:
         return ("cool", "冷却")
     return None
+
+
+def _infer_process_action_v2(text: str) -> tuple[str, str] | None:
+    inferred = _infer_process_action(text)
+    if inferred:
+        return inferred
+    if "称取" in text:
+        return ("weigh", "称取")
+    if "加入" in text:
+        return ("add", "加入")
+    if "滴加" in text:
+        return ("add", "滴加")
+    if "搅拌" in text:
+        return ("stir", "搅拌")
+    if "静电纺丝" in text or "纺丝" in text:
+        return ("electrospin", "静电纺丝")
+    if "煅烧" in text:
+        return ("calcine", "煅烧")
+    if "烧结" in text:
+        return ("sinter", "烧结")
+    if "加热" in text or "升温" in text or "保温" in text:
+        return ("heat", "升温保温")
+    if "过滤" in text:
+        return ("filter", "过滤")
+    if "洗涤" in text:
+        return ("wash", "洗涤")
+    if "冷却" in text:
+        return ("cool", "冷却")
+    if "溶解" in text:
+        return ("dissolve", "溶解")
+    if "配制" in text:
+        return ("prepare", "制备")
+    lowered = text.lower()
+    if "dropwise" in lowered:
+        return ("add", "婊村姞")
+    if "electrospin" in lowered or "electrospun" in lowered:
+        return ("electrospin", "闈欑數绾轰笣")
+    if "calcine" in lowered or "calcined" in lowered:
+        return ("calcine", "鐓呯儳")
+    if "sinter" in lowered or "sintered" in lowered:
+        return ("sinter", "鐑х粨")
+    if "dissolve" in lowered or "dissolved" in lowered:
+        return ("dissolve", "婧惰В")
+    if "stir" in lowered or "mixed" in lowered or "mix " in lowered:
+        return ("stir", "鎼呮媽")
+    if "add " in lowered or "added" in lowered:
+        return ("add", "鍔犲叆")
+    if "dry" in lowered or "dried" in lowered:
+        return ("dry", "骞茬嚗")
+    if "heat" in lowered or "heated" in lowered or "reflux" in lowered:
+        return ("heat", "鍗囨俯淇濇俯")
+    if "filter" in lowered or "filtered" in lowered:
+        return ("filter", "杩囨护")
+    if "wash" in lowered or "washed" in lowered:
+        return ("wash", "娲楁钉")
+    if "cool" in lowered or "cooled" in lowered:
+        return ("cool", "鍐峰嵈")
+    if "prepare" in lowered or "prepared" in lowered or "synthes" in lowered:
+        return ("prepare", "鍒跺")
+    return None
+
+
+def _extract_reagent_name_v2(text: str) -> str | None:
+    patterns = [
+        r"(PVA|PEO|PVP|TEOS|DMF|HNO3|HCl|AlCl3(?:·6H2O)?|polyvinyl alcohol|polyethylene oxide|nitric acid|hydrochloric acid)",
+        r"(拟薄水铝石|硝酸铝|氯化铝|铝溶胶|氧化铝溶胶|去离子水|无水乙醇|乙醇|液体石蜡|Span 80|Tween 80)",
+        r"(拟薄水铝石|硝酸铝|氯化铝|铝溶胶|氧化铝溶胶|去离子水|无水乙醇|乙醇|液体石蜡|Span 80|Tween 80)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _extract_unit_value_v2(text: str, pattern: str) -> str | None:
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _extract_heating_rate_value_v2(text: str) -> float | None:
+    normalized = (
+        str(text or "")
+        .replace("℃", " C ")
+        .replace("°C", " C ")
+        .replace("?C", " C ")
+        .replace("鈩?", " C ")
+        .lower()
+    )
+    patterns = (
+        r"heating rate of\s*([0-9]+(?:\.[0-9]+)?)",
+        r"([0-9]+(?:\.[0-9]+)?)\s*c\s*/\s*min",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, normalized, flags=re.IGNORECASE)
+        if match:
+            try:
+                return float(match.group(1))
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _process_steps_are_too_generic(steps: list[dict[str, Any]]) -> bool:
+    if not steps:
+        return True
+    generic_count = 0
+    empty_evidence_count = 0
+    for step in steps:
+        action = str(step.get("action") or "").strip().lower()
+        if action in {"", "other", "analyze", "study", "test", "characterize", "measure"}:
+            generic_count += 1
+        if not str(step.get("evidence_text") or "").strip():
+            empty_evidence_count += 1
+    return generic_count == len(steps) or empty_evidence_count == len(steps)
+
+
+def _fallback_process_steps_are_better(
+    current_steps: list[dict[str, Any]],
+    fallback_steps: list[dict[str, Any]],
+) -> bool:
+    if not fallback_steps:
+        return False
+    if not current_steps:
+        return True
+    if _process_steps_are_too_generic(current_steps):
+        return True
+    current_meaningful = sum(
+        1 for step in current_steps if str(step.get("action") or "").strip().lower() not in {"", "other"}
+    )
+    fallback_meaningful = sum(
+        1 for step in fallback_steps if str(step.get("action") or "").strip().lower() not in {"", "other"}
+    )
+    return fallback_meaningful > current_meaningful
 
 
 def _normalize_step_confidence(value: Any) -> str | None:

@@ -170,7 +170,7 @@ Fig. 2 SEM images of alumina fibers
     assert "figures_for_vision/c.jpg" not in result.cleaned_text
     assert "Fig. 2 SEM images of alumina fibers" in result.cleaned_text
     assert "图3-2 乙基纤维素分子式" in result.cleaned_text
-    assert result.report["removed_image_markdown_line_count"] >= 2
+    assert result.report["removed_image_markdown_line_count"] >= 1
     assert result.report["removed_html_img_line_count"] >= 1
     assert result.report["removed_image_path_line_count"] >= 1
 
@@ -191,3 +191,15 @@ SEM preview
     assert "SEM preview" not in result.cleaned_text
     assert "图3-2 纤维 XRD 谱图" in result.cleaned_text
     assert result.report["removed_details_image_block_count"] >= 1
+
+
+def test_trim_markdown_body_removes_trailing_image_path_residue_but_keeps_caption() -> None:
+    markdown = """# Results and Discussion
+paper/figures_all/abcdef123456.jpg)
+Fig. 4: XRD data of Alumina Fibers.
+"""
+    result = trim_markdown_body(markdown)
+
+    assert "figures_all/abcdef123456.jpg" not in result.cleaned_text
+    assert "Fig. 4: XRD data of Alumina Fibers." in result.cleaned_text
+    assert result.report["removed_image_path_line_count"] >= 1

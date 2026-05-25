@@ -65,3 +65,26 @@ def test_merge_synthesizes_series_when_data_points_exist_without_series() -> Non
     assert len(record.experiment_series[0].data_points) == 1
     assert record.experiment_series[1].series_id == "2"
     assert len(record.experiment_series[1].data_points) == 1
+
+
+def test_merge_ignores_scalar_items_in_series_and_process_lists() -> None:
+    record = merge_stage_outputs_to_paper_record(
+        experiment_series=[
+            {"series_id": "series-1", "series_name": "Valid Series"},
+            "bad-scalar-series-entry",
+        ],
+        data_points=[
+            {"sample_id": "dp-1", "extended_data": {"series_id": "series-1"}},
+            "bad-scalar-datapoint-entry",
+        ],
+        process_steps=[
+            {"step_id": "step-1", "action": "calcine"},
+            "bad-scalar-step-entry",
+        ],
+    )
+
+    assert len(record.experiment_series) == 1
+    assert record.experiment_series[0].series_id == "series-1"
+    assert len(record.experiment_series[0].data_points) == 1
+    assert len(record.process_steps) == 1
+    assert record.process_steps[0].action == "calcine"
