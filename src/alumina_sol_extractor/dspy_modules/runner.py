@@ -2804,12 +2804,16 @@ def _split_procedure_sentences(procedure_text: str) -> list[str]:
 
 
 def _is_generic_process_statement(text: str) -> bool:
-    lowered = str(text or "").strip().lower()
+    raw = str(text or "").strip()
+    lowered = raw.lower()
     if not lowered:
+        return True
+    if raw.startswith("#") or raw.startswith("CSV:") or raw.startswith("JSON:") or raw.startswith("|"):
         return True
     reject_markers = (
         "研究了", "分析了", "表征了", "测试了性能", "讨论了", "研究意义", "研究进展", "结果与讨论",
-        "性能研究", "thermal evolution was studied", "thermal evolution", "characterization was performed",
+        "性能研究", "有效途径", "尚未明确", "研究背景", "文献综述",
+        "thermal evolution was studied", "thermal evolution", "characterization was performed",
         "properties were investigated", "results show", "as shown in fig", "it can be seen", "it was observed",
     )
     return any(marker in lowered for marker in reject_markers)

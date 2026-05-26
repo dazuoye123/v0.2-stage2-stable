@@ -76,3 +76,15 @@ def test_rule_based_process_step_fallback_extracts_dissolve_reagent_and_temperat
     assert any(step["action"] == "dissolve" for step in steps)
     assert any(step.get("reagent_name") == "PVA" for step in steps)
     assert any(step.get("temperature_value") == 80.0 for step in steps)
+
+
+def test_rule_based_process_step_fallback_ignores_headings_and_table_link_lines() -> None:
+    procedure_text = """# Experimental
+CSV: [table_001.csv](path/to/table_001.csv)
+| column | value |
+The solution was stirred for 2 h.
+"""
+    steps = _build_rule_based_process_steps_v3(procedure_text)
+
+    assert len(steps) == 1
+    assert steps[0]["action"] == "stir"
