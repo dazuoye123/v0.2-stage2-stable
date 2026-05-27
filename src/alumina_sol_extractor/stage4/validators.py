@@ -51,8 +51,18 @@ def build_stage4_summary(
     config_warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     by_type = Counter(str(item.get("figure_type") or "unknown") for item in candidates)
+    by_stage2_class = Counter(str(item.get("stage2_figure_class") or "unknown") for item in candidates)
+    by_initial_type = Counter(str(item.get("initial_figure_type") or item.get("figure_type") or "unknown") for item in candidates)
+    by_routing_reason = Counter(str(item.get("routing_reason") or "unknown") for item in candidates)
+    by_risk = Counter(str(item.get("candidate_risk_level") or "unknown") for item in candidates)
     processed_count = sum(1 for item in candidates if item.get("send_to_vlm"))
     skipped_count = sum(1 for item in candidates if not item.get("send_to_vlm"))
+    rescued_unknown_by_caption_count = sum(
+        1 for item in candidates if item.get("routing_reason") == "stage2_unknown_caption_scientific" and item.get("send_to_vlm")
+    )
+    skipped_unknown_schema_specific_count = sum(
+        1 for item in candidates if item.get("routing_mode") == "schema_specific" and item.get("skip_reason") == "figure_type_not_in_allowlist_or_unknown"
+    )
     dry_run_count = sum(1 for item in extractions if item.get("extraction_mode") == "dry_run")
     live_count = sum(1 for item in extractions if item.get("extraction_mode") == "live")
     retry_attempt_count = sum(max(int(item.get("retry_attempts") or 0) - 1, 0) for item in failed_records)
@@ -67,6 +77,13 @@ def build_stage4_summary(
         "dry_run_count": dry_run_count,
         "live_count": live_count,
         "by_figure_type": dict(by_type),
+        "by_stage2_figure_class": dict(by_stage2_class),
+        "by_initial_figure_type": dict(by_initial_type),
+        "routing_reason_distribution": dict(by_routing_reason),
+        "candidate_risk_level_distribution": dict(by_risk),
+        "send_to_vision_model_count": processed_count,
+        "rescued_unknown_by_caption_count": rescued_unknown_by_caption_count,
+        "skipped_unknown_schema_specific_count": skipped_unknown_schema_specific_count,
         "validation_error_count": validation_error_count,
         "retry_attempt_count": retry_attempt_count,
         "transient_failure_count": len(transient_failures),

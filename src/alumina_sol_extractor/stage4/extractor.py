@@ -9,8 +9,15 @@ from typing import Any
 
 from .io import parse_json_payload, read_json, read_jsonl, write_json, write_jsonl
 from .normalization import normalize_vlm_payload_for_schema
-from .prompt_templates import get_prompt_for_figure_type
-from .routing import get_schema_for_figure_type, normalize_figure_type, should_process_figure
+from .prompt_templates import get_prompt_for_figure_type, get_universal_compact_prompt
+from .routing import (
+    caption_or_context_is_scientific,
+    describe_universal_candidate,
+    get_schema_for_figure_type,
+    normalize_figure_type,
+    should_process_figure,
+)
+from .schemas import UnknownFigureExtraction, UniversalFigureExtraction
 from .stage4_context import (
     build_evidence_object_context,
     build_input_context_summary,
@@ -53,6 +60,86 @@ MAX_REFERENCE_SENTENCES = 5
 MAX_CONTEXT_CHARS = 800
 MAX_EVIDENCE_CONTEXT_CHARS = 1000
 MAX_RELATED_PARAMETERS = 20
+LOW_TYPE_CONFIDENCE_THRESHOLD = 0.5
+
+
+def validate_universal_extraction_payload(
+    universal_payload: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    shell = UniversalFigureExtraction(**universal_payload).model_dump()
+    initial_type = normalize_figure_type(candidate.get("initial_figure_type"))
+    actual_type = normalize_figure_type(shell.get("actual_figure_type"))
+    type_confidence = shell.get("type_confidence")
+    low_confidence = isinstance(type_confidence, (int, float)) and float(type_confidence) < LOW_TYPE_CONFIDENCE_THRESHOLD
+    warnings = list(shell.get("warnings", []) or [])
+    conflict_warnings = list(shell.get("conflict_warnings", []) or [])
+    extraction_payload = dict(shell.get("extraction") or {})
+
+    if actual_type == "unknown" or low_confidence:
+        if low_confidence and "low_type_confidence" not in warnings:
+            warnings.append("low_type_confidence")
+        actual_type = "unknown"
+        shell["needs_manual_review"] = True
+        schema_cls = UnknownFigureExtraction
+        extraction_payload.setdefault("likely_figure_type", shell.get("actual_figure_type") or initial_type or None)
+        extraction_payload.setdefault("why_uncertain", shell.get("type_reason"))
+    else:
+        schema_cls = get_schema_for_figure_type(actual_type)
+
+    merged_payload = {
+        **extraction_payload,
+        "paper_id": candidate.get("paper_id"),
+        "figure_id": candidate.get("figure_id"),
+        "figure_type": actual_type,
+        "technique": extraction_payload.get("technique") or candidate.get("technique"),
+        "source_image_path": candidate.get("source_image_path"),
+        "caption": candidate.get("caption"),
+        "extraction_mode": "live",
+        "input_context_summary": build_input_context_summary(candidate),
+        "used_context_sources": list(candidate.get("context_source", {}).values()),
+        "image_readability": shell.get("image_readability"),
+        "text_context_quality": shell.get("text_context_quality"),
+        "warnings": warnings,
+        "conflict_warnings": conflict_warnings,
+        "stage2_figure_class": candidate.get("stage2_figure_class"),
+        "stage3_figure_type": candidate.get("stage3_figure_type"),
+        "initial_figure_type": candidate.get("initial_figure_type"),
+        "actual_figure_type": actual_type,
+        "type_confidence": shell.get("type_confidence"),
+        "type_reason": shell.get("type_reason"),
+        "type_mismatch": bool(shell.get("type_mismatch")) or (initial_type not in {"", "unknown"} and actual_type != "unknown" and actual_type != initial_type),
+        "needs_manual_review": bool(shell.get("needs_manual_review")) or actual_type == "unknown",
+        "routing_mode": "universal_compact",
+    }
+    normalized_payload, normalization_warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
+        merged_payload,
+        figure_type=actual_type,
+        schema_name=schema_cls.__name__,
+    )
+    normalized_payload["warnings"] = [*(normalized_payload.get("warnings", []) or []), *normalization_warnings]
+    try:
+        validated = schema_cls(**normalized_payload).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        failure_warnings = [*warnings, *normalization_warnings, "schema_validation_failed"]
+        return {
+            "ok": False,
+            "schema_name": schema_cls.__name__,
+            "actual_figure_type": actual_type,
+            "error_message": str(exc),
+            "raw_universal_payload": shell,
+            "warnings": failure_warnings,
+        }
+    validated["schema_name"] = schema_cls.__name__
+    validated["warnings"] = [*(validated.get("warnings", []) or []), *normalization_warnings]
+    validated["validation_errors"] = validate_stage4_extraction(validated)
+    return {
+        "ok": True,
+        "record": validated,
+        "schema_name": schema_cls.__name__,
+        "actual_figure_type": actual_type,
+        "raw_universal_payload": shell,
+    }
 
 
 @dataclass
@@ -64,16 +151,26 @@ class Stage4VisionSpectraExtractor:
     figure_ids: list[str] | None = None
     dry_run: bool = True
     client: VisionLanguageModelClient | None = None
+    routing_mode: str = "schema_specific"
+    stage3_subdir: str = "stage3_dspy_smoke"
+    stage4_subdir: str = "stage4_vision_spectra"
 
     def run(self) -> dict[str, Any]:
-        stage4_dir = Path(self.output_dir) / "stage4_vision_spectra"
+        stage4_dir = Path(self.output_dir) / self.stage4_subdir
         stage4_dir.mkdir(parents=True, exist_ok=True)
         previous_extractions = read_jsonl(stage4_dir / "spectra_extractions.jsonl")
+        config_warnings: list[str] = []
 
         figures = read_jsonl(Path(self.output_dir) / "figures.jsonl")
         vision_inputs = read_jsonl(Path(self.output_dir) / "vision_inputs.jsonl")
-        evidence_objects = read_jsonl(Path(self.output_dir) / "stage3_dspy_smoke" / "evidence_objects.jsonl")
-        stage3_schema = read_json(Path(self.output_dir) / "stage3_dspy_smoke" / "paper_extraction.schema_v2.json", default={}) or {}
+        stage3_dir = Path(self.output_dir) / self.stage3_subdir
+        evidence_objects = read_jsonl(stage3_dir / "evidence_objects.jsonl")
+        stage3_schema_path = stage3_dir / "paper_extraction.schema_v2.json"
+        stage3_schema = read_json(stage3_schema_path, default={}) or {}
+        if not evidence_objects:
+            config_warnings.append(f"missing_or_empty_evidence_objects:{self.stage3_subdir}")
+        if not stage3_schema_path.exists():
+            config_warnings.append(f"missing_stage3_schema:{self.stage3_subdir}")
 
         candidates = self._select_candidates(
             figures=figures,
@@ -82,10 +179,11 @@ class Stage4VisionSpectraExtractor:
             stage3_schema=stage3_schema,
         )
         prompts = [self._build_prompt_record(candidate) for candidate in candidates if candidate.get("send_to_vlm")]
-        extractions, raw_outputs, failed_records, config_warnings = self._run_extractions(
+        extractions, raw_outputs, failed_records, client_warnings = self._run_extractions(
             candidates,
             previous_extractions=previous_extractions,
         )
+        config_warnings.extend(client_warnings)
         summary = build_stage4_summary(
             candidates=candidates,
             extractions=extractions,
@@ -98,7 +196,9 @@ class Stage4VisionSpectraExtractor:
         write_jsonl(extractions, stage4_dir / "spectra_extractions.jsonl")
         write_jsonl(raw_outputs, stage4_dir / "raw_vlm_outputs.jsonl")
         write_jsonl(failed_records, stage4_dir / "failed_records.jsonl")
+        write_jsonl(failed_records, stage4_dir / "spectra_failed_records.jsonl")
         write_json(stage4_dir / "stage4_summary.json", summary)
+        write_json(stage4_dir / "stage4a_summary.json", summary)
         return summary
 
     def _select_candidates(
@@ -137,9 +237,6 @@ class Stage4VisionSpectraExtractor:
                 or figure_meta.get("raw_caption")
             )
             final_type = normalize_figure_type(evidence_type or stage2_class, caption)
-            send_to_vlm = should_process_figure(final_type, allowed_types)
-            prompt_template = get_prompt_for_figure_type(final_type)
-            schema_cls = get_schema_for_figure_type(final_type)
             source_image_path = (
                 vision_meta.get("vision_image_path")
                 or vision_meta.get("image_path")
@@ -153,10 +250,30 @@ class Stage4VisionSpectraExtractor:
                 evidence_group=evidence_group,
                 stage3_parameter_records=stage3_parameter_records,
             )
+            if self.routing_mode == "universal_compact":
+                send_to_vlm, routing_reason, risk_level = describe_universal_candidate(
+                    initial_figure_type=final_type,
+                    stage2_figure_class=stage2_class,
+                    stage3_figure_type=evidence_type,
+                    caption=caption,
+                    context_text=" ".join(context.get("reference_sentences", [])),
+                    allow_types=allowed_types,
+                )
+                prompt_template = get_universal_compact_prompt()
+                schema_name = UniversalFigureExtraction.__name__
+                skip_reason = None if send_to_vlm else "not_scientific_figure_candidate"
+            else:
+                send_to_vlm = should_process_figure(final_type, allowed_types)
+                prompt_template = get_prompt_for_figure_type(final_type)
+                schema_name = get_schema_for_figure_type(final_type).__name__
+                routing_reason = "default_schema_specific"
+                risk_level = "low" if send_to_vlm else "high"
+                skip_reason = None if send_to_vlm else "figure_type_not_in_allowlist_or_unknown"
             candidate = {
                 "paper_id": self.paper_id,
                 "figure_id": figure_id,
                 "figure_type": final_type,
+                "initial_figure_type": final_type,
                 "source_image_path": source_image_path,
                 "caption": caption,
                 "alt_text": context.get("alt_text"),
@@ -171,12 +288,15 @@ class Stage4VisionSpectraExtractor:
                 "evidence_id": next((item.get("evidence_id") for item in evidence_group if item.get("evidence_id")), None),
                 "evidence_ids": [item.get("evidence_id") for item in evidence_group if item.get("evidence_id")],
                 "prompt_template_name": prompt_template.name,
-                "schema_name": schema_cls.__name__,
+                "schema_name": schema_name,
                 "send_to_vlm": send_to_vlm,
-                "skip_reason": None if send_to_vlm else "figure_type_not_in_allowlist_or_unknown",
+                "skip_reason": skip_reason,
                 "stage3_figure_type": evidence_type,
                 "stage2_figure_class": stage2_class,
                 "technique": vision_meta.get("technique") or figure_meta.get("technique"),
+                "routing_mode": self.routing_mode,
+                "candidate_risk_level": risk_level,
+                "routing_reason": routing_reason,
             }
             candidates.append(candidate)
 
@@ -337,18 +457,38 @@ class Stage4VisionSpectraExtractor:
                 parsed.setdefault("extraction_model", response.get("model"))
                 parsed.setdefault("input_context_summary", build_input_context_summary(candidate))
                 parsed.setdefault("used_context_sources", list(candidate.get("context_source", {}).values()))
-                schema_cls = get_schema_for_figure_type(candidate.get("figure_type"))
-                parsed, normalization_warnings = self._normalize_live_payload(
-                    parsed,
-                    figure_type=str(candidate.get("figure_type") or ""),
-                    schema_name=schema_cls.__name__,
-                )
-                validated = schema_cls(**parsed).model_dump()
-                validated["schema_name"] = schema_cls.__name__
-                if normalization_warnings:
-                    validated["warnings"] = [*validated.get("warnings", []), *normalization_warnings]
-                validated["validation_errors"] = validate_stage4_extraction(validated)
-                extractions.append(validated)
+                if self.routing_mode == "universal_compact":
+                    validation_result = validate_universal_extraction_payload(parsed, candidate)
+                    if validation_result.get("ok"):
+                        extractions.append(validation_result["record"])
+                    else:
+                        error = ValueError(str(validation_result.get("error_message") or "schema_validation_failed"))
+                        failed_records.append(build_failed_record(candidate, error, fallback_used=False))
+                        raw_outputs.append(
+                            {
+                                "figure_id": candidate["figure_id"],
+                                "figure_type": candidate["figure_type"],
+                                "raw_response": response.get("response_text"),
+                                "response_payload": response.get("response_payload"),
+                                "raw_universal_payload": validation_result.get("raw_universal_payload"),
+                                "warnings": validation_result.get("warnings", []),
+                                "error_type": "schema_validation_failed",
+                                "dry_run": False,
+                            }
+                        )
+                else:
+                    schema_cls = get_schema_for_figure_type(candidate.get("figure_type"))
+                    parsed, normalization_warnings = self._normalize_live_payload(
+                        parsed,
+                        figure_type=str(candidate.get("figure_type") or ""),
+                        schema_name=schema_cls.__name__,
+                    )
+                    validated = schema_cls(**parsed).model_dump()
+                    validated["schema_name"] = schema_cls.__name__
+                    if normalization_warnings:
+                        validated["warnings"] = [*validated.get("warnings", []), *normalization_warnings]
+                    validated["validation_errors"] = validate_stage4_extraction(validated)
+                    extractions.append(validated)
             except VLMRequestError as exc:
                 fallback_record = None
                 if exc.is_transient:
@@ -514,7 +654,7 @@ class Stage4VisionSpectraExtractor:
             return None
 
     def _build_prompt_record(self, candidate: dict[str, Any]) -> dict[str, Any]:
-        template = get_prompt_for_figure_type(candidate.get("figure_type"))
+        template = get_universal_compact_prompt() if self.routing_mode == "universal_compact" else get_prompt_for_figure_type(candidate.get("figure_type"))
         attached_context = {
             "caption": candidate.get("caption"),
             "alt_text": candidate.get("alt_text"),
@@ -524,6 +664,9 @@ class Stage4VisionSpectraExtractor:
             "evidence_object_context": candidate.get("evidence_object_context", {}),
             "related_stage3_parameters": candidate.get("related_stage3_parameters", []),
             "context_source": candidate.get("context_source", {}),
+            "stage2_figure_class": candidate.get("stage2_figure_class"),
+            "stage3_figure_type": candidate.get("stage3_figure_type"),
+            "initial_figure_type": candidate.get("initial_figure_type"),
         }
         prompt_text = template.text
         composed_prompt = (
@@ -544,9 +687,40 @@ class Stage4VisionSpectraExtractor:
             "warnings": candidate.get("context_warnings", []),
             "dry_run_no_vlm_called": self.dry_run,
             "prompt": composed_prompt,
+            "routing_mode": candidate.get("routing_mode"),
+            "routing_reason": candidate.get("routing_reason"),
         }
 
     def _build_dry_run_extraction(self, candidate: dict[str, Any]) -> dict[str, Any]:
+        if self.routing_mode == "universal_compact":
+            extraction = {
+                "paper_id": self.paper_id,
+                "figure_id": candidate.get("figure_id"),
+                "figure_type": candidate.get("initial_figure_type"),
+                "initial_figure_type": candidate.get("initial_figure_type"),
+                "actual_figure_type": None,
+                "stage2_figure_class": candidate.get("stage2_figure_class"),
+                "stage3_figure_type": candidate.get("stage3_figure_type"),
+                "routing_mode": "universal_compact",
+                "type_confidence": None,
+                "type_reason": "dry_run_no_vlm_called",
+                "type_mismatch": False,
+                "needs_manual_review": True,
+                "source_image_path": candidate.get("source_image_path"),
+                "caption": candidate.get("caption"),
+                "extraction_model": None,
+                "extraction_mode": "dry_run",
+                "confidence": None,
+                "warnings": ["dry_run_no_vlm_called", *candidate.get("context_warnings", [])],
+                "raw_notes": "Universal compact prompt generated only; no VLM request was sent.",
+                "input_context_summary": build_input_context_summary(candidate),
+                "used_context_sources": list(candidate.get("context_source", {}).values()),
+                "image_readability": None,
+                "text_context_quality": "available" if candidate.get("estimated_context_chars") else "minimal",
+                "conflict_warnings": [],
+                "schema_name": UniversalFigureExtraction.__name__,
+            }
+            return extraction
         schema_cls = get_schema_for_figure_type(candidate.get("figure_type"))
         extraction = schema_cls(
             paper_id=self.paper_id,

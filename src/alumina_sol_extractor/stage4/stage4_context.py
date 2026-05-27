@@ -227,10 +227,14 @@ def figure_metadata_for_prompt(candidate: dict[str, Any]) -> dict[str, Any]:
         "paper_id": candidate.get("paper_id"),
         "figure_id": candidate.get("figure_id"),
         "figure_type": candidate.get("figure_type"),
+        "initial_figure_type": candidate.get("initial_figure_type"),
         "technique": candidate.get("technique"),
         "source_image_path": candidate.get("source_image_path"),
         "stage3_figure_type": candidate.get("stage3_figure_type"),
         "stage2_figure_class": candidate.get("stage2_figure_class"),
+        "routing_mode": candidate.get("routing_mode"),
+        "routing_reason": candidate.get("routing_reason"),
+        "candidate_risk_level": candidate.get("candidate_risk_level"),
     }
 
 
