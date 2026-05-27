@@ -18,10 +18,15 @@ def normalize_vlm_payload_for_schema(payload: dict[str, Any], schema_name: str) 
 
     _normalize_list_field(normalized, warnings, field_name="warnings")
     _normalize_list_field(normalized, warnings, field_name="conflict_warnings")
-    _normalize_list_field(normalized, warnings, field_name="peaks")
+    _normalize_peak_list_field(normalized, warnings, field_name="peaks")
 
     if schema_name == "XRDExtraction":
-        _normalize_list_field(normalized, warnings, field_name="phase_assignments")
+        _normalize_assignment_list_field(
+            normalized,
+            warnings,
+            field_name="phase_assignments",
+            warning_code="phase_assignments_item_mapped_from_dict",
+        )
         _normalize_detected_phases(normalized, warnings)
         _normalize_text_field_from_dict(
             normalized,
@@ -40,17 +45,37 @@ def normalize_vlm_payload_for_schema(payload: dict[str, Any], schema_name: str) 
             field_name="transition_temperatures",
             warning_code="transition_temperatures_item_mapped_from_dict",
         )
+        _normalize_peak_list_field(normalized, warnings, field_name="endothermic_peaks", temperature_unit="C")
+        _normalize_peak_list_field(normalized, warnings, field_name="exothermic_peaks", temperature_unit="C")
         _normalize_event_value_lists(normalized, warnings)
         _normalize_list_field(normalized, warnings, field_name="thermal_events")
     elif schema_name == "VibrationalSpectrumExtraction":
         _normalize_vibrational_peaks(normalized, warnings)
+        _normalize_assignment_list_field(
+            normalized,
+            warnings,
+            field_name="band_assignments",
+            warning_code="band_assignments_item_mapped_from_dict",
+        )
     elif schema_name == "NMRExtraction":
         _normalize_nmr_peaks(normalized, warnings)
+        _normalize_string_field_from_list(normalized, warnings, field_name="sample_name")
     elif schema_name == "FerronCurveExtraction":
         _normalize_list_field(normalized, warnings, field_name="al_species")
     elif schema_name == "UnknownFigureExtraction":
         _normalize_list_field(normalized, warnings, field_name="safe_observations")
 
+    return normalized, warnings
+
+
+def normalize_universal_extraction_payload_for_schema(
+    payload: dict[str, Any],
+    actual_figure_type: str,
+    schema_name: str,
+) -> tuple[dict[str, Any], list[str]]:
+    normalized, warnings = normalize_vlm_payload_for_schema(payload, schema_name)
+    if actual_figure_type == "unknown":
+        normalized.setdefault("likely_figure_type", payload.get("likely_figure_type") or payload.get("figure_type"))
     return normalized, warnings
 
 
@@ -67,6 +92,87 @@ def _normalize_list_field(payload: dict[str, Any], warnings: list[str], *, field
         return
     payload[field_name] = [str(value)] if str(value).strip() else []
     warnings.append(f"{field_name}_coerced_to_list")
+
+
+def _normalize_peak_list_field(
+    payload: dict[str, Any],
+    warnings: list[str],
+    *,
+    field_name: str,
+    temperature_unit: str | None = None,
+) -> None:
+    if field_name not in payload:
+        payload[field_name] = []
+        return
+    value = payload.get(field_name)
+    if value is None:
+        payload[field_name] = []
+        warnings.append(f"{field_name}_normalized_none_to_empty_list")
+        return
+    if isinstance(value, dict):
+        value = [value]
+        warnings.append(f"{field_name}_wrapped_dict_as_list")
+    elif isinstance(value, str):
+        payload[field_name] = []
+        warnings.append(f"{field_name}_string_dropped_to_empty_list")
+        warnings.append(f"{field_name}_coerced_to_empty_list")
+        return
+    elif not isinstance(value, list):
+        value = [value]
+        warnings.append(f"{field_name}_wrapped_scalar_as_list")
+
+    normalized_items: list[dict[str, Any]] = []
+    for item in value:
+        normalized = _normalize_peak_like_item(item, warnings, field_name=field_name, temperature_unit=temperature_unit)
+        if normalized is not None:
+            normalized_items.append(normalized)
+    payload[field_name] = normalized_items
+
+
+def _normalize_assignment_list_field(
+    payload: dict[str, Any],
+    warnings: list[str],
+    *,
+    field_name: str,
+    warning_code: str,
+) -> None:
+    value = payload.get(field_name)
+    if value is None:
+        payload[field_name] = []
+        return
+    if isinstance(value, str):
+        stripped = value.strip()
+        payload[field_name] = [stripped] if stripped else []
+        if stripped:
+            warnings.append(f"{field_name}_wrapped_string_as_list")
+            warnings.append(f"{field_name}_coerced_to_list")
+        return
+    if isinstance(value, dict):
+        value = [value]
+        warnings.append(f"{field_name}_wrapped_dict_as_list")
+    elif not isinstance(value, list):
+        payload[field_name] = [str(value)]
+        warnings.append(f"{field_name}_coerced_scalar_to_string_list")
+        return
+
+    normalized_items: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            stripped = item.strip()
+            if stripped:
+                normalized_items.append(stripped)
+            continue
+        if isinstance(item, dict):
+            rendered = _render_assignment_dict(item)
+            if rendered:
+                normalized_items.append(rendered)
+                warnings.append(warning_code)
+            continue
+        rendered = str(item).strip()
+        if rendered:
+            normalized_items.append(rendered)
+            warnings.append(f"{field_name}_item_coerced_to_string")
+    payload[field_name] = normalized_items
 
 
 def _normalize_detected_phases(payload: dict[str, Any], warnings: list[str]) -> None:
@@ -213,14 +319,30 @@ def _normalize_event_value_lists(payload: dict[str, Any], warnings: list[str]) -
         value = payload.get(field_name)
         if value is None:
             continue
+        if isinstance(value, dict):
+            value = [value]
+            payload[field_name] = value
+            warnings.append(f"{field_name}_wrapped_dict_as_list")
+        elif isinstance(value, str):
+            payload[field_name] = []
+            warnings.append(f"{field_name}_string_dropped_to_empty_list")
+            continue
         if isinstance(value, list):
             normalized_items: list[Any] = []
             changed = False
             for item in value:
+                if isinstance(item, str):
+                    warnings.append(f"{field_name}_string_item_dropped")
+                    changed = True
+                    continue
                 if not isinstance(item, dict):
                     normalized_items.append(item)
                     continue
                 normalized_item = dict(item)
+                event_type = normalized_item.get("event_type") or normalized_item.get("type")
+                if event_type is not None and "event_type" not in normalized_item:
+                    normalized_item["event_type"] = event_type
+                    changed = True
                 for key in ("temperature", "peak_temperature", "transition_temperature"):
                     raw = normalized_item.get(key)
                     if isinstance(raw, dict):
@@ -229,6 +351,9 @@ def _normalize_event_value_lists(payload: dict[str, Any], warnings: list[str]) -
                             normalized_item[key] = _coerce_float(extracted)
                             warnings.append(f"{field_name}_{key}_mapped_from_dict")
                             changed = True
+                    elif raw is not None and key == "temperature":
+                        normalized_item.setdefault("temperature_peak", _safe_coerce_float(raw))
+                        changed = True
                 for key in ("mass_loss_percent", "weight_loss_percent", "residue_percent"):
                     raw = normalized_item.get(key)
                     if isinstance(raw, dict):
@@ -237,6 +362,7 @@ def _normalize_event_value_lists(payload: dict[str, Any], warnings: list[str]) -
                             normalized_item[key] = _coerce_float(extracted)
                             warnings.append(f"{field_name}_{key}_mapped_from_dict")
                             changed = True
+                normalized_item = _normalize_thermal_event_record(normalized_item, warnings)
                 normalized_items.append(normalized_item)
             if changed:
                 payload[field_name] = normalized_items
@@ -371,8 +497,173 @@ def _normalize_microscopy_payload(payload: dict[str, Any], warnings: list[str]) 
                     payload[range_field] = stripped
                     payload[estimate_field] = None
                     warnings.append(f"{estimate_field}_non_numeric_moved_to_{range_field}")
+        range_value = payload.get(range_field)
+        if isinstance(range_value, dict):
+            rendered = _render_numeric_range(range_value, payload.get("diameter_unit") if "diameter" in range_field else payload.get("particle_size_unit"))
+            payload[range_field] = rendered
+            warnings.append(f"{range_field}_mapped_from_dict")
+        elif isinstance(range_value, list):
+            rendered = _render_numeric_range(range_value, payload.get("diameter_unit") if "diameter" in range_field else payload.get("particle_size_unit"))
+            if rendered is None:
+                payload[range_field] = None
+                warnings.append(f"{range_field}_list_dropped")
+            else:
+                payload[range_field] = rendered
+                warnings.append(f"{range_field}_mapped_from_list")
         if payload.get(estimate_field) is None and not payload.get(basis_field):
             payload.setdefault(basis_field, "not_measurable")
+
+
+def _normalize_string_field_from_list(payload: dict[str, Any], warnings: list[str], *, field_name: str) -> None:
+    value = payload.get(field_name)
+    if value is None or isinstance(value, str):
+        return
+    if isinstance(value, list):
+        joined = "; ".join(str(item) for item in value if item not in (None, ""))
+        payload[field_name] = joined or None
+        warnings.append(f"{field_name}_joined_from_list")
+        return
+    payload[field_name] = str(value)
+    warnings.append(f"{field_name}_coerced_to_string")
+
+
+def _render_assignment_dict(item: dict[str, Any]) -> str | None:
+    primary = item.get("assignment") or item.get("description") or item.get("phase") or item.get("species")
+    location = (
+        item.get("wavenumber")
+        or item.get("position")
+        or item.get("peak_position")
+        or item.get("two_theta")
+        or item.get("chemical_shift")
+        or item.get("chemical_shift_ppm")
+    )
+    if primary and location:
+        return f"{location}: {primary}"
+    if primary:
+        return str(primary)
+    if location:
+        return str(location)
+    source_text = item.get("source_text") or item.get("notes")
+    return str(source_text) if source_text else None
+
+
+def _render_numeric_range(value: Any, unit: str | None) -> str | None:
+    low = high = None
+    if isinstance(value, dict):
+        low = value.get("min") if value.get("min") is not None else value.get("start")
+        high = value.get("max") if value.get("max") is not None else value.get("end")
+        unit = value.get("unit") or unit
+    elif isinstance(value, list) and len(value) >= 2:
+        low, high = value[0], value[1]
+    if low is None or high is None:
+        return None
+    low_text = _format_number_or_text(low)
+    high_text = _format_number_or_text(high)
+    suffix = f" {unit}" if unit else ""
+    return f"{low_text}-{high_text}{suffix}"
+
+
+def _normalize_peak_like_item(
+    item: Any,
+    warnings: list[str],
+    *,
+    field_name: str,
+    temperature_unit: str | None = None,
+) -> dict[str, Any] | None:
+    if isinstance(item, dict):
+        peak = dict(item)
+    elif isinstance(item, (int, float)) and not isinstance(item, bool):
+        peak = {"position": float(item), "source_text": str(item)}
+        if temperature_unit:
+            peak["unit"] = temperature_unit
+        warnings.append(f"{field_name}_numeric_item_mapped_to_peak_record")
+    elif isinstance(item, str):
+        stripped = item.strip()
+        if not stripped:
+            return None
+        peak = {"position": None, "source_text": stripped, "warnings": [f"{field_name}_string_item_preserved_as_source_text"]}
+        warnings.append(f"{field_name}_string_item_preserved_as_source_text")
+    else:
+        return None
+
+    if peak.get("warnings") is None:
+        peak["warnings"] = []
+    elif not isinstance(peak.get("warnings"), list):
+        peak["warnings"] = [str(peak.get("warnings"))]
+    if temperature_unit and not peak.get("unit"):
+        peak["unit"] = temperature_unit
+    if "assignment" not in peak:
+        assignment = peak.get("description") or peak.get("phase") or peak.get("species_assignment")
+        if assignment:
+            peak["assignment"] = assignment
+    position = peak.get("position")
+    if position is None:
+        alt_position = peak.get("temperature") or peak.get("peak_temperature") or peak.get("wavenumber") or peak.get("two_theta")
+        if alt_position is not None:
+            numeric = _safe_coerce_float(alt_position)
+            if numeric is not None:
+                peak["position"] = numeric
+            else:
+                peak["position"] = None
+                if alt_position not in (None, ""):
+                    source = str(peak.get("source_text") or "").strip()
+                    snippet = str(alt_position)
+                    if snippet not in source:
+                        peak["source_text"] = f"{source}; {snippet}".strip("; ")
+                        _append_item_warning(peak, f"non_numeric_peak_position:{snippet}")
+    elif isinstance(position, str):
+        stripped = position.strip()
+        if _RANGE_PATTERN.match(stripped):
+            source = str(peak.get("source_text") or "").strip()
+            if stripped not in source:
+                peak["source_text"] = f"{source}; {stripped}".strip("; ")
+            peak["position"] = None
+            _append_item_warning(peak, f"range_peak_position_not_numeric:{stripped}")
+            warnings.append(f"range_peak_position_not_numeric:{stripped}")
+        else:
+            numeric = _safe_coerce_float(stripped)
+            if numeric is None:
+                peak["position"] = None
+                _append_item_warning(peak, f"non_numeric_peak_position:{stripped}")
+                warnings.append(f"{field_name}_non_numeric_position:{stripped}")
+            else:
+                peak["position"] = numeric
+    return peak
+
+
+def _normalize_thermal_event_record(item: dict[str, Any], warnings: list[str]) -> dict[str, Any]:
+    normalized = dict(item)
+    if normalized.get("event_type") is None and normalized.get("type") is not None:
+        normalized["event_type"] = normalized.get("type")
+    mapping = {
+        "temperature": "temperature_peak",
+        "peak_temperature": "temperature_peak",
+        "temp_peak": "temperature_peak",
+        "onset": "temperature_onset",
+        "temperature_onset": "temperature_onset",
+        "end": "temperature_end",
+        "temperature_end": "temperature_end",
+        "description": "assignment",
+    }
+    for source_key, target_key in mapping.items():
+        value = normalized.get(source_key)
+        if value is None:
+            continue
+        if target_key.startswith("temperature_"):
+            coerced = _safe_coerce_float(value)
+            if coerced is not None:
+                normalized[target_key] = coerced
+            else:
+                source = str(normalized.get("source_text") or "").strip()
+                snippet = str(value)
+                if snippet and snippet not in source:
+                    normalized["source_text"] = f"{source}; {snippet}".strip("; ")
+                    warnings.append(f"thermal_event_{source_key}_range_preserved_in_source_text")
+            if normalized.get("temperature_unit") is None:
+                normalized["temperature_unit"] = "C"
+        elif target_key == "assignment" and normalized.get("assignment") is None:
+            normalized["assignment"] = str(value)
+    return normalized
 
 
 def _coerce_list_of_strings(value: Any) -> list[str]:
@@ -388,3 +679,17 @@ def _coerce_float(value: Any) -> float:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
     return float(str(value).strip())
+
+
+def _safe_coerce_float(value: Any) -> float | None:
+    try:
+        return _coerce_float(value)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _format_number_or_text(value: Any) -> str:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        numeric = float(value)
+        return str(int(numeric)) if numeric.is_integer() else str(numeric)
+    return str(value)

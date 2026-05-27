@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .io import parse_json_payload, read_json, read_jsonl, write_json, write_jsonl
-from .normalization import normalize_vlm_payload_for_schema
+from .normalization import normalize_universal_extraction_payload_for_schema, normalize_vlm_payload_for_schema
 from .prompt_templates import get_prompt_for_figure_type, get_universal_compact_prompt
 from .routing import (
     caption_or_context_is_scientific,
@@ -116,6 +116,7 @@ def validate_universal_extraction_payload(
         merged_payload,
         figure_type=actual_type,
         schema_name=schema_cls.__name__,
+        use_universal_adapter=True,
     )
     normalized_payload["warnings"] = [*(normalized_payload.get("warnings", []) or []), *normalization_warnings]
     try:
@@ -521,24 +522,17 @@ class Stage4VisionSpectraExtractor:
         *,
         figure_type: str = "",
         schema_name: str = "",
+        use_universal_adapter: bool = False,
     ) -> tuple[dict[str, Any], list[str]]:
         normalized = dict(parsed)
         warnings: list[str] = []
-        list_fields = ("peaks", "endothermic_peaks", "exothermic_peaks")
-        for field_name in list_fields:
-            value = normalized.get(field_name)
-            if value is None:
-                continue
-            if not isinstance(value, list):
-                normalized[field_name] = []
-                warnings.append(f"{field_name}_coerced_to_empty_list")
-                continue
-            if field_name == "peaks":
-                normalized[field_name] = [
-                    Stage4VisionSpectraExtractor._normalize_peak_record(item, figure_type=figure_type, warnings=warnings)
-                    for item in value
-                    if isinstance(item, dict)
-                ]
+        peaks = normalized.get("peaks")
+        if isinstance(peaks, list):
+            normalized["peaks"] = [
+                Stage4VisionSpectraExtractor._normalize_peak_record(item, figure_type=figure_type, warnings=warnings)
+                for item in peaks
+                if isinstance(item, dict)
+            ]
         confidence = normalized.get("confidence")
         if isinstance(confidence, str):
             coerced_confidence = Stage4VisionSpectraExtractor._coerce_confidence_value(confidence)
@@ -547,7 +541,8 @@ class Stage4VisionSpectraExtractor:
                 warnings.append("confidence_cleared_from_invalid_string")
             else:
                 normalized["confidence"] = coerced_confidence
-        schema_normalized, schema_warnings = normalize_vlm_payload_for_schema(normalized, schema_name)
+        normalizer = normalize_universal_extraction_payload_for_schema if use_universal_adapter else normalize_vlm_payload_for_schema
+        schema_normalized, schema_warnings = normalizer(normalized, figure_type, schema_name) if use_universal_adapter else normalizer(normalized, schema_name)
         normalized = schema_normalized
         warnings.extend(schema_warnings)
         return normalized, warnings

@@ -64,7 +64,10 @@ def test_stage4_batch_runner_skip_existing(tmp_path: Path) -> None:
     stage3_dir.mkdir(parents=True, exist_ok=True)
     stage4_dir.mkdir(parents=True, exist_ok=True)
     (stage3_dir / "stage3_summary.json").write_text(json.dumps({"ok": True}, ensure_ascii=False), encoding="utf-8")
-    (stage4_dir / "stage4a_summary.json").write_text(json.dumps({"total_candidates": 1}, ensure_ascii=False), encoding="utf-8")
+    (stage4_dir / "stage4a_summary.json").write_text(
+        json.dumps({"dry_run_count": 1, "live_count": 0, "total_candidates": 1}, ensure_ascii=False),
+        encoding="utf-8",
+    )
     manifest.write_text("source_id,category,paper_id_guess\ns1,fiber_process,paper1\n", encoding="utf-8")
 
     result = module.run_stage4a_batch(
@@ -79,3 +82,43 @@ def test_stage4_batch_runner_skip_existing(tmp_path: Path) -> None:
     )
 
     assert result["rows"][0]["status"] == "skipped_existing"
+
+
+def test_stage4_batch_runner_live_not_blocked_by_dry_run_summary(tmp_path: Path) -> None:
+    module = _load_script_module()
+    manifest = tmp_path / "source_manifest.csv"
+    outputs_dir = tmp_path / "outputs"
+    report_dir = tmp_path / "reports"
+    paper_output_dir = outputs_dir / "fiber_process" / "paper1"
+    stage3_dir = paper_output_dir / "stage3_twopass"
+    stage4_dir = paper_output_dir / "stage4_vision_spectra_universal"
+    stage3_dir.mkdir(parents=True, exist_ok=True)
+    stage4_dir.mkdir(parents=True, exist_ok=True)
+    (stage3_dir / "stage3_summary.json").write_text(json.dumps({"ok": True}, ensure_ascii=False), encoding="utf-8")
+    (stage4_dir / "stage4a_summary.json").write_text(
+        json.dumps({"dry_run_count": 1, "live_count": 0, "total_candidates": 1}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (paper_output_dir / "figures.jsonl").write_text(
+        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": "fig1.jpg"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (paper_output_dir / "vision_inputs.jsonl").write_text(
+        json.dumps({"figure_id": "fig-1", "figure_class": "other", "vision_image_path": "fig1.jpg"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
+    manifest.write_text("source_id,category,paper_id_guess\ns1,fiber_process,paper1\n", encoding="utf-8")
+
+    result = module.run_stage4a_batch(
+        manifest=manifest,
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        stage3_subdir="stage3_twopass",
+        stage4_subdir="stage4_vision_spectra_universal",
+        routing_mode="universal_compact",
+        dry_run=False,
+        skip_existing=True,
+    )
+
+    assert result["rows"][0]["status"] == "success"

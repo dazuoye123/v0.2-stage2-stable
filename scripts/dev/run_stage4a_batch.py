@@ -17,6 +17,7 @@ if str(SRC_DIR) not in sys.path:
 
 from alumina_sol_extractor.stage4.extractor import Stage4VisionSpectraExtractor  # noqa: E402
 from alumina_sol_extractor.stage4.io import read_json, read_jsonl  # noqa: E402
+from alumina_sol_extractor.dspy_modules.settings import load_project_dotenv  # noqa: E402
 from alumina_sol_extractor.utils.batch_categories import (  # noqa: E402
     CANONICAL_BATCH_CATEGORIES_WITH_UNCATEGORIZED,
     normalize_batch_category,
@@ -102,6 +103,8 @@ def run_stage4a_batch(
     manifest = Path(manifest)
     outputs_dir = Path(outputs_dir)
     report_dir = Path(report_dir)
+    if not dry_run and not estimate_only:
+        load_project_dotenv(PROJECT_ROOT)
     report_dir.mkdir(parents=True, exist_ok=True)
     rows = _load_manifest_rows(manifest)
     selected_rows = _select_manifest_rows(rows, category=category, paper_ids=paper_ids, limit=limit)
@@ -193,7 +196,7 @@ def _process_manifest_row(
 
     if not _has_readable_stage3_summary(stage3_dir):
         status = "missing_stage3"
-    elif skip_existing and not force and stage4_summary_path.exists():
+    elif skip_existing and not force and _should_skip_existing_stage4(stage4_summary_path, dry_run=dry_run, estimate_only=estimate_only):
         status = "skipped_existing"
         summary = read_json(stage4_summary_path, default={}) or {}
     else:
@@ -408,6 +411,19 @@ def _has_readable_stage3_summary(stage3_dir: Path) -> bool:
     except Exception:
         return False
     return isinstance(payload, dict)
+
+
+def _should_skip_existing_stage4(stage4_summary_path: Path, *, dry_run: bool, estimate_only: bool) -> bool:
+    if not stage4_summary_path.exists():
+        return False
+    summary = read_json(stage4_summary_path, default={}) or {}
+    if not isinstance(summary, dict):
+        return False
+    existing_live_count = int(summary.get("live_count") or 0)
+    existing_dry_run_count = int(summary.get("dry_run_count") or 0)
+    if dry_run or estimate_only:
+        return existing_live_count > 0 or existing_dry_run_count > 0
+    return existing_live_count > 0
 
 
 def _load_manifest_rows(path: Path) -> list[dict[str, str]]:

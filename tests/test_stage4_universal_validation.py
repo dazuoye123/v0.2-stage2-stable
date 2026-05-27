@@ -130,7 +130,7 @@ def test_universal_validation_schema_failure_is_captured_without_crashing() -> N
         "warnings": [],
         "conflict_warnings": [],
         "extraction": {
-            "band_assignments": {},
+            "sample_name": {"unexpected": "dict"},
         },
     }
 

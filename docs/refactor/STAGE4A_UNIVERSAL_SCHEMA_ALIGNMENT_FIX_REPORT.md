@@ -1,0 +1,64 @@
+# Stage4A Universal Schema Alignment Fix Report
+
+- ???? VLM: ??
+- ?????? Stage4A live: ??
+
+## ??????
+
+- ?? failed_records: 14
+- ??? normalization ??: 14
+- schema_validation_failed_count before/after: 14 -> 0
+
+### ? schema
+
+- XRDExtraction: 4
+- VibrationalSpectrumExtraction: 4
+- MicroscopyExtraction: 3
+- ThermalAnalysisExtraction: 2
+- NMRExtraction: 1
+
+### ???
+
+- phase_assignments.0: 4
+- band_assignments.0: 4
+- band_assignments.1: 4
+- band_assignments.2: 4
+- band_assignments.3: 4
+- band_assignments.4: 4
+- band_assignments.5: 4
+- diameter_range: 3
+- endothermic_peaks.0: 2
+- exothermic_peaks.0: 2
+- band_assignments.6: 2
+- endothermic_peaks.1: 1
+- exothermic_peaks.1: 1
+- sample_name: 1
+- band_assignments.7: 1
+- band_assignments.8: 1
+- band_assignments.9: 1
+- band_assignments.10: 1
+- band_assignments.11: 1
+- band_assignments.12: 1
+
+## ??????
+
+- `band_assignments`: ?? `string -> list[str]`?`list[dict] -> list[str]`?
+- `phase_assignments`: ?? `string -> list[str]`?`list[dict] -> list[str]`?
+- `diameter_range`: ?? `dict/list -> "min-max unit"`?????????? warning?
+- `thermal_events / endothermic_peaks / exothermic_peaks`: ?? scalar/dict/list ?????????? thermal schema?
+- `peaks`: ?? `dict/string/null` ?????????? `source_text`?`position=null`??? midpoint?
+- `sample_name`: ?? `list -> joined string`?
+- universal adapter ????????????????? warnings ? failed ???
+
+## ?? replay ????
+
+- old_successful_extractions: 26
+- old_failed_records: 14
+- new_successful_extractions: 40
+- new_failed_records: 0
+
+## ??
+
+- ?? 14 ? schema failure ???????? normalization + posterior schema validation ???
+- ??? universal_compact live ?????? schema adapter ??????? VLM ???
+- ??????? limit10 live????????? adapter????????? limit20?
