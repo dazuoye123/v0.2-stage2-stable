@@ -38,6 +38,104 @@ _COMMON_PREFIX = (
 )
 
 
+_UNIVERSAL_COMPACT_PROMPT = PromptTemplate(
+    name="universal_compact_prompt",
+    schema_name="UniversalCompactFigureExtraction",
+    text=(
+        "Return exactly one JSON object. Do not wrap JSON in markdown. Do not include prose outside JSON. "
+        "You will receive an image plus text context. Use the image as the primary evidence. "
+        "Stage2 figure_class is only a hint, not hard routing. Stage3 figure_type is only a hint, not hard routing. "
+        "Caption and surrounding text may help, but image evidence comes first. "
+        "First decide actual_figure_type from this closed set only: "
+        "[xrd_pattern, ftir_spectrum, ir_spectrum, raman_spectrum, nmr_spectrum, tg_curve, dsc_curve, tg_dsc_curve, ferron_curve, sem_image, tem_image, microscopy, unknown]. "
+        "If uncertain, set actual_figure_type=unknown. "
+        "Do not fabricate peaks, phases, sizes, mass loss values, temperatures, residue, or morphology details that are not visible or explicitly supported by text. "
+        "All list-like fields must be JSON arrays. If empty, output []. Numeric fields must be number or null. "
+        "warnings must be []. conflict_warnings must be []. Do not output markdown. Output one JSON object only. "
+        "For range-like peaks such as 1000-1100 cm^-1, do not convert the range to a midpoint. "
+        "Set numeric position=null, preserve the range in source_text or note text, and keep the interpretation in assignment or notes. "
+        "For XRD, do not treat reference tick marks as experimental peaks. "
+        "For SEM, TEM, or microscopy, do not estimate diameter or particle size without a clear scale bar and measurable boundaries. "
+        "If no reliable size can be measured, keep diameter_estimate and particle_size_estimate null and explain in image_quality_notes or warnings. "
+        "Only populate fields relevant to actual_figure_type; keep unrelated fields null, [], or {}. "
+        "The output JSON must follow this top-level structure: "
+        "{"
+        "\"paper_id\": null, "
+        "\"figure_id\": null, "
+        "\"stage2_figure_class\": null, "
+        "\"stage3_figure_type\": null, "
+        "\"actual_figure_type\": null, "
+        "\"type_confidence\": null, "
+        "\"type_reason\": null, "
+        "\"type_mismatch\": false, "
+        "\"needs_manual_review\": false, "
+        "\"image_readability\": null, "
+        "\"text_context_quality\": null, "
+        "\"conflict_warnings\": [], "
+        "\"warnings\": [], "
+        "\"extraction\": {"
+        "\"figure_type\": null, "
+        "\"technique\": null, "
+        "\"sample_name\": null, "
+        "\"peaks\": [], "
+        "\"detected_phases\": [], "
+        "\"phase_assignments\": [], "
+        "\"crystallinity_trend\": null, "
+        "\"reference_ticks_visible\": null, "
+        "\"band_assignments\": [], "
+        "\"trend_summary\": null, "
+        "\"nucleus\": null, "
+        "\"species_summary\": null, "
+        "\"possible_species\": [], "
+        "\"quantitative_values\": {}, "
+        "\"reference_standard\": null, "
+        "\"mass_loss_steps\": [], "
+        "\"thermal_events\": [], "
+        "\"endothermic_peaks\": [], "
+        "\"exothermic_peaks\": [], "
+        "\"transition_temperatures\": [], "
+        "\"residue_percent\": null, "
+        "\"total_mass_loss_percent\": null, "
+        "\"final_residue_percent\": null, "
+        "\"atmosphere\": null, "
+        "\"heating_rate\": null, "
+        "\"al_species\": [], "
+        "\"species_quantification\": {}, "
+        "\"Ala_fraction_percent\": null, "
+        "\"Alb_fraction_percent\": null, "
+        "\"Alc_fraction_percent\": null, "
+        "\"Al13_fraction_percent\": null, "
+        "\"equation\": null, "
+        "\"r_squared\": null, "
+        "\"method_summary\": null, "
+        "\"morphology_summary\": null, "
+        "\"object_identity\": null, "
+        "\"view_type\": null, "
+        "\"morphology_type\": null, "
+        "\"surface_smoothness\": null, "
+        "\"compactness\": null, "
+        "\"fracture_type\": null, "
+        "\"diameter_estimate\": null, "
+        "\"diameter_range\": null, "
+        "\"diameter_unit\": null, "
+        "\"diameter_basis\": null, "
+        "\"particle_size_estimate\": null, "
+        "\"particle_size_range\": null, "
+        "\"particle_size_unit\": null, "
+        "\"particle_size_basis\": null, "
+        "\"scale_bar\": null, "
+        "\"morphology_features\": [], "
+        "\"image_quality_notes\": [], "
+        "\"likely_figure_type\": null, "
+        "\"safe_observations\": [], "
+        "\"why_uncertain\": null, "
+        "\"raw_notes\": null"
+        "}"
+        "}."
+    ),
+)
+
+
 _PROMPTS: dict[str, PromptTemplate] = {
     "nmr_spectrum": PromptTemplate(
         name="nmr_spectrum_prompt",
@@ -199,3 +297,7 @@ _PROMPTS: dict[str, PromptTemplate] = {
 def get_prompt_for_figure_type(figure_type: str | None) -> PromptTemplate:
     key = (figure_type or "unknown").strip().lower()
     return _PROMPTS.get(key, _PROMPTS["unknown"])
+
+
+def get_universal_compact_prompt() -> PromptTemplate:
+    return _UNIVERSAL_COMPACT_PROMPT
