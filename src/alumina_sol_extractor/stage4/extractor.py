@@ -8,8 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from .io import parse_json_payload, read_json, read_jsonl, write_json, write_jsonl
-from .normalization import normalize_universal_extraction_payload_for_schema, normalize_vlm_payload_for_schema
+from .normalization import (
+    normalize_universal_extraction_payload_for_schema,
+    normalize_universal_shell_payload,
+    normalize_vlm_payload_for_schema,
+)
 from .prompt_templates import get_prompt_for_figure_type, get_universal_compact_prompt
+from .processed_index import (
+    classify_stage4a_figure_processing_action,
+    load_stage4a_processed_figure_index,
+    merge_stage4_records_by_figure_id,
+)
 from .routing import (
     caption_or_context_is_scientific,
     describe_universal_candidate,
@@ -63,16 +72,27 @@ MAX_RELATED_PARAMETERS = 20
 LOW_TYPE_CONFIDENCE_THRESHOLD = 0.5
 
 
+def _has_valid_image_file(value: Any) -> bool:
+    if not value:
+        return False
+    try:
+        path = Path(str(value))
+    except Exception:  # noqa: BLE001
+        return False
+    return path.exists() and path.is_file()
+
+
 def validate_universal_extraction_payload(
     universal_payload: dict[str, Any],
     candidate: dict[str, Any],
 ) -> dict[str, Any]:
-    shell = UniversalFigureExtraction(**universal_payload).model_dump()
+    normalized_shell_payload, shell_warnings = normalize_universal_shell_payload(universal_payload)
+    shell = UniversalFigureExtraction(**normalized_shell_payload).model_dump()
     initial_type = normalize_figure_type(candidate.get("initial_figure_type"))
     actual_type = normalize_figure_type(shell.get("actual_figure_type"))
     type_confidence = shell.get("type_confidence")
     low_confidence = isinstance(type_confidence, (int, float)) and float(type_confidence) < LOW_TYPE_CONFIDENCE_THRESHOLD
-    warnings = list(shell.get("warnings", []) or [])
+    warnings = [*list(shell.get("warnings", []) or []), *shell_warnings]
     conflict_warnings = list(shell.get("conflict_warnings", []) or [])
     extraction_payload = dict(shell.get("extraction") or {})
 
@@ -156,10 +176,17 @@ class Stage4VisionSpectraExtractor:
     stage3_subdir: str = "stage3_dspy_smoke"
     stage4_subdir: str = "stage4_vision_spectra"
 
+    def _should_require_real_image_file(self) -> bool:
+        if self.dry_run:
+            return False
+        return self.client is None or isinstance(self.client, VisionLanguageModelClient)
+
     def run(self) -> dict[str, Any]:
         stage4_dir = Path(self.output_dir) / self.stage4_subdir
         stage4_dir.mkdir(parents=True, exist_ok=True)
         previous_extractions = read_jsonl(stage4_dir / "spectra_extractions.jsonl")
+        previous_raw_outputs = read_jsonl(stage4_dir / "raw_vlm_outputs.jsonl")
+        previous_failed_records = read_jsonl(stage4_dir / "spectra_failed_records.jsonl")
         config_warnings: list[str] = []
 
         figures = read_jsonl(Path(self.output_dir) / "figures.jsonl")
@@ -179,28 +206,80 @@ class Stage4VisionSpectraExtractor:
             evidence_objects=evidence_objects,
             stage3_schema=stage3_schema,
         )
-        prompts = [self._build_prompt_record(candidate) for candidate in candidates if candidate.get("send_to_vlm")]
+        processed_index = load_stage4a_processed_figure_index(stage4_dir)
+        candidates = self._apply_figure_level_dedup(candidates, processed_index)
+        prompts = [
+            self._build_prompt_record(candidate)
+            for candidate in candidates
+            if candidate.get("send_to_vlm") and candidate.get("will_call_vlm")
+        ]
         extractions, raw_outputs, failed_records, client_warnings = self._run_extractions(
             candidates,
             previous_extractions=previous_extractions,
         )
         config_warnings.extend(client_warnings)
+        replaced_figure_ids = {
+            str(candidate.get("figure_id") or "").strip()
+            for candidate in candidates
+            if candidate.get("figure_processing_action") in {"new_live", "rerun_transient", "missing_image"}
+            and candidate.get("figure_id")
+        }
+        final_extractions = merge_stage4_records_by_figure_id(
+            previous_extractions,
+            extractions,
+            replaced_figure_ids=replaced_figure_ids,
+        )
+        final_raw_outputs = merge_stage4_records_by_figure_id(
+            previous_raw_outputs,
+            raw_outputs,
+            replaced_figure_ids=replaced_figure_ids,
+        )
+        final_failed_records = merge_stage4_records_by_figure_id(
+            previous_failed_records,
+            failed_records,
+            replaced_figure_ids=replaced_figure_ids,
+        )
         summary = build_stage4_summary(
             candidates=candidates,
-            extractions=extractions,
-            failed_records=failed_records,
+            extractions=final_extractions,
+            failed_records=final_failed_records,
             config_warnings=config_warnings,
         )
 
         write_jsonl(candidates, stage4_dir / "stage4_candidates.jsonl")
         write_jsonl(prompts, stage4_dir / "stage4_prompts.jsonl")
-        write_jsonl(extractions, stage4_dir / "spectra_extractions.jsonl")
-        write_jsonl(raw_outputs, stage4_dir / "raw_vlm_outputs.jsonl")
-        write_jsonl(failed_records, stage4_dir / "failed_records.jsonl")
-        write_jsonl(failed_records, stage4_dir / "spectra_failed_records.jsonl")
+        write_jsonl(final_extractions, stage4_dir / "spectra_extractions.jsonl")
+        write_jsonl(final_raw_outputs, stage4_dir / "raw_vlm_outputs.jsonl")
+        write_jsonl(final_failed_records, stage4_dir / "failed_records.jsonl")
+        write_jsonl(final_failed_records, stage4_dir / "spectra_failed_records.jsonl")
         write_json(stage4_dir / "stage4_summary.json", summary)
         write_json(stage4_dir / "stage4a_summary.json", summary)
         return summary
+
+    def _apply_figure_level_dedup(
+        self,
+        candidates: list[dict[str, Any]],
+        processed_index: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        normalized_candidates: list[dict[str, Any]] = []
+        for candidate in candidates:
+            action, reason = classify_stage4a_figure_processing_action(candidate, processed_index)
+            updated = dict(candidate)
+            updated["figure_processing_action"] = action
+            updated["figure_processing_reason"] = reason
+            updated["will_call_vlm"] = bool(updated.get("send_to_vlm")) and action in {"new_live", "rerun_transient"}
+            updated["replay_candidate"] = action == "replay_candidate"
+            updated["rerun_reason"] = reason if action == "rerun_transient" else None
+            if action == "skip_success":
+                updated["skip_reason"] = reason or updated.get("skip_reason")
+            elif action == "missing_image":
+                updated["send_to_vlm"] = False
+                updated["will_call_vlm"] = False
+                updated["skip_reason"] = "missing_image_path"
+            elif action in {"replay_candidate", "blocked_failed"}:
+                updated["will_call_vlm"] = False
+            normalized_candidates.append(updated)
+        return normalized_candidates
 
     def _select_candidates(
         self,
@@ -299,6 +378,16 @@ class Stage4VisionSpectraExtractor:
                 "candidate_risk_level": risk_level,
                 "routing_reason": routing_reason,
             }
+            if (
+                self._should_require_real_image_file()
+                and candidate["send_to_vlm"]
+                and not _has_valid_image_file(source_image_path)
+            ):
+                candidate["send_to_vlm"] = False
+                candidate["skip_reason"] = "missing_image_path"
+                candidate["candidate_risk_level"] = "high"
+                if candidate["routing_mode"] == "universal_compact":
+                    candidate["routing_reason"] = "weak_type_but_scientific_context"
             candidates.append(candidate)
 
         requested_ids = [item for item in (self.figure_ids or []) if item]
@@ -415,7 +504,27 @@ class Stage4VisionSpectraExtractor:
         config_warnings = list(getattr(client, "config_warnings", []) or [])
         previous_success_by_figure_id = index_previous_successes(previous_extractions or [])
         for candidate in candidates:
-            if not candidate.get("send_to_vlm"):
+            action = str(candidate.get("figure_processing_action") or "")
+            if action == "missing_image":
+                failed_records.append(
+                    {
+                        "figure_id": candidate.get("figure_id"),
+                        "figure_type": candidate.get("figure_type"),
+                        "error": "missing_image_path",
+                        "error_type": "missing_image_path",
+                        "error_message": "missing_image_path",
+                        "is_transient": False,
+                        "retry_attempts": 0,
+                        "max_retries": 0,
+                        "timeout_seconds": None,
+                        "attempt_errors": [],
+                        "fallback_used": False,
+                        "fallback_source": None,
+                        "final_status": "failed",
+                    }
+                )
+                continue
+            if not candidate.get("send_to_vlm") or not candidate.get("will_call_vlm"):
                 continue
             prompt_record = self._build_prompt_record(candidate)
             if self.dry_run:
@@ -428,6 +537,8 @@ class Stage4VisionSpectraExtractor:
                         "figure_type": candidate["figure_type"],
                         "raw_response": None,
                         "dry_run": True,
+                        "live_request_needed": bool(candidate.get("will_call_vlm")),
+                        "figure_processing_action": candidate.get("figure_processing_action"),
                         "prompt_preview": prompt_record.get("prompt"),
                     }
                 )

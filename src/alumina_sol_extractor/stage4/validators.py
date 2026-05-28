@@ -55,8 +55,15 @@ def build_stage4_summary(
     by_initial_type = Counter(str(item.get("initial_figure_type") or item.get("figure_type") or "unknown") for item in candidates)
     by_routing_reason = Counter(str(item.get("routing_reason") or "unknown") for item in candidates)
     by_risk = Counter(str(item.get("candidate_risk_level") or "unknown") for item in candidates)
+    by_processing_action = Counter(str(item.get("figure_processing_action") or "unknown") for item in candidates)
     processed_count = sum(1 for item in candidates if item.get("send_to_vlm"))
     skipped_count = sum(1 for item in candidates if not item.get("send_to_vlm"))
+    figure_level_skip_success_count = by_processing_action.get("skip_success", 0)
+    figure_level_replay_candidate_count = by_processing_action.get("replay_candidate", 0)
+    figure_level_rerun_transient_count = by_processing_action.get("rerun_transient", 0)
+    figure_level_new_live_count = by_processing_action.get("new_live", 0)
+    figure_level_missing_image_count = by_processing_action.get("missing_image", 0)
+    duplicate_vlm_prevented_count = figure_level_skip_success_count + figure_level_replay_candidate_count
     rescued_unknown_by_caption_count = sum(
         1 for item in candidates if item.get("routing_reason") == "stage2_unknown_caption_scientific" and item.get("send_to_vlm")
     )
@@ -82,7 +89,14 @@ def build_stage4_summary(
         "by_initial_figure_type": dict(by_initial_type),
         "routing_reason_distribution": dict(by_routing_reason),
         "candidate_risk_level_distribution": dict(by_risk),
+        "figure_processing_action_distribution": dict(by_processing_action),
         "send_to_vision_model_count": processed_count,
+        "figure_level_skip_success_count": figure_level_skip_success_count,
+        "figure_level_replay_candidate_count": figure_level_replay_candidate_count,
+        "figure_level_rerun_transient_count": figure_level_rerun_transient_count,
+        "figure_level_new_live_count": figure_level_new_live_count,
+        "figure_level_missing_image_count": figure_level_missing_image_count,
+        "duplicate_vlm_prevented_count": duplicate_vlm_prevented_count,
         "rescued_unknown_by_caption_count": rescued_unknown_by_caption_count,
         "skipped_unknown_schema_specific_count": skipped_unknown_schema_specific_count,
         "validation_error_count": validation_error_count,

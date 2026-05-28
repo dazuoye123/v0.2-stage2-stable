@@ -17,6 +17,10 @@ if str(SRC_DIR) not in sys.path:
 
 from alumina_sol_extractor.stage4.extractor import Stage4VisionSpectraExtractor  # noqa: E402
 from alumina_sol_extractor.stage4.io import read_json, read_jsonl  # noqa: E402
+from alumina_sol_extractor.stage4.processed_index import (  # noqa: E402
+    is_dry_run_only_stage4_summary,
+    is_live_successful_stage4_summary,
+)
 from alumina_sol_extractor.dspy_modules.settings import load_project_dotenv  # noqa: E402
 from alumina_sol_extractor.utils.batch_categories import (  # noqa: E402
     CANONICAL_BATCH_CATEGORIES_WITH_UNCATEGORIZED,
@@ -51,6 +55,12 @@ REPORT_FIELDS = [
     "initial_figure_type_distribution",
     "routing_reason_distribution",
     "candidate_risk_level_distribution",
+    "figure_level_skip_success_count",
+    "figure_level_replay_candidate_count",
+    "figure_level_rerun_transient_count",
+    "figure_level_new_live_count",
+    "figure_level_missing_image_count",
+    "duplicate_vlm_prevented_count",
     "started_at",
     "finished_at",
     "elapsed_seconds",
@@ -243,6 +253,12 @@ def _process_manifest_row(
         "initial_figure_type_distribution": json.dumps(summary.get("by_initial_figure_type", {}), ensure_ascii=False),
         "routing_reason_distribution": json.dumps(summary.get("routing_reason_distribution", {}), ensure_ascii=False),
         "candidate_risk_level_distribution": json.dumps(summary.get("candidate_risk_level_distribution", {}), ensure_ascii=False),
+        "figure_level_skip_success_count": int(summary.get("figure_level_skip_success_count") or 0),
+        "figure_level_replay_candidate_count": int(summary.get("figure_level_replay_candidate_count") or 0),
+        "figure_level_rerun_transient_count": int(summary.get("figure_level_rerun_transient_count") or 0),
+        "figure_level_new_live_count": int(summary.get("figure_level_new_live_count") or 0),
+        "figure_level_missing_image_count": int(summary.get("figure_level_missing_image_count") or 0),
+        "duplicate_vlm_prevented_count": int(summary.get("duplicate_vlm_prevented_count") or 0),
         "started_at": started_at,
         "finished_at": finished_at,
         "elapsed_seconds": elapsed_seconds,
@@ -423,27 +439,15 @@ def _should_skip_existing_stage4(stage4_summary_path: Path, *, dry_run: bool, es
     existing_dry_run_count = int(summary.get("dry_run_count") or 0)
     if dry_run or estimate_only:
         return existing_live_count > 0 or existing_dry_run_count > 0
-    return _is_live_successful_stage4_summary(summary)
+    return is_live_successful_stage4_summary(summary)
 
 
 def _is_live_successful_stage4_summary(summary: dict[str, Any]) -> bool:
-    if not isinstance(summary, dict):
-        return False
-    live_count = int(summary.get("live_count") or 0)
-    failed_record_count = int(summary.get("failed_record_count") or 0)
-    if "successful_extractions_count" in summary:
-        successful_extractions_count = int(summary.get("successful_extractions_count") or 0)
-    else:
-        successful_extractions_count = live_count
-    return live_count > 0 and failed_record_count == 0 and successful_extractions_count > 0
+    return is_live_successful_stage4_summary(summary)
 
 
 def _is_dry_run_only_stage4_summary(summary: dict[str, Any]) -> bool:
-    if not isinstance(summary, dict):
-        return False
-    dry_run_count = int(summary.get("dry_run_count") or 0)
-    live_count = int(summary.get("live_count") or 0)
-    return dry_run_count > 0 and live_count == 0
+    return is_dry_run_only_stage4_summary(summary)
 
 
 def _load_manifest_rows(path: Path) -> list[dict[str, str]]:

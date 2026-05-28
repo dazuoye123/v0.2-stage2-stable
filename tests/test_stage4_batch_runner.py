@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -147,3 +148,118 @@ def test_is_dry_run_only_stage4_summary_detects_non_live_placeholder() -> None:
     module = _load_script_module()
     assert module._is_dry_run_only_stage4_summary({"dry_run_count": 10, "live_count": 0}) is True
     assert module._is_dry_run_only_stage4_summary({"dry_run_count": 10, "live_count": 1}) is False
+
+
+def test_force_true_still_protects_existing_live_success_figure(tmp_path: Path, monkeypatch) -> None:
+    module = _load_script_module()
+    manifest = tmp_path / "source_manifest.csv"
+    outputs_dir = tmp_path / "outputs"
+    report_dir = tmp_path / "reports"
+    paper_output_dir = outputs_dir / "fiber_process" / "paper1"
+    stage3_dir = paper_output_dir / "stage3_twopass"
+    stage4_dir = paper_output_dir / "stage4_vision_spectra_universal"
+    stage3_dir.mkdir(parents=True, exist_ok=True)
+    stage4_dir.mkdir(parents=True, exist_ok=True)
+    image_path = paper_output_dir / "fig1.jpg"
+    image_path.write_bytes(b"img")
+    (stage3_dir / "stage3_summary.json").write_text(json.dumps({"ok": True}, ensure_ascii=False), encoding="utf-8")
+    (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
+    (paper_output_dir / "figures.jsonl").write_text(
+        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": str(image_path)}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (paper_output_dir / "vision_inputs.jsonl").write_text(
+        json.dumps({"figure_id": "fig-1", "figure_class": "unknown", "vision_image_path": str(image_path)}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (stage4_dir / "stage4a_summary.json").write_text(
+        json.dumps({"live_count": 1, "dry_run_count": 0, "successful_extractions_count": 1, "failed_record_count": 0}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (stage4_dir / "spectra_extractions.jsonl").write_text(
+        json.dumps({"figure_id": "fig-1", "source_image_path": str(image_path), "extraction_mode": "live"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    manifest.write_text("source_id,category,paper_id_guess\ns1,fiber_process,paper1\n", encoding="utf-8")
+
+    captured: dict[str, Any] = {}
+
+    def fake_run_extractions(self, candidates, *, previous_extractions=None):  # noqa: ANN001
+        captured["candidates"] = candidates
+        return [], [], [], []
+
+    monkeypatch.setattr(module.Stage4VisionSpectraExtractor, "_run_extractions", fake_run_extractions)
+
+    result = module.run_stage4a_batch(
+        manifest=manifest,
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        stage3_subdir="stage3_twopass",
+        stage4_subdir="stage4_vision_spectra_universal",
+        routing_mode="universal_compact",
+        dry_run=True,
+        force=True,
+        skip_existing=False,
+    )
+
+    assert result["rows"][0]["status"] == "success"
+    candidate = captured["candidates"][0]
+    assert candidate["figure_processing_action"] == "skip_success"
+    assert candidate["will_call_vlm"] is False
+
+
+def test_force_true_prefers_replay_over_resending_when_raw_output_exists(tmp_path: Path, monkeypatch) -> None:
+    module = _load_script_module()
+    manifest = tmp_path / "source_manifest.csv"
+    outputs_dir = tmp_path / "outputs"
+    report_dir = tmp_path / "reports"
+    paper_output_dir = outputs_dir / "fiber_process" / "paper1"
+    stage3_dir = paper_output_dir / "stage3_twopass"
+    stage4_dir = paper_output_dir / "stage4_vision_spectra_universal"
+    stage3_dir.mkdir(parents=True, exist_ok=True)
+    stage4_dir.mkdir(parents=True, exist_ok=True)
+    image_path = paper_output_dir / "fig1.jpg"
+    image_path.write_bytes(b"img")
+    (stage3_dir / "stage3_summary.json").write_text(json.dumps({"ok": True}, ensure_ascii=False), encoding="utf-8")
+    (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
+    (paper_output_dir / "figures.jsonl").write_text(
+        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": str(image_path)}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (paper_output_dir / "vision_inputs.jsonl").write_text(
+        json.dumps({"figure_id": "fig-1", "figure_class": "unknown", "vision_image_path": str(image_path)}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (stage4_dir / "stage4a_summary.json").write_text(
+        json.dumps({"live_count": 0, "dry_run_count": 0, "successful_extractions_count": 0, "failed_record_count": 1}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (stage4_dir / "raw_vlm_outputs.jsonl").write_text(
+        json.dumps({"figure_id": "fig-1", "dry_run": False, "raw_response": "{\"figure_id\":\"fig-1\"}"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    manifest.write_text("source_id,category,paper_id_guess\ns1,fiber_process,paper1\n", encoding="utf-8")
+
+    captured: dict[str, Any] = {}
+
+    def fake_run_extractions(self, candidates, *, previous_extractions=None):  # noqa: ANN001
+        captured["candidates"] = candidates
+        return [], [], [], []
+
+    monkeypatch.setattr(module.Stage4VisionSpectraExtractor, "_run_extractions", fake_run_extractions)
+
+    module.run_stage4a_batch(
+        manifest=manifest,
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        stage3_subdir="stage3_twopass",
+        stage4_subdir="stage4_vision_spectra_universal",
+        routing_mode="universal_compact",
+        dry_run=True,
+        force=True,
+        skip_existing=False,
+    )
+
+    candidate = captured["candidates"][0]
+    assert candidate["figure_processing_action"] == "replay_candidate"
+    assert candidate["will_call_vlm"] is False

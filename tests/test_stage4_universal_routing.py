@@ -39,6 +39,22 @@ def test_universal_candidate_selection_rescues_unknown_stage2_by_scientific_capt
     assert candidates[0]["prompt_template_name"] == "universal_compact_prompt"
 
 
+def test_universal_candidate_with_scientific_caption_but_missing_image_path_is_not_sent() -> None:
+    extractor = Stage4VisionSpectraExtractor(
+        paper_id="paper-1",
+        output_dir=Path("."),
+        routing_mode="universal_compact",
+        dry_run=False,
+    )
+    candidates = extractor._select_candidates(
+        figures=[{"figure_id": "fig-1", "caption": "FTIR spectrum of precursor", "image_path": None}],
+        vision_inputs=[{"figure_id": "fig-1", "figure_class": "other", "vision_image_path": None}],
+        evidence_objects=[],
+    )
+    assert candidates[0]["send_to_vlm"] is False
+    assert candidates[0]["skip_reason"] == "missing_image_path"
+
+
 def test_universal_prompt_record_includes_stage_hints_and_caption() -> None:
     extractor = Stage4VisionSpectraExtractor(
         paper_id="paper-1",
@@ -105,7 +121,7 @@ def test_universal_run_reads_stage3_twopass_without_schema_file(tmp_path: Path) 
     assert '"routing_mode": "universal_compact"' in extraction_lines
 
 
-def test_universal_previous_success_fallback_still_works(tmp_path: Path) -> None:
+def test_universal_existing_live_success_is_not_resent_to_vlm(tmp_path: Path) -> None:
     output_dir = tmp_path / "paper-output"
     output_dir.mkdir(parents=True, exist_ok=True)
     stage3_dir = output_dir / "stage3_twopass"
@@ -113,14 +129,16 @@ def test_universal_previous_success_fallback_still_works(tmp_path: Path) -> None
     stage3_dir.mkdir(parents=True, exist_ok=True)
     stage4_dir.mkdir(parents=True, exist_ok=True)
 
+    image_path = output_dir / "fig1.jpg"
     (output_dir / "figures.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": "fig1.jpg"}, ensure_ascii=False) + "\n",
+        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": str(image_path)}, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
     (output_dir / "vision_inputs.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "figure_class": "other", "vision_image_path": "fig1.jpg"}, ensure_ascii=False) + "\n",
+        json.dumps({"figure_id": "fig-1", "figure_class": "other", "vision_image_path": str(image_path)}, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    image_path.write_bytes(b"fake-image")
     (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
     (stage4_dir / "spectra_extractions.jsonl").write_text(
         json.dumps(
@@ -151,5 +169,7 @@ def test_universal_previous_success_fallback_still_works(tmp_path: Path) -> None
         client=_AlwaysTimeoutClient(),
     ).run()
 
-    assert summary["fallback_reused_count"] == 1
+    assert summary["fallback_reused_count"] == 0
     assert summary["hard_failed_record_count"] == 0
+    assert summary["figure_level_skip_success_count"] == 1
+    assert summary["figure_level_new_live_count"] == 0
