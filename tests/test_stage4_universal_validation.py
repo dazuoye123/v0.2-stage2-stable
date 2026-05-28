@@ -116,26 +116,92 @@ def test_universal_validation_schema_failure_is_captured_without_crashing() -> N
     candidate = {
         "paper_id": "paper-1",
         "figure_id": "fig-4",
-        "caption": "FTIR spectrum",
-        "source_image_path": "ftir.jpg",
-        "stage2_figure_class": "ftir_spectrum",
-        "stage3_figure_type": "ftir_spectrum",
-        "initial_figure_type": "ftir_spectrum",
+        "caption": "27Al NMR spectrum",
+        "source_image_path": "nmr.jpg",
+        "stage2_figure_class": "nmr_spectrum",
+        "stage3_figure_type": "nmr_spectrum",
+        "initial_figure_type": "nmr_spectrum",
         "technique": None,
         "context_source": {},
     }
     payload = {
-        "actual_figure_type": "ftir_spectrum",
+        "actual_figure_type": "nmr_spectrum",
         "type_confidence": 0.8,
         "warnings": [],
         "conflict_warnings": [],
         "extraction": {
-            "sample_name": {"unexpected": "dict"},
+            "quantitative_values": ["invalid", "shape"],
         },
     }
 
     result = validate_universal_extraction_payload(payload, candidate)
 
     assert result["ok"] is False
-    assert result["schema_name"] == "VibrationalSpectrumExtraction"
+    assert result["schema_name"] == "NMRExtraction"
     assert "schema_validation_failed" in result["warnings"]
+
+
+def test_universal_validation_coerces_string_type_confidence_and_range_fields() -> None:
+    candidate = {
+        "paper_id": "paper-1",
+        "figure_id": "fig-5",
+        "caption": "TEM image",
+        "source_image_path": "tem.jpg",
+        "stage2_figure_class": "microscopy_image",
+        "stage3_figure_type": "microscopy_image",
+        "initial_figure_type": "tem_image",
+        "technique": None,
+        "context_source": {},
+    }
+    payload = {
+        "actual_figure_type": "tem_image",
+        "type_confidence": "high",
+        "warnings": [],
+        "conflict_warnings": [],
+        "extraction": {
+            "morphology_summary": "particles visible",
+            "particle_size_range": [15, 25],
+            "particle_size_unit": "nm",
+            "scale_bar": "100 nm",
+        },
+    }
+
+    result = validate_universal_extraction_payload(payload, candidate)
+
+    assert result["ok"] is True
+    assert result["record"]["type_confidence"] == 0.9
+    assert result["record"]["particle_size_range"] == "15-25 nm"
+
+
+def test_universal_validation_normalizes_ferron_species_shapes() -> None:
+    candidate = {
+        "paper_id": "paper-1",
+        "figure_id": "fig-6",
+        "caption": "Ferron curve",
+        "source_image_path": "ferron.jpg",
+        "stage2_figure_class": "ferron_curve",
+        "stage3_figure_type": "ferron_curve",
+        "initial_figure_type": "ferron_curve",
+        "technique": None,
+        "context_source": {},
+    }
+    payload = {
+        "actual_figure_type": "ferron_curve",
+        "type_confidence": 0.8,
+        "warnings": [],
+        "conflict_warnings": [],
+        "extraction": {
+            "al_species": ["Ala", "Al13"],
+            "species_quantification": {
+                "Ala": "mononuclear Al",
+                "Al13": "tridecameric polycation (Alb)",
+            },
+        },
+    }
+
+    result = validate_universal_extraction_payload(payload, candidate)
+
+    assert result["ok"] is True
+    assert result["schema_name"] == "FerronCurveExtraction"
+    assert result["record"]["al_species"][0]["species"] == "Ala"
+    assert result["record"]["species_quantification"]["Ala"] is None

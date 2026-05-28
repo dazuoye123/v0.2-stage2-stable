@@ -35,6 +35,7 @@ def normalize_vlm_payload_for_schema(payload: dict[str, Any], schema_name: str) 
             warning_code="crystallinity_trend_mapped_from_dict",
         )
         _normalize_xrd_peaks(normalized, warnings)
+        _normalize_string_field_from_list(normalized, warnings, field_name="sample_name")
     elif schema_name == "MicroscopyExtraction":
         _normalize_scale_bar(normalized, warnings)
         _normalize_microscopy_payload(normalized, warnings)
@@ -57,11 +58,12 @@ def normalize_vlm_payload_for_schema(payload: dict[str, Any], schema_name: str) 
             field_name="band_assignments",
             warning_code="band_assignments_item_mapped_from_dict",
         )
+        _normalize_string_field_from_list(normalized, warnings, field_name="sample_name")
     elif schema_name == "NMRExtraction":
         _normalize_nmr_peaks(normalized, warnings)
         _normalize_string_field_from_list(normalized, warnings, field_name="sample_name")
     elif schema_name == "FerronCurveExtraction":
-        _normalize_list_field(normalized, warnings, field_name="al_species")
+        _normalize_ferron_payload(normalized, warnings)
     elif schema_name == "UnknownFigureExtraction":
         _normalize_list_field(normalized, warnings, field_name="safe_observations")
 
@@ -76,6 +78,37 @@ def normalize_universal_extraction_payload_for_schema(
     normalized, warnings = normalize_vlm_payload_for_schema(payload, schema_name)
     if actual_figure_type == "unknown":
         normalized.setdefault("likely_figure_type", payload.get("likely_figure_type") or payload.get("figure_type"))
+    return normalized, warnings
+
+
+def normalize_universal_shell_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    normalized = dict(payload)
+    warnings: list[str] = []
+
+    _normalize_list_field(normalized, warnings, field_name="warnings")
+    _normalize_list_field(normalized, warnings, field_name="conflict_warnings")
+
+    extraction = normalized.get("extraction")
+    if extraction is None:
+        normalized["extraction"] = {}
+        warnings.append("universal_extraction_normalized_none_to_empty_dict")
+    elif not isinstance(extraction, dict):
+        normalized["extraction"] = {"raw_notes": str(extraction)}
+        warnings.append("universal_extraction_coerced_scalar_to_dict")
+
+    type_confidence = normalized.get("type_confidence")
+    if isinstance(type_confidence, str):
+        coerced = _coerce_confidence_string(type_confidence)
+        if coerced is None:
+            normalized["type_confidence"] = None
+            warnings.append("type_confidence_cleared_from_invalid_string")
+        else:
+            normalized["type_confidence"] = coerced
+            warnings.append("type_confidence_coerced_from_label")
+    elif type_confidence is not None and not isinstance(type_confidence, (int, float)):
+        normalized["type_confidence"] = None
+        warnings.append("type_confidence_cleared_from_invalid_type")
+
     return normalized, warnings
 
 
@@ -372,6 +405,14 @@ _RANGE_PATTERN = re.compile(
     r"^\s*(?P<left>-?\d+(?:\.\d+)?)\s*(?:-|–|~|to)\s*(?P<right>-?\d+(?:\.\d+)?)\s*$",
     re.IGNORECASE,
 )
+_NON_EXACT_RANGE_TEXT_PATTERN = re.compile(
+    r"(?P<left>-?\d+(?:\.\d+)?)\s*(?:-|–|—|~|to)\s*(?P<right>-?\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+_APPROXIMATE_SINGLE_VALUE_PATTERN = re.compile(
+    r"^\s*(?:~|≈|about|ca\.?|approx(?:imately)?)\s*-?\d+(?:\.\d+)?\s*$",
+    re.IGNORECASE,
+)
 
 
 def _append_item_warning(item: dict[str, Any], warning: str) -> None:
@@ -384,6 +425,34 @@ def _append_item_warning(item: dict[str, Any], warning: str) -> None:
             existing.append(warning)
         return
     item["warnings"] = [str(existing), warning]
+
+
+def _nullify_peak_position_from_non_exact_text(
+    peak: dict[str, Any],
+    warnings: list[str],
+    *,
+    raw_text: str,
+    default_unit: str | None,
+    warning_code: str = "range_peak_position_not_numeric",
+) -> None:
+    source_text = str(peak.get("source_text") or "").strip()
+    if raw_text and raw_text not in source_text:
+        peak["source_text"] = f"{source_text}; {raw_text}".strip("; ").strip()
+    peak["position"] = None
+    if default_unit and not peak.get("unit"):
+        peak["unit"] = default_unit
+    if peak.get("band_type") in (None, "", "unknown"):
+        peak["band_type"] = "range_band"
+    warning = f"{warning_code}:{raw_text}"
+    _append_item_warning(peak, warning)
+    warnings.append(warning)
+
+
+def _source_text_requires_null_position(source_text: str) -> bool:
+    stripped = source_text.strip()
+    if not stripped:
+        return False
+    return bool(_NON_EXACT_RANGE_TEXT_PATTERN.search(stripped) or _APPROXIMATE_SINGLE_VALUE_PATTERN.match(stripped))
 
 
 def _normalize_vibrational_peaks(payload: dict[str, Any], warnings: list[str]) -> None:
@@ -405,17 +474,12 @@ def _normalize_vibrational_peaks(payload: dict[str, Any], warnings: list[str]) -
         if isinstance(position, str):
             stripped = position.strip()
             if _RANGE_PATTERN.match(stripped):
-                source_text = str(peak.get("source_text") or "").strip()
-                raw_text = stripped
-                if raw_text and raw_text not in source_text:
-                    peak["source_text"] = f"{source_text}; {raw_text}".strip("; ").strip()
-                peak["position"] = None
-                if not peak.get("unit"):
-                    peak["unit"] = "cm^-1"
-                if peak.get("band_type") in (None, "", "unknown"):
-                    peak["band_type"] = "range_band"
-                _append_item_warning(peak, f"range_peak_position_not_numeric:{stripped}")
-                warnings.append(f"range_peak_position_not_numeric:{stripped}")
+                _nullify_peak_position_from_non_exact_text(
+                    peak,
+                    warnings,
+                    raw_text=stripped,
+                    default_unit="cm^-1",
+                )
             else:
                 try:
                     peak["position"] = float(stripped)
@@ -423,6 +487,14 @@ def _normalize_vibrational_peaks(payload: dict[str, Any], warnings: list[str]) -
                     peak["position"] = None
                     _append_item_warning(peak, f"non_numeric_peak_position:{stripped}")
                     warnings.append(f"non_numeric_peak_position:{stripped}")
+        source_text = str(peak.get("source_text") or "").strip()
+        if source_text and _source_text_requires_null_position(source_text):
+            _nullify_peak_position_from_non_exact_text(
+                peak,
+                warnings,
+                raw_text=source_text,
+                default_unit="cm^-1",
+            )
         normalized_peaks.append(peak)
     payload["peaks"] = normalized_peaks
 
@@ -448,6 +520,14 @@ def _normalize_xrd_peaks(payload: dict[str, Any], warnings: list[str]) -> None:
                 peak["position"] = None
                 _append_item_warning(peak, f"non_numeric_peak_position:{position}")
                 warnings.append(f"xrd_peak_non_numeric_position:{position}")
+        source_text = str(peak.get("source_text") or "").strip()
+        if source_text and _source_text_requires_null_position(source_text):
+            _nullify_peak_position_from_non_exact_text(
+                peak,
+                warnings,
+                raw_text=source_text,
+                default_unit="2theta_deg",
+            )
         normalized.append(peak)
 
     normalized.sort(key=lambda peak: (peak.get("position") is None, peak.get("position") if peak.get("position") is not None else float("inf")))
@@ -525,6 +605,90 @@ def _normalize_string_field_from_list(payload: dict[str, Any], warnings: list[st
         return
     payload[field_name] = str(value)
     warnings.append(f"{field_name}_coerced_to_string")
+
+
+def _normalize_ferron_payload(payload: dict[str, Any], warnings: list[str]) -> None:
+    value = payload.get("al_species")
+    if value is None:
+        payload["al_species"] = []
+    elif isinstance(value, str):
+        payload["al_species"] = [{"species": value.strip() or None}]
+        warnings.append("al_species_wrapped_string_as_species_record")
+    elif isinstance(value, dict):
+        payload["al_species"] = [_normalize_ferron_species_item(value, warnings)]
+        warnings.append("al_species_wrapped_dict_as_list")
+    elif isinstance(value, list):
+        normalized_items: list[dict[str, Any]] = []
+        for item in value:
+            normalized = _normalize_ferron_species_item(item, warnings)
+            if normalized is not None:
+                normalized_items.append(normalized)
+        payload["al_species"] = normalized_items
+    else:
+        payload["al_species"] = []
+        warnings.append("al_species_dropped_from_invalid_type")
+
+    species_quantification = payload.get("species_quantification")
+    if species_quantification is None:
+        payload["species_quantification"] = {}
+    elif isinstance(species_quantification, dict):
+        normalized_quantification: dict[str, float | None] = {}
+        for key, raw_value in species_quantification.items():
+            if raw_value in (None, ""):
+                normalized_quantification[str(key)] = None
+                continue
+            coerced = _safe_coerce_float(raw_value)
+            if coerced is None:
+                normalized_quantification[str(key)] = None
+                warnings.append(f"species_quantification_{key}_cleared_from_non_numeric")
+            else:
+                normalized_quantification[str(key)] = coerced
+        payload["species_quantification"] = normalized_quantification
+    else:
+        payload["species_quantification"] = {}
+        warnings.append("species_quantification_dropped_from_invalid_type")
+
+    _normalize_string_field_from_list(payload, warnings, field_name="sample_name")
+
+
+def _normalize_ferron_species_item(item: Any, warnings: list[str]) -> dict[str, Any] | None:
+    if item is None:
+        return None
+    if isinstance(item, str):
+        stripped = item.strip()
+        if not stripped:
+            return None
+        warnings.append("al_species_item_wrapped_string_as_species_record")
+        return {"species": stripped}
+    if not isinstance(item, dict):
+        text = str(item).strip()
+        if not text:
+            return None
+        warnings.append("al_species_item_coerced_to_species_record")
+        return {"species": text}
+
+    normalized = dict(item)
+    species = normalized.get("species") or normalized.get("assignment") or normalized.get("label") or normalized.get("name")
+    if species is not None:
+        normalized["species"] = str(species)
+    fraction = normalized.get("fraction_percent")
+    if fraction is not None:
+        coerced = _safe_coerce_float(fraction)
+        if coerced is None:
+            normalized["fraction_percent"] = None
+            warnings.append("al_species_fraction_percent_cleared_from_non_numeric")
+        else:
+            normalized["fraction_percent"] = coerced
+    confidence = normalized.get("confidence")
+    if isinstance(confidence, str):
+        coerced = _coerce_confidence_string(confidence)
+        if coerced is None:
+            normalized["confidence"] = None
+            warnings.append("al_species_confidence_cleared_from_invalid_string")
+        else:
+            normalized["confidence"] = coerced
+            warnings.append("al_species_confidence_coerced_from_label")
+    return normalized
 
 
 def _render_assignment_dict(item: dict[str, Any]) -> str | None:
@@ -614,12 +778,12 @@ def _normalize_peak_like_item(
     elif isinstance(position, str):
         stripped = position.strip()
         if _RANGE_PATTERN.match(stripped):
-            source = str(peak.get("source_text") or "").strip()
-            if stripped not in source:
-                peak["source_text"] = f"{source}; {stripped}".strip("; ")
-            peak["position"] = None
-            _append_item_warning(peak, f"range_peak_position_not_numeric:{stripped}")
-            warnings.append(f"range_peak_position_not_numeric:{stripped}")
+            _nullify_peak_position_from_non_exact_text(
+                peak,
+                warnings,
+                raw_text=stripped,
+                default_unit=temperature_unit,
+            )
         else:
             numeric = _safe_coerce_float(stripped)
             if numeric is None:
@@ -628,6 +792,14 @@ def _normalize_peak_like_item(
                 warnings.append(f"{field_name}_non_numeric_position:{stripped}")
             else:
                 peak["position"] = numeric
+    source_text = str(peak.get("source_text") or "").strip()
+    if source_text and _source_text_requires_null_position(source_text):
+        _nullify_peak_position_from_non_exact_text(
+            peak,
+            warnings,
+            raw_text=source_text,
+            default_unit=temperature_unit,
+        )
     return peak
 
 
@@ -686,6 +858,21 @@ def _safe_coerce_float(value: Any) -> float | None:
         return _coerce_float(value)
     except Exception:  # noqa: BLE001
         return None
+
+
+def _coerce_confidence_string(value: str) -> float | None:
+    stripped = value.strip().lower()
+    if not stripped:
+        return None
+    mapping = {
+        "high": 0.9,
+        "medium": 0.6,
+        "moderate": 0.6,
+        "low": 0.3,
+    }
+    if stripped in mapping:
+        return mapping[stripped]
+    return _safe_coerce_float(stripped)
 
 
 def _format_number_or_text(value: Any) -> str:

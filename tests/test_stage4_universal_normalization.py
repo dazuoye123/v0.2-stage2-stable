@@ -32,6 +32,17 @@ def test_band_assignments_dict_list_normalizes_to_strings() -> None:
     assert normalized["band_assignments"] == ["1000-1100 cm^-1: Si-O stretching", "780: Al-O"]
 
 
+def test_vibrational_sample_name_list_normalizes_to_joined_string() -> None:
+    normalized, warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
+        {"sample_name": ["A-Si", "A-Si+1.5wt%PEO"]},
+        figure_type="ftir_spectrum",
+        schema_name="VibrationalSpectrumExtraction",
+        use_universal_adapter=True,
+    )
+    assert normalized["sample_name"] == "A-Si; A-Si+1.5wt%PEO"
+    assert "sample_name_joined_from_list" in warnings
+
+
 def test_phase_assignments_string_and_dict_list_normalize_to_strings() -> None:
     normalized, _ = Stage4VisionSpectraExtractor._normalize_live_payload(
         {
@@ -161,6 +172,57 @@ def test_range_peak_position_does_not_convert_to_midpoint() -> None:
     peak = result["record"]["peaks"][0]
     assert peak["position"] is None
     assert "1000-1100" in peak["source_text"]
+    assert any(str(item).startswith("range_peak_position_not_numeric:") for item in peak["warnings"])
+
+
+def test_en_dash_range_peak_position_does_not_convert_to_midpoint() -> None:
+    payload = {
+        "actual_figure_type": "ftir_spectrum",
+        "type_confidence": 0.9,
+        "warnings": [],
+        "conflict_warnings": [],
+        "extraction": {
+            "peaks": [{"position": 1050, "source_text": "1000–1100 cm^-1", "assignment": "Si-O stretching"}],
+            "band_assignments": [],
+        },
+    }
+    candidate = {
+        "paper_id": "paper-1",
+        "figure_id": "fig-ftir",
+        "caption": "FTIR spectrum",
+        "source_image_path": "ftir.jpg",
+        "stage2_figure_class": "ftir_spectrum",
+        "stage3_figure_type": "ftir_spectrum",
+        "initial_figure_type": "ftir_spectrum",
+        "technique": None,
+        "context_source": {},
+    }
+    result = validate_universal_extraction_payload(payload, candidate)
+    assert result["ok"] is True
+    peak = result["record"]["peaks"][0]
+    assert peak["position"] is None
+    assert "1000–1100" in peak["source_text"]
+    assert any(str(item).startswith("range_peak_position_not_numeric:") for item in peak["warnings"])
+
+
+def test_approximate_xrd_peak_source_text_nullifies_position() -> None:
+    normalized, warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
+        {
+            "peaks": [
+                {
+                    "position": 18.0,
+                    "source_text": "~18",
+                }
+            ]
+        },
+        figure_type="xrd_pattern",
+        schema_name="XRDExtraction",
+        use_universal_adapter=True,
+    )
+    peak = normalized["peaks"][0]
+    assert peak["position"] is None
+    assert any(str(item).startswith("range_peak_position_not_numeric:") for item in peak["warnings"])
+    assert any(str(item).startswith("range_peak_position_not_numeric:") for item in warnings)
 
 
 def test_sem_without_scale_bar_does_not_invent_diameter() -> None:

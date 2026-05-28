@@ -122,3 +122,28 @@ def test_stage4_batch_runner_live_not_blocked_by_dry_run_summary(tmp_path: Path)
     )
 
     assert result["rows"][0]["status"] == "success"
+
+
+def test_is_live_successful_stage4_summary_requires_live_count_zero_failed_and_successful_extractions() -> None:
+    module = _load_script_module()
+    assert module._is_live_successful_stage4_summary(
+        {"live_count": 1, "failed_record_count": 0, "successful_extractions_count": 1}
+    ) is True
+    assert module._is_live_successful_stage4_summary(
+        {"live_count": 3, "failed_record_count": 0}
+    ) is True
+    assert module._is_live_successful_stage4_summary(
+        {"live_count": 0, "failed_record_count": 0, "successful_extractions_count": 1}
+    ) is False
+    assert module._is_live_successful_stage4_summary(
+        {"live_count": 1, "failed_record_count": 1, "successful_extractions_count": 1}
+    ) is False
+    assert module._is_live_successful_stage4_summary(
+        {"live_count": 1, "failed_record_count": 0, "successful_extractions_count": 0}
+    ) is False
+
+
+def test_is_dry_run_only_stage4_summary_detects_non_live_placeholder() -> None:
+    module = _load_script_module()
+    assert module._is_dry_run_only_stage4_summary({"dry_run_count": 10, "live_count": 0}) is True
+    assert module._is_dry_run_only_stage4_summary({"dry_run_count": 10, "live_count": 1}) is False

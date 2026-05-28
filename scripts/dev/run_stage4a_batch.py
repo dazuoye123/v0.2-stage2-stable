@@ -423,7 +423,27 @@ def _should_skip_existing_stage4(stage4_summary_path: Path, *, dry_run: bool, es
     existing_dry_run_count = int(summary.get("dry_run_count") or 0)
     if dry_run or estimate_only:
         return existing_live_count > 0 or existing_dry_run_count > 0
-    return existing_live_count > 0
+    return _is_live_successful_stage4_summary(summary)
+
+
+def _is_live_successful_stage4_summary(summary: dict[str, Any]) -> bool:
+    if not isinstance(summary, dict):
+        return False
+    live_count = int(summary.get("live_count") or 0)
+    failed_record_count = int(summary.get("failed_record_count") or 0)
+    if "successful_extractions_count" in summary:
+        successful_extractions_count = int(summary.get("successful_extractions_count") or 0)
+    else:
+        successful_extractions_count = live_count
+    return live_count > 0 and failed_record_count == 0 and successful_extractions_count > 0
+
+
+def _is_dry_run_only_stage4_summary(summary: dict[str, Any]) -> bool:
+    if not isinstance(summary, dict):
+        return False
+    dry_run_count = int(summary.get("dry_run_count") or 0)
+    live_count = int(summary.get("live_count") or 0)
+    return dry_run_count > 0 and live_count == 0
 
 
 def _load_manifest_rows(path: Path) -> list[dict[str, str]]:

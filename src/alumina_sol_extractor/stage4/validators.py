@@ -76,6 +76,7 @@ def build_stage4_summary(
         "skipped_count": skipped_count,
         "dry_run_count": dry_run_count,
         "live_count": live_count,
+        "successful_extractions_count": len(extractions),
         "by_figure_type": dict(by_type),
         "by_stage2_figure_class": dict(by_stage2_class),
         "by_initial_figure_type": dict(by_initial_type),
