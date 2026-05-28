@@ -27,6 +27,7 @@ from .routing import (
     should_process_figure,
 )
 from .schemas import UnknownFigureExtraction, UniversalFigureExtraction
+from .stage2_selected_loader import load_stage2_selected_figures
 from .stage4_context import (
     build_evidence_object_context,
     build_input_context_summary,
@@ -82,13 +83,35 @@ def _has_valid_image_file(value: Any) -> bool:
     return path.exists() and path.is_file()
 
 
+def _image_path_state(value: Any) -> str:
+    if not value:
+        return "missing"
+    try:
+        path = Path(str(value))
+    except Exception:  # noqa: BLE001
+        return "missing"
+    if not path.exists():
+        if not path.is_absolute():
+            return "relative_unchecked"
+        return "missing"
+    if path.is_dir():
+        return "directory"
+    if path.is_file():
+        return "valid"
+    return "missing"
+
+
 def validate_universal_extraction_payload(
     universal_payload: dict[str, Any],
     candidate: dict[str, Any],
 ) -> dict[str, Any]:
     normalized_shell_payload, shell_warnings = normalize_universal_shell_payload(universal_payload)
     shell = UniversalFigureExtraction(**normalized_shell_payload).model_dump()
-    initial_type = normalize_figure_type(candidate.get("initial_figure_type"))
+    initial_type = normalize_figure_type(
+        candidate.get("initial_figure_type")
+        or candidate.get("stage2_predicted_figure_type")
+        or candidate.get("stage2_figure_class")
+    )
     actual_type = normalize_figure_type(shell.get("actual_figure_type"))
     type_confidence = shell.get("type_confidence")
     low_confidence = isinstance(type_confidence, (int, float)) and float(type_confidence) < LOW_TYPE_CONFIDENCE_THRESHOLD
@@ -96,10 +119,15 @@ def validate_universal_extraction_payload(
     conflict_warnings = list(shell.get("conflict_warnings", []) or [])
     extraction_payload = dict(shell.get("extraction") or {})
 
-    if actual_type == "unknown" or low_confidence:
+    stage2_hint_type = normalize_figure_type(
+        candidate.get("stage2_predicted_figure_type") or candidate.get("stage2_figure_class")
+    )
+
+    if actual_type in {"unknown", "non_extractable"} or low_confidence:
         if low_confidence and "low_type_confidence" not in warnings:
             warnings.append("low_type_confidence")
-        actual_type = "unknown"
+        if actual_type not in {"unknown", "non_extractable"}:
+            actual_type = "unknown"
         shell["needs_manual_review"] = True
         schema_cls = UnknownFigureExtraction
         extraction_payload.setdefault("likely_figure_type", shell.get("actual_figure_type") or initial_type or None)
@@ -123,14 +151,20 @@ def validate_universal_extraction_payload(
         "warnings": warnings,
         "conflict_warnings": conflict_warnings,
         "stage2_figure_class": candidate.get("stage2_figure_class"),
+        "stage2_predicted_figure_type": candidate.get("stage2_predicted_figure_type"),
         "stage3_figure_type": candidate.get("stage3_figure_type"),
         "initial_figure_type": candidate.get("initial_figure_type"),
         "actual_figure_type": actual_type,
         "type_confidence": shell.get("type_confidence"),
         "type_reason": shell.get("type_reason"),
+        "stage2_type_used_as_hint": shell.get("stage2_type_used_as_hint", True),
         "type_mismatch": bool(shell.get("type_mismatch")) or (initial_type not in {"", "unknown"} and actual_type != "unknown" and actual_type != initial_type),
-        "needs_manual_review": bool(shell.get("needs_manual_review")) or actual_type == "unknown",
+        "corrected_from_stage2_type": shell.get("corrected_from_stage2_type") or (
+            stage2_hint_type if stage2_hint_type not in {"", "unknown", "non_extractable"} and stage2_hint_type != actual_type else None
+        ),
+        "needs_manual_review": bool(shell.get("needs_manual_review")) or actual_type in {"unknown", "non_extractable"},
         "routing_mode": "universal_compact",
+        "image_basename": Path(str(candidate.get("source_image_path") or "")).name or None,
     }
     normalized_payload, normalization_warnings = Stage4VisionSpectraExtractor._normalize_live_payload(
         merged_payload,
@@ -167,7 +201,7 @@ def validate_universal_extraction_payload(
 class Stage4VisionSpectraExtractor:
     paper_id: str
     output_dir: Path
-    max_figures: int = 10
+    max_figures: int = 0
     allowed_figure_types: set[str] | None = None
     figure_ids: list[str] | None = None
     dry_run: bool = True
@@ -175,6 +209,7 @@ class Stage4VisionSpectraExtractor:
     routing_mode: str = "schema_specific"
     stage3_subdir: str = "stage3_dspy_smoke"
     stage4_subdir: str = "stage4_vision_spectra"
+    candidate_source: str = "stage2-selected"
 
     def _should_require_real_image_file(self) -> bool:
         if self.dry_run:
@@ -182,32 +217,13 @@ class Stage4VisionSpectraExtractor:
         return self.client is None or isinstance(self.client, VisionLanguageModelClient)
 
     def run(self) -> dict[str, Any]:
-        stage4_dir = Path(self.output_dir) / self.stage4_subdir
-        stage4_dir.mkdir(parents=True, exist_ok=True)
-        previous_extractions = read_jsonl(stage4_dir / "spectra_extractions.jsonl")
-        previous_raw_outputs = read_jsonl(stage4_dir / "raw_vlm_outputs.jsonl")
-        previous_failed_records = read_jsonl(stage4_dir / "spectra_failed_records.jsonl")
-        config_warnings: list[str] = []
-
-        figures = read_jsonl(Path(self.output_dir) / "figures.jsonl")
-        vision_inputs = read_jsonl(Path(self.output_dir) / "vision_inputs.jsonl")
-        stage3_dir = Path(self.output_dir) / self.stage3_subdir
-        evidence_objects = read_jsonl(stage3_dir / "evidence_objects.jsonl")
-        stage3_schema_path = stage3_dir / "paper_extraction.schema_v2.json"
-        stage3_schema = read_json(stage3_schema_path, default={}) or {}
-        if not evidence_objects:
-            config_warnings.append(f"missing_or_empty_evidence_objects:{self.stage3_subdir}")
-        if not stage3_schema_path.exists():
-            config_warnings.append(f"missing_stage3_schema:{self.stage3_subdir}")
-
-        candidates = self._select_candidates(
-            figures=figures,
-            vision_inputs=vision_inputs,
-            evidence_objects=evidence_objects,
-            stage3_schema=stage3_schema,
-        )
-        processed_index = load_stage4a_processed_figure_index(stage4_dir)
-        candidates = self._apply_figure_level_dedup(candidates, processed_index)
+        plan = self.build_candidate_plan()
+        stage4_dir = plan["stage4_dir"]
+        previous_extractions = plan["previous_extractions"]
+        previous_raw_outputs = plan["previous_raw_outputs"]
+        previous_failed_records = plan["previous_failed_records"]
+        config_warnings = list(plan["config_warnings"])
+        candidates = plan["candidates"]
         prompts = [
             self._build_prompt_record(candidate)
             for candidate in candidates
@@ -216,12 +232,13 @@ class Stage4VisionSpectraExtractor:
         extractions, raw_outputs, failed_records, client_warnings = self._run_extractions(
             candidates,
             previous_extractions=previous_extractions,
+            previous_raw_outputs=previous_raw_outputs,
         )
         config_warnings.extend(client_warnings)
         replaced_figure_ids = {
             str(candidate.get("figure_id") or "").strip()
             for candidate in candidates
-            if candidate.get("figure_processing_action") in {"new_live", "rerun_transient", "missing_image"}
+            if candidate.get("figure_processing_action") in {"new_live", "rerun_transient", "missing_image", "replay_candidate"}
             and candidate.get("figure_id")
         }
         final_extractions = merge_stage4_records_by_figure_id(
@@ -256,6 +273,110 @@ class Stage4VisionSpectraExtractor:
         write_json(stage4_dir / "stage4a_summary.json", summary)
         return summary
 
+    def build_candidate_plan(self, *, create_stage4_dir: bool = True) -> dict[str, Any]:
+        stage4_dir = Path(self.output_dir) / self.stage4_subdir
+        if create_stage4_dir:
+            stage4_dir.mkdir(parents=True, exist_ok=True)
+        previous_extractions = read_jsonl(stage4_dir / "spectra_extractions.jsonl")
+        previous_raw_outputs = read_jsonl(stage4_dir / "raw_vlm_outputs.jsonl")
+        previous_failed_records = read_jsonl(stage4_dir / "spectra_failed_records.jsonl")
+        config_warnings: list[str] = []
+
+        stage3_dir = Path(self.output_dir) / self.stage3_subdir
+        evidence_objects = read_jsonl(stage3_dir / "evidence_objects.jsonl")
+        stage3_schema_path = stage3_dir / "paper_extraction.schema_v2.json"
+        stage3_schema = read_json(stage3_schema_path, default={}) or {}
+        if not evidence_objects:
+            config_warnings.append(f"missing_or_empty_evidence_objects:{self.stage3_subdir}")
+        if not stage3_schema_path.exists():
+            config_warnings.append(f"missing_stage3_schema:{self.stage3_subdir}")
+
+        if self.candidate_source != "stage2-selected":
+            raise ValueError(f"Unsupported Stage4A candidate_source: {self.candidate_source}")
+        stage2_selected_figures = load_stage2_selected_figures(Path(self.output_dir))
+        if not stage2_selected_figures:
+            figures = read_jsonl(Path(self.output_dir) / "figures.jsonl")
+            vision_inputs = read_jsonl(Path(self.output_dir) / "vision_inputs.jsonl")
+            if figures or vision_inputs:
+                config_warnings.append("legacy_candidate_loader_compatibility_fallback")
+                stage2_selected_figures = self._legacy_stage2_selected_from_records(figures, vision_inputs)
+        if not stage2_selected_figures:
+            config_warnings.append("no_stage2_selected_figures")
+
+        candidates = self._select_candidates(
+            stage2_selected_figures=stage2_selected_figures,
+            evidence_objects=evidence_objects,
+            stage3_schema=stage3_schema,
+        )
+        processed_index = load_stage4a_processed_figure_index(stage4_dir)
+        candidates = self._apply_figure_level_dedup(candidates, processed_index)
+        return {
+            "stage4_dir": stage4_dir,
+            "previous_extractions": previous_extractions,
+            "previous_raw_outputs": previous_raw_outputs,
+            "previous_failed_records": previous_failed_records,
+            "config_warnings": config_warnings,
+            "candidates": candidates,
+            "processed_index": processed_index,
+            "stage2_selected_figures": stage2_selected_figures,
+        }
+
+    @staticmethod
+    def _legacy_stage2_selected_from_records(
+        figures: list[dict[str, Any]],
+        vision_inputs: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        figures_by_id = index_by_figure_id(figures)
+        vision_by_id = index_by_figure_id(vision_inputs)
+        ordered_ids: list[str] = []
+        for record in figures:
+            figure_id = str(record.get("figure_id") or "").strip()
+            if figure_id and figure_id not in ordered_ids:
+                ordered_ids.append(figure_id)
+        for record in vision_inputs:
+            figure_id = str(record.get("figure_id") or "").strip()
+            if figure_id and figure_id not in ordered_ids:
+                ordered_ids.append(figure_id)
+
+        selected: list[dict[str, Any]] = []
+        for figure_id in ordered_ids:
+            figure_meta = figures_by_id.get(figure_id, {})
+            vision_meta = vision_by_id.get(figure_id, {})
+            source_image_path = (
+                vision_meta.get("vision_image_path")
+                or figure_meta.get("vision_image_path")
+                or vision_meta.get("image_path")
+                or figure_meta.get("image_path")
+            )
+            selected.append(
+                {
+                    "figure_id": figure_id,
+                    "image_path": figure_meta.get("image_path") or vision_meta.get("image_path"),
+                    "vision_image_path": vision_meta.get("vision_image_path") or figure_meta.get("vision_image_path") or source_image_path,
+                    "source_image_path": source_image_path,
+                    "caption": figure_meta.get("caption") or figure_meta.get("raw_caption") or vision_meta.get("caption"),
+                    "stage2_figure_class": vision_meta.get("figure_class") or figure_meta.get("figure_class"),
+                    "stage2_predicted_figure_type": vision_meta.get("predicted_figure_type") or figure_meta.get("predicted_figure_type"),
+                    "figure_label": figure_meta.get("figure_label"),
+                    "page_number": figure_meta.get("page_number"),
+                    "subfigure_id": figure_meta.get("subfigure_id") or figure_meta.get("subfigure_index"),
+                    "reference_sentences": figure_meta.get("reference_sentences") or [],
+                    "context_before": figure_meta.get("context_before"),
+                    "context_after": figure_meta.get("context_after"),
+                    "nearby_text": figure_meta.get("nearby_text"),
+                    "related_text": figure_meta.get("related_text"),
+                    "ocr_text": figure_meta.get("ocr_text"),
+                    "context_text": figure_meta.get("description_text") or figure_meta.get("context_text"),
+                    "description_text": figure_meta.get("description_text"),
+                    "loader_warnings": ["legacy_candidate_loader_compatibility_fallback"],
+                    "selection_source": "legacy_figures_or_vision_inputs",
+                    "send_to_vision_model": True,
+                    "keep": True,
+                    "technique": figure_meta.get("technique") or vision_meta.get("technique"),
+                }
+            )
+        return selected
+
     def _apply_figure_level_dedup(
         self,
         candidates: list[dict[str, Any]],
@@ -284,39 +405,44 @@ class Stage4VisionSpectraExtractor:
     def _select_candidates(
         self,
         *,
-        figures: list[dict[str, Any]],
-        vision_inputs: list[dict[str, Any]],
+        stage2_selected_figures: list[dict[str, Any]] | None = None,
+        figures: list[dict[str, Any]] | None = None,
+        vision_inputs: list[dict[str, Any]] | None = None,
         evidence_objects: list[dict[str, Any]],
         stage3_schema: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         allowed_types = self.allowed_figure_types or DEFAULT_ALLOWED_FIGURE_TYPES
-        figures_by_id = index_by_figure_id(figures)
-        vision_by_id = index_by_figure_id(vision_inputs)
+        stage2_selected_figures = list(stage2_selected_figures or [])
+        if not stage2_selected_figures:
+            stage2_selected_figures = self._legacy_stage2_selected_from_records(figures or [], vision_inputs or [])
         evidence_by_id = group_evidence_by_figure_id(evidence_objects)
         stage3_parameter_records = collect_stage3_parameter_records(stage3_schema or {})
-        ordered_ids: list[str] = []
-        for evidence in evidence_objects:
-            figure_id = evidence.get("figure_id")
-            if figure_id and figure_id not in ordered_ids:
-                ordered_ids.append(figure_id)
-        for figure_id in figures_by_id:
-            if figure_id not in ordered_ids:
-                ordered_ids.append(figure_id)
-
         candidates: list[dict[str, Any]] = []
-        for figure_id in ordered_ids:
-            figure_meta = figures_by_id.get(figure_id, {})
-            vision_meta = vision_by_id.get(figure_id, {})
+        for selected in stage2_selected_figures:
+            figure_id = str(selected.get("figure_id") or "").strip()
+            if not figure_id:
+                continue
+            figure_meta = dict(selected)
+            vision_meta = dict(selected)
             evidence_group = evidence_by_id.get(figure_id, [])
             evidence_type = next((item.get("figure_type") for item in evidence_group if item.get("figure_type")), None)
-            stage2_class = vision_meta.get("figure_class") or figure_meta.get("figure_class")
+            stage2_class = (
+                vision_meta.get("stage2_figure_class")
+                or vision_meta.get("figure_class")
+                or figure_meta.get("stage2_figure_class")
+                or figure_meta.get("figure_class")
+            )
+            stage2_predicted_figure_type = (
+                vision_meta.get("stage2_predicted_figure_type")
+                or figure_meta.get("stage2_predicted_figure_type")
+            )
             caption = (
                 next((item.get("caption") for item in evidence_group if item.get("caption")), None)
                 or vision_meta.get("caption")
                 or figure_meta.get("caption")
                 or figure_meta.get("raw_caption")
             )
-            final_type = normalize_figure_type(evidence_type or stage2_class, caption)
+            final_type = normalize_figure_type(evidence_type or stage2_predicted_figure_type or stage2_class, caption)
             source_image_path = (
                 vision_meta.get("vision_image_path")
                 or vision_meta.get("image_path")
@@ -330,18 +456,32 @@ class Stage4VisionSpectraExtractor:
                 evidence_group=evidence_group,
                 stage3_parameter_records=stage3_parameter_records,
             )
+            path_status = _image_path_state(source_image_path)
             if self.routing_mode == "universal_compact":
-                send_to_vlm, routing_reason, risk_level = describe_universal_candidate(
+                _, routing_reason, risk_level = describe_universal_candidate(
                     initial_figure_type=final_type,
                     stage2_figure_class=stage2_class,
                     stage3_figure_type=evidence_type,
                     caption=caption,
-                    context_text=" ".join(context.get("reference_sentences", [])),
+                    context_text=" ".join(
+                        item
+                        for item in [
+                            *context.get("reference_sentences", []),
+                            context.get("context_before"),
+                            context.get("context_after"),
+                            figure_meta.get("context_text"),
+                            figure_meta.get("nearby_text"),
+                            figure_meta.get("related_text"),
+                            figure_meta.get("ocr_text"),
+                        ]
+                        if item
+                    ),
                     allow_types=allowed_types,
                 )
+                send_to_vlm = True
                 prompt_template = get_universal_compact_prompt()
                 schema_name = UniversalFigureExtraction.__name__
-                skip_reason = None if send_to_vlm else "not_scientific_figure_candidate"
+                skip_reason = None
             else:
                 send_to_vlm = should_process_figure(final_type, allowed_types)
                 prompt_template = get_prompt_for_figure_type(final_type)
@@ -354,16 +494,27 @@ class Stage4VisionSpectraExtractor:
                 "figure_id": figure_id,
                 "figure_type": final_type,
                 "initial_figure_type": final_type,
+                "stage2_predicted_figure_type": stage2_predicted_figure_type,
                 "source_image_path": source_image_path,
+                "vision_image_path": vision_meta.get("vision_image_path") or figure_meta.get("vision_image_path"),
+                "image_path": vision_meta.get("image_path") or figure_meta.get("image_path"),
+                "image_basename": Path(str(source_image_path or "")).name or None,
                 "caption": caption,
                 "alt_text": context.get("alt_text"),
                 "reference_sentences": context.get("reference_sentences", []),
                 "context_before": context.get("context_before"),
                 "context_after": context.get("context_after"),
+                "nearby_text": figure_meta.get("nearby_text"),
+                "related_text": figure_meta.get("related_text"),
+                "ocr_text": figure_meta.get("ocr_text"),
+                "context_text": figure_meta.get("context_text"),
+                "figure_label": figure_meta.get("figure_label"),
+                "page_number": figure_meta.get("page_number"),
+                "subfigure_id": figure_meta.get("subfigure_id"),
                 "evidence_object_context": context.get("evidence_object_context", {}),
                 "related_stage3_parameters": context.get("related_stage3_parameters", []),
                 "context_source": context.get("context_source", {}),
-                "context_warnings": context.get("warnings", []),
+                "context_warnings": [*context.get("warnings", []), *list(figure_meta.get("loader_warnings", []))],
                 "estimated_context_chars": context.get("estimated_context_chars", 0),
                 "evidence_id": next((item.get("evidence_id") for item in evidence_group if item.get("evidence_id")), None),
                 "evidence_ids": [item.get("evidence_id") for item in evidence_group if item.get("evidence_id")],
@@ -377,17 +528,14 @@ class Stage4VisionSpectraExtractor:
                 "routing_mode": self.routing_mode,
                 "candidate_risk_level": risk_level,
                 "routing_reason": routing_reason,
+                "selection_source": figure_meta.get("selection_source"),
+                "path_status": path_status,
+                "max_figures_per_paper_applied": self.max_figures if self.max_figures and self.max_figures > 0 else 0,
             }
-            if (
-                self._should_require_real_image_file()
-                and candidate["send_to_vlm"]
-                and not _has_valid_image_file(source_image_path)
-            ):
+            if path_status in {"missing", "directory"}:
                 candidate["send_to_vlm"] = False
-                candidate["skip_reason"] = "missing_image_path"
+                candidate["skip_reason"] = "directory_path_error" if path_status == "directory" else "missing_image_path"
                 candidate["candidate_risk_level"] = "high"
-                if candidate["routing_mode"] == "universal_compact":
-                    candidate["routing_reason"] = "weak_type_but_scientific_context"
             candidates.append(candidate)
 
         requested_ids = [item for item in (self.figure_ids or []) if item]
@@ -399,14 +547,15 @@ class Stage4VisionSpectraExtractor:
                 raise ValueError(f"Requested figure_id(s) not found: {', '.join(missing_ids)}")
             candidates = [item for item in candidates if item.get("figure_id") in requested_set]
 
-        if self.max_figures > 0:
+        if self.max_figures is not None and self.max_figures > 0:
             sendable = [item for item in candidates if item.get("send_to_vlm")]
             prioritized = prioritize_sendable_candidates(sendable)
             blocked_ids = {item["figure_id"] for item in prioritized[self.max_figures :]}
             for item in candidates:
                 if item["figure_id"] in blocked_ids:
                     item["send_to_vlm"] = False
-                    item["skip_reason"] = "max_figures_limit"
+                    item["skip_reason"] = "max_figures_limit_debug"
+                    item["max_figures_per_paper_applied"] = self.max_figures
         return candidates
 
     def build_figure_context(
@@ -496,6 +645,7 @@ class Stage4VisionSpectraExtractor:
         candidates: list[dict[str, Any]],
         *,
         previous_extractions: list[dict[str, Any]] | None = None,
+        previous_raw_outputs: list[dict[str, Any]] | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[str]]:
         client = self.client or VisionLanguageModelClient(dry_run=self.dry_run)
         extractions: list[dict[str, Any]] = []
@@ -503,6 +653,7 @@ class Stage4VisionSpectraExtractor:
         failed_records: list[dict[str, Any]] = []
         config_warnings = list(getattr(client, "config_warnings", []) or [])
         previous_success_by_figure_id = index_previous_successes(previous_extractions or [])
+        previous_raw_by_figure_id = self._index_latest_raw_outputs(previous_raw_outputs or [])
         for candidate in candidates:
             action = str(candidate.get("figure_processing_action") or "")
             if action == "missing_image":
@@ -523,6 +674,17 @@ class Stage4VisionSpectraExtractor:
                         "final_status": "failed",
                     }
                 )
+                continue
+            if action == "replay_candidate":
+                replay_output = previous_raw_by_figure_id.get(str(candidate.get("figure_id") or ""))
+                replay_result = self._replay_candidate_from_raw_output(candidate, replay_output)
+                if replay_result["ok"]:
+                    extractions.append(replay_result["record"])
+                    raw_outputs.append(replay_result["raw_output"])
+                else:
+                    failed_records.append(replay_result["failed_record"])
+                    if replay_result.get("raw_output") is not None:
+                        raw_outputs.append(replay_result["raw_output"])
                 continue
             if not candidate.get("send_to_vlm") or not candidate.get("will_call_vlm"):
                 continue
@@ -626,6 +788,90 @@ class Stage4VisionSpectraExtractor:
                 raw_outputs.append(build_error_raw_output(candidate, error_message=str(exc), error_type="processing_error"))
                 failed_records.append(build_failed_record(candidate, exc, fallback_used=False))
         return extractions, raw_outputs, failed_records, config_warnings
+
+    @staticmethod
+    def _index_latest_raw_outputs(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        indexed: dict[str, dict[str, Any]] = {}
+        for record in records:
+            figure_id = str(record.get("figure_id") or "").strip()
+            if not figure_id:
+                continue
+            indexed[figure_id] = record
+        return indexed
+
+    def _replay_candidate_from_raw_output(
+        self,
+        candidate: dict[str, Any],
+        raw_output: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not raw_output:
+            error = ValueError("missing_raw_vlm_output_for_replay")
+            return {
+                "ok": False,
+                "failed_record": build_failed_record(candidate, error, fallback_used=False),
+                "raw_output": None,
+            }
+        try:
+            if raw_output.get("raw_universal_payload"):
+                parsed = dict(raw_output.get("raw_universal_payload") or {})
+            else:
+                parsed = parse_json_payload(str(raw_output.get("raw_response") or ""))
+            parsed.setdefault("paper_id", self.paper_id)
+            parsed.setdefault("figure_id", candidate.get("figure_id"))
+            parsed.setdefault("figure_type", candidate.get("figure_type"))
+            parsed.setdefault("source_image_path", candidate.get("source_image_path"))
+            parsed.setdefault("caption", candidate.get("caption"))
+            parsed.setdefault("extraction_mode", "replay_materialized")
+            parsed.setdefault("extraction_model", (raw_output.get("response_payload") or {}).get("model"))
+            parsed.setdefault("input_context_summary", build_input_context_summary(candidate))
+            parsed.setdefault("used_context_sources", list(candidate.get("context_source", {}).values()))
+            if self.routing_mode == "universal_compact":
+                validation_result = validate_universal_extraction_payload(parsed, candidate)
+                if not validation_result.get("ok"):
+                    error = ValueError(str(validation_result.get("error_message") or "schema_validation_failed"))
+                    failed_record = build_failed_record(candidate, error, fallback_used=False)
+                    failed_record["error_type"] = "schema_validation_failed"
+                    return {
+                        "ok": False,
+                        "failed_record": failed_record,
+                        "raw_output": {
+                            **raw_output,
+                            "error_type": "schema_validation_failed",
+                            "warnings": validation_result.get("warnings", []),
+                        },
+                    }
+                record = dict(validation_result["record"])
+            else:
+                schema_cls = get_schema_for_figure_type(candidate.get("figure_type"))
+                parsed, normalization_warnings = self._normalize_live_payload(
+                    parsed,
+                    figure_type=str(candidate.get("figure_type") or ""),
+                    schema_name=schema_cls.__name__,
+                )
+                record = schema_cls(**parsed).model_dump()
+                record["schema_name"] = schema_cls.__name__
+                if normalization_warnings:
+                    record["warnings"] = [*record.get("warnings", []), *normalization_warnings]
+                record["validation_errors"] = validate_stage4_extraction(record)
+            record["extraction_mode"] = "replay_materialized"
+            return {
+                "ok": True,
+                "record": record,
+                "raw_output": {
+                    **raw_output,
+                    "replayed_without_vlm": True,
+                },
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "ok": False,
+                "failed_record": build_failed_record(candidate, exc, fallback_used=False),
+                "raw_output": {
+                    **raw_output,
+                    "error_type": raw_output.get("error_type") or "replay_processing_error",
+                    "replayed_without_vlm": True,
+                },
+            }
 
     @staticmethod
     def _normalize_live_payload(
@@ -767,10 +1013,15 @@ class Stage4VisionSpectraExtractor:
             "reference_sentences": candidate.get("reference_sentences", []),
             "context_before": candidate.get("context_before"),
             "context_after": candidate.get("context_after"),
+            "nearby_text": candidate.get("nearby_text"),
+            "related_text": candidate.get("related_text"),
+            "ocr_text": candidate.get("ocr_text"),
+            "context_text": candidate.get("context_text"),
             "evidence_object_context": candidate.get("evidence_object_context", {}),
             "related_stage3_parameters": candidate.get("related_stage3_parameters", []),
             "context_source": candidate.get("context_source", {}),
             "stage2_figure_class": candidate.get("stage2_figure_class"),
+            "stage2_predicted_figure_type": candidate.get("stage2_predicted_figure_type"),
             "stage3_figure_type": candidate.get("stage3_figure_type"),
             "initial_figure_type": candidate.get("initial_figure_type"),
         }

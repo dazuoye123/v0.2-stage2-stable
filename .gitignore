@@ -14,6 +14,13 @@ env/
 
 *.pdf
 *.PDF
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.tif
+*.tiff
+*.bmp
 *.zip
 *.tar
 *.tar.gz
@@ -33,11 +40,16 @@ env/
 .cache/
 hf_cache/
 
-data/markdown/*.md
+data/markdown/
 !data/markdown/.gitkeep
-data/mineru_raw/*
+data/mineru_raw/
 !data/mineru_raw/.gitkeep
-data/outputs/*
+data/outputs/
 !data/outputs/.gitkeep
 data/pdfs/*
 !data/pdfs/.gitkeep
+data/batch_validation/
+data/batch_validation_reports/
+data/gold_outputs/
+**/figures_all/
+**/figures_for_vision/

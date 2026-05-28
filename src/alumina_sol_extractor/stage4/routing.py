@@ -17,6 +17,7 @@ from .schemas import (
 
 
 _NORMALIZATION_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("non_extractable", ("non_extractable", "non-extractable", "not extractable", "not_extractable")),
     ("tg_dsc_curve", ("tg-dsc", "tg/dsc", "tg dsc")),
     ("ftir_spectrum", ("ftir", "infrared", "ir", "红外", "傅里叶红外")),
     ("raman_spectrum", ("raman", "拉曼")),
@@ -44,6 +45,7 @@ _SCHEMA_BY_FIGURE_TYPE = {
     "tem_image": MicroscopyExtraction,
     "microscopy": MicroscopyExtraction,
     "unknown": UnknownFigureExtraction,
+    "non_extractable": UnknownFigureExtraction,
 }
 
 _SCIENTIFIC_CONTEXT_KEYWORDS = (
@@ -90,7 +92,7 @@ def get_schema_for_figure_type(figure_type: str | None):
 
 def should_process_figure(figure_type: str | None, allow_types: set[str] | None = None) -> bool:
     normalized = normalize_figure_type(figure_type)
-    if normalized == "unknown":
+    if normalized in {"unknown", "non_extractable"}:
         return False
     if not allow_types:
         return normalized in _SCHEMA_BY_FIGURE_TYPE and normalized != "unknown"
@@ -119,7 +121,7 @@ def describe_universal_candidate(
     raw_stage2 = (stage2_figure_class or "").strip().lower()
     scientific_caption = caption_or_context_is_scientific(caption, context_text)
 
-    if normalized_initial != "unknown":
+    if normalized_initial not in {"unknown", "non_extractable"}:
         if raw_stage2 in _WEAK_STAGE2_CLASSES and scientific_caption:
             return True, "stage2_unknown_caption_scientific", "medium"
         if normalized_stage2 == normalized_stage3 == normalized_initial:
@@ -134,7 +136,7 @@ def describe_universal_candidate(
         return True, "weak_type_but_scientific_context", "high"
 
     allowed = {normalize_figure_type(item) for item in allow_types or set()}
-    if allowed and normalized_stage3 in allowed and normalized_stage3 != "unknown":
+    if allowed and normalized_stage3 in allowed and normalized_stage3 not in {"unknown", "non_extractable"}:
         return True, "default_schema_specific", "medium"
     return False, "default_schema_specific", "high"
 

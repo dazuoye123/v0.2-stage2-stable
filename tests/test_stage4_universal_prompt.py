@@ -32,6 +32,7 @@ def test_universal_compact_prompt_contains_all_allowed_types() -> None:
         "tem_image",
         "microscopy",
         "unknown",
+        "non_extractable",
     ]:
         assert token in text
 
@@ -55,6 +56,9 @@ def test_universal_compact_prompt_requires_json_only_output() -> None:
 def test_universal_compact_prompt_includes_extraction_fields() -> None:
     text = get_universal_compact_prompt().text
     for token in [
+        "\"stage2_predicted_figure_type\"",
+        "\"stage2_type_used_as_hint\"",
+        "\"corrected_from_stage2_type\"",
         "\"extraction\"",
         "\"peaks\"",
         "\"detected_phases\"",

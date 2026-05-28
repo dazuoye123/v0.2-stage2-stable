@@ -29,11 +29,18 @@ def test_stage4_batch_runner_dry_run_uses_stage3_twopass_and_universal_subdir(tm
     (stage3_dir / "stage3_summary.json").write_text(json.dumps({"ok": True}, ensure_ascii=False), encoding="utf-8")
     (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
     (paper_output_dir / "figures.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": "fig1.jpg"}, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    (paper_output_dir / "vision_inputs.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "figure_class": "other", "vision_image_path": "fig1.jpg"}, ensure_ascii=False) + "\n",
+        json.dumps(
+            {
+                "figure_id": "fig-1",
+                "caption": "FTIR spectrum",
+                "image_path": "fig1.jpg",
+                "vision_image_path": "fig1.jpg",
+                "figure_class": "other",
+                "send_to_vision_model": True,
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
         encoding="utf-8",
     )
     manifest.write_text("source_id,category,paper_id_guess\ns1,fiber_process,paper1\n", encoding="utf-8")
@@ -101,11 +108,18 @@ def test_stage4_batch_runner_live_not_blocked_by_dry_run_summary(tmp_path: Path)
         encoding="utf-8",
     )
     (paper_output_dir / "figures.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": "fig1.jpg"}, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    (paper_output_dir / "vision_inputs.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "figure_class": "other", "vision_image_path": "fig1.jpg"}, ensure_ascii=False) + "\n",
+        json.dumps(
+            {
+                "figure_id": "fig-1",
+                "caption": "FTIR spectrum",
+                "image_path": "fig1.jpg",
+                "vision_image_path": "fig1.jpg",
+                "figure_class": "other",
+                "send_to_vision_model": True,
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
         encoding="utf-8",
     )
     (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
@@ -165,11 +179,18 @@ def test_force_true_still_protects_existing_live_success_figure(tmp_path: Path, 
     (stage3_dir / "stage3_summary.json").write_text(json.dumps({"ok": True}, ensure_ascii=False), encoding="utf-8")
     (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
     (paper_output_dir / "figures.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": str(image_path)}, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    (paper_output_dir / "vision_inputs.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "figure_class": "unknown", "vision_image_path": str(image_path)}, ensure_ascii=False) + "\n",
+        json.dumps(
+            {
+                "figure_id": "fig-1",
+                "caption": "FTIR spectrum",
+                "image_path": str(image_path),
+                "vision_image_path": str(image_path),
+                "figure_class": "unknown",
+                "send_to_vision_model": True,
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
         encoding="utf-8",
     )
     (stage4_dir / "stage4a_summary.json").write_text(
@@ -184,7 +205,7 @@ def test_force_true_still_protects_existing_live_success_figure(tmp_path: Path, 
 
     captured: dict[str, Any] = {}
 
-    def fake_run_extractions(self, candidates, *, previous_extractions=None):  # noqa: ANN001
+    def fake_run_extractions(self, candidates, *, previous_extractions=None, previous_raw_outputs=None):  # noqa: ANN001
         captured["candidates"] = candidates
         return [], [], [], []
 
@@ -223,11 +244,18 @@ def test_force_true_prefers_replay_over_resending_when_raw_output_exists(tmp_pat
     (stage3_dir / "stage3_summary.json").write_text(json.dumps({"ok": True}, ensure_ascii=False), encoding="utf-8")
     (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
     (paper_output_dir / "figures.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": str(image_path)}, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    (paper_output_dir / "vision_inputs.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "figure_class": "unknown", "vision_image_path": str(image_path)}, ensure_ascii=False) + "\n",
+        json.dumps(
+            {
+                "figure_id": "fig-1",
+                "caption": "FTIR spectrum",
+                "image_path": str(image_path),
+                "vision_image_path": str(image_path),
+                "figure_class": "unknown",
+                "send_to_vision_model": True,
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
         encoding="utf-8",
     )
     (stage4_dir / "stage4a_summary.json").write_text(
@@ -242,7 +270,7 @@ def test_force_true_prefers_replay_over_resending_when_raw_output_exists(tmp_pat
 
     captured: dict[str, Any] = {}
 
-    def fake_run_extractions(self, candidates, *, previous_extractions=None):  # noqa: ANN001
+    def fake_run_extractions(self, candidates, *, previous_extractions=None, previous_raw_outputs=None):  # noqa: ANN001
         captured["candidates"] = candidates
         return [], [], [], []
 

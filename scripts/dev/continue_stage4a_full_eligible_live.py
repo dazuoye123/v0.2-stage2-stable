@@ -97,20 +97,8 @@ def _load_candidate_plan(category: str, paper_id: str) -> tuple[list[dict[str, A
         stage3_subdir="stage3_twopass",
         stage4_subdir="stage4_vision_spectra_universal",
     )
-    figures = read_jsonl(output_dir / "figures.jsonl")
-    vision_inputs = read_jsonl(output_dir / "vision_inputs.jsonl")
-    stage3_dir = output_dir / "stage3_twopass"
-    evidence_objects = read_jsonl(stage3_dir / "evidence_objects.jsonl")
-    stage3_schema = read_json(stage3_dir / "paper_extraction.schema_v2.json", default={}) or {}
-    candidates = extractor._select_candidates(  # noqa: SLF001
-        figures=figures,
-        vision_inputs=vision_inputs,
-        evidence_objects=evidence_objects,
-        stage3_schema=stage3_schema,
-    )
-    processed_index = load_stage4a_processed_figure_index(_stage4_dir(category, paper_id))
-    candidates = extractor._apply_figure_level_dedup(candidates, processed_index)  # noqa: SLF001
-    return candidates, processed_index
+    plan = extractor.build_candidate_plan(create_stage4_dir=False)
+    return plan["candidates"], plan["processed_index"]
 
 
 def _classify_paper(row: dict[str, str]) -> dict[str, Any]:

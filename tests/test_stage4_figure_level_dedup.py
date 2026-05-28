@@ -149,11 +149,18 @@ def test_continue_script_audit_only_does_not_treat_032_dry_run_only_as_completed
     stage4_dir.mkdir(parents=True, exist_ok=True)
     image_path.write_bytes(b"img")
     (paper_output_dir / "figures.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "caption": "FTIR spectrum", "image_path": str(image_path)}, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    (paper_output_dir / "vision_inputs.jsonl").write_text(
-        json.dumps({"figure_id": "fig-1", "figure_class": "other", "vision_image_path": str(image_path)}, ensure_ascii=False) + "\n",
+        json.dumps(
+            {
+                "figure_id": "fig-1",
+                "caption": "FTIR spectrum",
+                "image_path": str(image_path),
+                "vision_image_path": str(image_path),
+                "figure_class": "other",
+                "send_to_vision_model": True,
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
         encoding="utf-8",
     )
     (stage3_dir / "evidence_objects.jsonl").write_text("", encoding="utf-8")
@@ -179,4 +186,5 @@ def test_continue_script_audit_only_does_not_treat_032_dry_run_only_as_completed
 
     assert result["rows"][0]["dry_run_only_summary"] is True
     assert result["rows"][0]["run_action"] == "defer_032"
-    assert result["summary"]["remaining_figures_to_send_vlm"] == 1
+    assert result["summary"]["remaining_figures_to_send_vlm"] == 0
+    assert result["summary"]["deferred_remaining_figures"] == 1

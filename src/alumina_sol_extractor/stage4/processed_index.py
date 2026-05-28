@@ -131,7 +131,7 @@ def classify_stage4a_figure_processing_action(
     image_path = str(candidate.get("source_image_path") or "").strip()
     if figure_id in processed_index["successful_figure_ids"] or (image_path and image_path in processed_index["successful_image_paths"]):
         return "skip_success", "already_successful_extraction"
-    if candidate.get("skip_reason") == "missing_image_path" or figure_id in processed_index["missing_image_path_figure_ids"]:
+    if candidate.get("skip_reason") in {"missing_image_path", "directory_path_error"} or figure_id in processed_index["missing_image_path_figure_ids"]:
         return "missing_image", "missing_image_path"
     if figure_id in processed_index["schema_failed_figure_ids"]:
         return "replay_candidate", "schema_validation_failed"

@@ -21,6 +21,7 @@ _KNOWN_FIGURE_TYPES = {
     "tem_image",
     "microscopy",
     "unknown",
+    "non_extractable",
 }
 
 
@@ -56,14 +57,38 @@ def build_stage4_summary(
     by_routing_reason = Counter(str(item.get("routing_reason") or "unknown") for item in candidates)
     by_risk = Counter(str(item.get("candidate_risk_level") or "unknown") for item in candidates)
     by_processing_action = Counter(str(item.get("figure_processing_action") or "unknown") for item in candidates)
+    total_stage2_selected_figures = len(candidates)
+    valid_stage2_selected_figures = sum(
+        1
+        for item in candidates
+        if str(item.get("path_status") or "valid") in {"valid", "relative_unchecked"}
+    )
+    missing_image_path_count = sum(
+        1
+        for item in candidates
+        if str(item.get("path_status") or "") == "missing"
+    )
+    directory_path_error_count = sum(
+        1
+        for item in candidates
+        if str(item.get("path_status") or "") == "directory"
+    )
     processed_count = sum(1 for item in candidates if item.get("send_to_vlm"))
     skipped_count = sum(1 for item in candidates if not item.get("send_to_vlm"))
-    figure_level_skip_success_count = by_processing_action.get("skip_success", 0)
-    figure_level_replay_candidate_count = by_processing_action.get("replay_candidate", 0)
-    figure_level_rerun_transient_count = by_processing_action.get("rerun_transient", 0)
-    figure_level_new_live_count = by_processing_action.get("new_live", 0)
-    figure_level_missing_image_count = by_processing_action.get("missing_image", 0)
+    figure_level_skip_success_count = sum(1 for item in candidates if item.get("figure_processing_action") == "skip_success")
+    figure_level_replay_candidate_count = sum(1 for item in candidates if item.get("figure_processing_action") == "replay_candidate")
+    figure_level_rerun_transient_count = sum(1 for item in candidates if item.get("figure_processing_action") == "rerun_transient")
+    figure_level_new_live_count = sum(
+        1 for item in candidates if item.get("figure_processing_action") == "new_live" and item.get("send_to_vlm")
+    )
+    figure_level_missing_image_count = sum(1 for item in candidates if item.get("figure_processing_action") == "missing_image")
     duplicate_vlm_prevented_count = figure_level_skip_success_count + figure_level_replay_candidate_count
+    schema_replay_candidate_count = sum(
+        1 for item in candidates if item.get("figure_processing_reason") == "schema_validation_failed"
+    )
+    raw_vlm_replay_candidate_count = sum(
+        1 for item in candidates if item.get("figure_processing_reason") == "raw_vlm_output_available"
+    )
     rescued_unknown_by_caption_count = sum(
         1 for item in candidates if item.get("routing_reason") == "stage2_unknown_caption_scientific" and item.get("send_to_vlm")
     )
@@ -77,7 +102,24 @@ def build_stage4_summary(
     fallback_reused = [item for item in failed_records if item.get("fallback_used")]
     hard_failed = [item for item in failed_records if item.get("final_status") != "reused_previous_success"]
     validation_error_count = sum(len(item.get("validation_errors", [])) for item in extractions)
+    non_extractable_count = sum(
+        1
+        for item in extractions
+        if str(item.get("actual_figure_type") or item.get("figure_type") or "") == "non_extractable"
+    )
     return {
+        "total_stage2_selected_figures": total_stage2_selected_figures,
+        "valid_stage2_selected_figures": valid_stage2_selected_figures,
+        "missing_image_path_count": missing_image_path_count,
+        "directory_path_error_count": directory_path_error_count,
+        "already_successful_figure_count": figure_level_skip_success_count,
+        "raw_vlm_replay_candidate_count": raw_vlm_replay_candidate_count,
+        "schema_replay_candidate_count": schema_replay_candidate_count,
+        "transient_rerun_candidate_count": figure_level_rerun_transient_count,
+        "new_live_candidate_count": figure_level_new_live_count,
+        "non_extractable_count": non_extractable_count,
+        "live_success_count": live_count,
+        "max_figures_per_paper_applied": int(candidates[0].get("max_figures_per_paper_applied") or 0) if candidates else 0,
         "total_candidates": len(candidates),
         "processed_count": processed_count,
         "skipped_count": skipped_count,

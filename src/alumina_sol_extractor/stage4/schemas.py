@@ -173,15 +173,19 @@ class UniversalFigureExtraction(Stage4BaseModel):
     paper_id: str | None = None
     figure_id: str | None = None
     stage2_figure_class: str | None = None
+    stage2_predicted_figure_type: str | None = None
     stage3_figure_type: str | None = None
     initial_figure_type: str | None = None
     actual_figure_type: str | None = None
     type_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     type_reason: str | None = None
+    stage2_type_used_as_hint: bool | None = None
     type_mismatch: bool = False
+    corrected_from_stage2_type: str | None = None
     needs_manual_review: bool = False
     routing_mode: str | None = None
     caption: str | None = None
+    image_basename: str | None = None
     image_readability: str | None = None
     text_context_quality: str | None = None
     warnings: list[str] = Field(default_factory=list)
