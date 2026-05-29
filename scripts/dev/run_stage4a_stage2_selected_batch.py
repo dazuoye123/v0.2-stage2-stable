@@ -1,9 +1,11 @@
 from __future__ import annotations
-
 import argparse
 import csv
 import json
+import os
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -58,6 +60,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-defer-large-papers", dest="defer_large_papers", action="store_false")
     parser.add_argument("--report-dir", default=str(DEFAULT_CHUNK_ROOT))
     parser.add_argument("--continue-on-error", action="store_true", default=True)
+    parser.add_argument("--vlm-timeout-seconds", type=int, default=90)
+    parser.add_argument("--vlm-max-retries", type=int, default=1)
+    parser.add_argument("--vlm-retry-backoff-seconds", type=float, default=2.0)
+    parser.add_argument("--workers", type=int, default=1)
     return parser.parse_args()
 
 
@@ -107,6 +113,10 @@ def main() -> None:
         defer_large_papers=args.defer_large_papers,
         report_dir=Path(args.report_dir),
         continue_on_error=args.continue_on_error,
+        vlm_timeout_seconds=args.vlm_timeout_seconds,
+        vlm_max_retries=args.vlm_max_retries,
+        vlm_retry_backoff_seconds=args.vlm_retry_backoff_seconds,
+        workers=args.workers,
     )
     print(json.dumps(result["summary"], ensure_ascii=False, indent=2))
 
@@ -229,6 +239,86 @@ def run_review_only(
     return {"rows": review_rows, "summary": summary}
 
 
+
+def _stage4a_to_int(value, default=0):
+    try:
+        if value is None or value == "":
+            return default
+        return int(float(value))
+    except Exception:
+        return default
+
+def _stage4a_to_bool(value):
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
+
+def _stage4a_should_run_live(row):
+    """???? run_action ??? audit row?"""
+    action = str(row.get("run_action") or "").strip()
+    if action:
+        return action == "run_live"
+    if _stage4a_to_bool(row.get("deferred")):
+        return False
+    return _stage4a_to_int(row.get("new_live_candidate_figures")) > 0
+
+def _run_one_stage4a_paper(
+    row: dict[str, Any],
+    *,
+    outputs_dir: Path,
+    stage3_subdir: str,
+    stage4_subdir: str,
+    routing_mode: str,
+    candidate_source: str,
+    max_figures_per_paper: int,
+) -> dict[str, Any]:
+    started_at = time.monotonic()
+    category = row["category"]
+    paper_id = row["paper_id"]
+
+    print(
+        f"[Stage4A batch] start paper={paper_id} "
+        f"category={category} max_figures={max_figures_per_paper}",
+        flush=True,
+    )
+
+    extractor = Stage4VisionSpectraExtractor(
+        paper_id=paper_id,
+        output_dir=outputs_dir / category / paper_id,
+        max_figures=max_figures_per_paper,
+        dry_run=False,
+        routing_mode=routing_mode,
+        stage3_subdir=stage3_subdir,
+        stage4_subdir=stage4_subdir,
+        candidate_source=candidate_source,
+    )
+
+    try:
+        summary = extractor.run()
+        elapsed = round(time.monotonic() - started_at, 2)
+        print(
+            f"[Stage4A batch] done paper={paper_id} elapsed={elapsed}s",
+            flush=True,
+        )
+        return {
+            "category": category,
+            "paper_id": paper_id,
+            "status": "success",
+            "elapsed_seconds": elapsed,
+            "summary": summary,
+        }
+    except Exception as exc:  # noqa: BLE001
+        elapsed = round(time.monotonic() - started_at, 2)
+        print(
+            f"[Stage4A batch] failed paper={paper_id} "
+            f"elapsed={elapsed}s error={exc}",
+            flush=True,
+        )
+        return {
+            "category": category,
+            "paper_id": paper_id,
+            "status": "failed",
+            "elapsed_seconds": elapsed,
+            "error_message": str(exc),
+        }
 def run_live_chunks(
     *,
     rows: list[dict[str, str]],
@@ -242,7 +332,14 @@ def run_live_chunks(
     defer_large_papers: bool,
     report_dir: Path,
     continue_on_error: bool,
+    vlm_timeout_seconds: int,
+    vlm_max_retries: int,
+    vlm_retry_backoff_seconds: float,
+    workers: int,
 ) -> dict[str, Any]:
+    os.environ["VLM_TIMEOUT_SECONDS"] = str(vlm_timeout_seconds)
+    os.environ["VLM_MAX_RETRIES"] = str(vlm_max_retries)
+    os.environ["VLM_RETRY_BACKOFF_SECONDS"] = str(vlm_retry_backoff_seconds)
     audit = run_audit_only(
         rows=rows,
         outputs_dir=outputs_dir,
@@ -255,7 +352,7 @@ def run_live_chunks(
     )
     run_live_rows = [
         row for row in audit["rows"]
-        if row["run_action"] == "run_live"
+        if _stage4a_should_run_live(row)
     ]
     chunk_reports: list[dict[str, Any]] = []
     for index in range(0, len(run_live_rows), max(chunk_size, 1)):
@@ -264,38 +361,46 @@ def run_live_chunks(
         chunk_dir = report_dir / chunk_name
         chunk_dir.mkdir(parents=True, exist_ok=True)
         results: list[dict[str, Any]] = []
-        for row in chunk_rows:
-            extractor = Stage4VisionSpectraExtractor(
-                paper_id=row["paper_id"],
-                output_dir=outputs_dir / row["category"] / row["paper_id"],
-                max_figures=max_figures_per_paper,
-                dry_run=False,
-                routing_mode=routing_mode,
-                stage3_subdir=stage3_subdir,
-                stage4_subdir=stage4_subdir,
-                candidate_source=candidate_source,
-            )
-            try:
-                summary = extractor.run()
-                results.append(
-                    {
-                        "category": row["category"],
-                        "paper_id": row["paper_id"],
-                        "status": "success",
-                        "summary": summary,
-                    }
+        max_workers = max(1, int(workers or 1))
+
+        if max_workers == 1:
+            for row in chunk_rows:
+                result = _run_one_stage4a_paper(
+                    row,
+                    outputs_dir=outputs_dir,
+                    stage3_subdir=stage3_subdir,
+                    stage4_subdir=stage4_subdir,
+                    routing_mode=routing_mode,
+                    candidate_source=candidate_source,
+                    max_figures_per_paper=max_figures_per_paper,
                 )
-            except Exception as exc:  # noqa: BLE001
-                results.append(
-                    {
-                        "category": row["category"],
-                        "paper_id": row["paper_id"],
-                        "status": "failed",
-                        "error_message": str(exc),
-                    }
-                )
-                if not continue_on_error:
+                results.append(result)
+                if result["status"] == "failed" and not continue_on_error:
                     break
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_row = {
+                    executor.submit(
+                        _run_one_stage4a_paper,
+                        row,
+                        outputs_dir=outputs_dir,
+                        stage3_subdir=stage3_subdir,
+                        stage4_subdir=stage4_subdir,
+                        routing_mode=routing_mode,
+                        candidate_source=candidate_source,
+                        max_figures_per_paper=max_figures_per_paper,
+                    ): row
+                    for row in chunk_rows
+                }
+
+                for future in as_completed(future_to_row):
+                    result = future.result()
+                    results.append(result)
+
+                    if result["status"] == "failed" and not continue_on_error:
+                        for pending in future_to_row:
+                            pending.cancel()
+                        break
         chunk_summary = _build_chunk_summary(chunk_rows, results)
         (chunk_dir / "chunk_summary.json").write_text(json.dumps(chunk_summary, ensure_ascii=False, indent=2), encoding="utf-8")
         chunk_reports.append(chunk_summary)

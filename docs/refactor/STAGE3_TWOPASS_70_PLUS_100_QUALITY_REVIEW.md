@@ -1,0 +1,27 @@
+# Stage 3 Two-pass 70 Plus 100 Quality Review
+
+- limit20_count = 20
+- next50_count = 50
+- next100_count = 100
+- combined_raw_count = 170
+- combined_unique_count = 170
+- duplicate_count = 0
+- A_count = 0
+- B_count = 139
+- C_count = 31
+- D_count = 0
+- manual_hold_count = 23
+- usable_set_A_count = 0
+- usable_set_B_count = 139
+- usable_set_C_count = 8
+- usable_set_D_count = 0
+- raw_name_key_value_bug_count = 0
+- list_value_validation_error_count = 0
+- evidence_zero_with_scientific_figures_count = 0
+- cleaned_body_image_residue_count = 0
+- average_canonical_key_errors_count = 0.0
+- average_rejected_parameter_records_count = 0.0
+- process_steps_warning_count = 83
+- average_other_action_ratio = 0.3336
+- average_missing_evidence_text_ratio = 0.2765
+- process_steps_zero_count = 2

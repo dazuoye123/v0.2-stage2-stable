@@ -51,5 +51,11 @@ data/pdfs/*
 data/batch_validation/
 data/batch_validation_reports/
 data/gold_outputs/
+data/analysis_outputs_stage3/
+data/analysis_outputs_stage3_refined/
 **/figures_all/
 **/figures_for_vision/
+
+*.log
+*.tmp
+*.bak

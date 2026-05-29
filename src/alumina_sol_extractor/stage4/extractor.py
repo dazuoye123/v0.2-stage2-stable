@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -705,12 +706,28 @@ class Stage4VisionSpectraExtractor:
                     }
                 )
                 continue
+            figure_id = str(candidate.get("figure_id") or "").strip()
+            figure_started_at = time.monotonic()
+            timeout_s = getattr(client, "timeout_s", None)
+
             try:
+                print(
+                    f"[Stage4A] VLM start figure_id={figure_id} "
+                    f"type={candidate.get('figure_type')} timeout={timeout_s}s",
+                    flush=True,
+                )
+
                 response = client.extract(
                     VLMRequest(
                         image_path=str(candidate.get("source_image_path") or ""),
                         prompt=prompt_record["prompt"],
                     )
+                )
+
+                elapsed = round(time.monotonic() - figure_started_at, 2)
+                print(
+                    f"[Stage4A] VLM done figure_id={figure_id} elapsed={elapsed}s",
+                    flush=True,
                 )
                 raw_outputs.append(
                     {
@@ -748,6 +765,8 @@ class Stage4VisionSpectraExtractor:
                                 "warnings": validation_result.get("warnings", []),
                                 "error_type": "schema_validation_failed",
                                 "dry_run": False,
+                                "elapsed_seconds": elapsed,
+                                "timeout_seconds": timeout_s,
                             }
                         )
                 else:
@@ -764,6 +783,7 @@ class Stage4VisionSpectraExtractor:
                     validated["validation_errors"] = validate_stage4_extraction(validated)
                     extractions.append(validated)
             except VLMRequestError as exc:
+                elapsed = round(time.monotonic() - figure_started_at, 2)
                 fallback_record = None
                 if exc.is_transient:
                     fallback_record = reuse_previous_success(
@@ -772,15 +792,26 @@ class Stage4VisionSpectraExtractor:
                         error_type=exc.error_type,
                     )
                 failed_record = build_failed_record(candidate, exc, fallback_used=fallback_record is not None)
+                failed_record["elapsed_seconds"] = elapsed
+                failed_record["status"] = "timeout" if "timeout" in str(exc.error_type).lower() else "failed"
+                failed_record["final_status"] = failed_record["status"]
                 failed_records.append(failed_record)
-                raw_outputs.append(
-                    build_error_raw_output(
-                        candidate,
-                        error_message=str(exc),
-                        error_type=exc.error_type,
-                        retry_attempts=exc.retry_attempts,
-                        timeout_seconds=exc.timeout_seconds,
-                    )
+                error_raw_output = build_error_raw_output(
+                    candidate,
+                    error_message=str(exc),
+                    error_type=exc.error_type,
+                    retry_attempts=exc.retry_attempts,
+                    timeout_seconds=exc.timeout_seconds,
+                )
+                error_raw_output["elapsed_seconds"] = elapsed
+                error_raw_output["status"] = failed_record["status"]
+                raw_outputs.append(error_raw_output)
+
+                print(
+                    f"[Stage4A] VLM {failed_record['status']} "
+                    f"figure_id={figure_id} elapsed={elapsed}s "
+                    f"error_type={exc.error_type}; continue next figure",
+                    flush=True,
                 )
                 if fallback_record is not None:
                     extractions.append(fallback_record)

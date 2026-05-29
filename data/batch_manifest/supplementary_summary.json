@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-05-20T14:21:51.847707+00:00",
+  "source_manifest": "data\\batch_manifest\\source_manifest.csv",
+  "pdf_dir": "G:\\paper\\Sorted_Database",
+  "markdown_dir": "data\\markdown",
+  "supplementary_dir": "data\\supplementary",
+  "total_sources": 343,
+  "supplementary_detected_count": 138,
+  "no_supplementary_detected_count": 205,
+  "needs_manual_download_count": 51,
+  "with_supplementary_url_count": 87,
+  "doi_detected_count": 171,
+  "possible_supplementary_count": 138,
+  "by_category": {
+    "applications": {
+      "total": 36,
+      "supplementary_detected_count": 19,
+      "no_supplementary_detected_count": 17,
+      "needs_manual_download_count": 6,
+      "with_supplementary_url_count": 13,
+      "doi_detected_count": 16
+    },
+    "fiber_process": {
+      "total": 130,
+      "supplementary_detected_count": 58,
+      "no_supplementary_detected_count": 72,
+      "needs_manual_download_count": 29,
+      "with_supplementary_url_count": 29,
+      "doi_detected_count": 67
+    },
+    "mechanism": {
+      "total": 163,
+      "supplementary_detected_count": 55,
+      "no_supplementary_detected_count": 108,
+      "needs_manual_download_count": 14,
+      "with_supplementary_url_count": 41,
+      "doi_detected_count": 85
+    },
+    "rheology": {
+      "total": 14,
+      "supplementary_detected_count": 6,
+      "no_supplementary_detected_count": 8,
+      "needs_manual_download_count": 2,
+      "with_supplementary_url_count": 4,
+      "doi_detected_count": 3
+    }
+  },
+  "recommended_download_or_manual_check_list": [
+    "fiber_process__029_无机酸铝体系氧化铝连续纤维的制备技术研究",
+    "fiber_process__096_cai_等_2006_azeotropic_distillation_assisted_preparation_of_macro_mesostructured_γ_al2o3_nanofibres_of_crumpled",
+    "fiber_process__101_chandradass和balasubramanian_2006_sol_gel_based_extrusion_of_alumina_fibers",
+    "fiber_process__103_chandradass和balasubramanian_2008_synthesis_and_characterization_of_cao_doped_alumina_zirconia_fibers_by_sol_gel_process",
+    "fiber_process__136_gao_等_2019_thermal_decomposition_of_aluminum_carboxylates_based_precursor_for_alumina_fibers",
+    "fiber_process__157_jia_等_2023_preparation_of_alumina_ceramic_continuous_fibers_with_inorganic_acidic_aluminum_sol_as_precursor",
+    "fiber_process__164_kang和gu_2011_sol_gel_synthesis_of_multi_walled_carbon_nanotubes_reinforced_alumina_silica_fibers",
+    "fiber_process__189_li_等_2021_research_progress_of_ultrafine_alumina_fiber_prepared_by_sol_gel_method_a_review",
+    "fiber_process__193_liu_等_2019_preparation_of_alumina_precursor_sols_with_a_high_solid_content_for_alumina_fibers",
+    "fiber_process__195_liu_等_2023_effect_of_the_alumina_and_silica_source_mixing_procedure_on_the_microstructural_evolution_of_alumina"
+  ]
+}

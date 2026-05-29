@@ -1,0 +1,295 @@
+# Stage4A universal ABCD quality review
+
+## Summary
+
+- paper_count: 278
+
+## Grade distribution
+
+- A: 23
+- B: 3
+- C: 245
+- D: 7
+
+## Reason distribution
+
+- high_manual_review_ratio: 241
+- clean_success: 23
+- high_unknown_ratio: 11
+- no_successful_extraction_with_candidates: 7
+- moderate_manual_review: 3
+- many_unknown_but_no_hard_error: 1
+- schema_validation_failed: 1
+- range_peak_midpoint_error: 1
+- no_successful_extractions: 1
+- high_failed_record_rate: 1
+
+## Actual figure type distribution
+
+- ftir_spectrum: 308
+- nmr_spectrum: 290
+- sem_image: 288
+- xrd_pattern: 272
+- tem_image: 185
+- unknown: 166
+- microscopy: 149
+- tg_curve: 63
+- tg_dsc_curve: 33
+- ferron_curve: 15
+- dsc_curve: 13
+- raman_spectrum: 8
+
+## C/D papers
+
+- [C] applications / 003_SiO_2_Al_2O_3复合中空纤维膜的制备与透氢性能研究_白丽 ? high_manual_review_ratio
+- [C] applications / 006_Γ-Al_2O_3_A-Al_2O_3中空纤维复合膜的制备与性能研究_张许 ? high_manual_review_ratio
+- [C] applications / 012_基于拟薄水铝石氧化铝气凝胶制备工艺研究 ? high_manual_review_ratio
+- [C] applications / 028_整装Fiber@γ-Al_2O_3的涂层制备及其负载Ni基催化剂甲烷干气重整研究_盛雯倩 ? high_manual_review_ratio
+- [C] applications / 040_氧化铝纤维负载氧化铈_氧化铜的制备及其光催化性能研究 ? high_manual_review_ratio
+- [C] applications / 052_纤维增强氧化铝基气凝胶复合材料的制备及性能研究 ? high_manual_review_ratio
+- [C] applications / 086_Bera 等 - 2021 - Fabrication of sol-gel derived cladding for sapphire fibers and their performance evaluation under h ? high_manual_review_ratio
+- [C] applications / 141_González-Peña 等 - 2005 - Sol–gel synthesis of mesostructured aluminas from chemically modified aluminum sec-butoxide using no ? high_manual_review_ratio
+- [C] applications / 167_Kim 等 - 2007 - Synthesis of thermo-stable high surface area alumina powder from sol–gel derived boehmite ? high_manual_review_ratio
+- [C] applications / 173_Krivoshapkin 等 - 2016 - Sol–gel template preparation of alumina nanofillers for reinforcing the epoxy resin ? high_manual_review_ratio
+- [C] applications / 185_Li 等 - 2013 - Solvothermal synthesis of gamma aluminas and their structural evolution ? high_manual_review_ratio
+- [C] applications / 202_Ma 等 - 2018 - Preparation of high‐performance zeolite NaA membranes in clear solution by adding SiO2 into Al2O3 ho ? high_manual_review_ratio
+- [C] applications / 215_Moradipour 等 - 2020 - Ternary ZnOZnAl2O4 Al2O3 composite nanofiber as photocatalyst for conversion of CO2 and CH4 ? high_manual_review_ratio
+- [C] applications / 218_Müller 等 - 2002 - Zirconia-alumina nanoparticles prepared by laser evaporation Powder characterisation by TEM and 27A ? high_manual_review_ratio
+- [C] applications / 240_PREPARATION OF ALUMINA FIBER-TYPE CATALYST FOR METHANE COMBUSTION BY SOL-GEL METHODn ? high_manual_review_ratio
+- [C] applications / 245_Pérez-Pastenes 等 - 2006 - Influence of the synthesis method on the properties of ceria-doped alumina ? high_manual_review_ratio
+- [C] applications / 262_Shen 等 - 2012 - Morphology controllable synthesis of nanostructured boehmite and γ-alumina by facile dry gel convers ? high_manual_review_ratio
+- [C] applications / 286_Tang 等 - 2022 - Fibrous activated alumina prepared through phase transformation using dawsonite as a template ? high_manual_review_ratio
+- [C] applications / 311_Xu 等 - 2022 - LaPO4 coating on alumina-based fiber Strength retention of fiber and improvement of interfacial per ? high_manual_review_ratio
+- [C] applications / 328_Zhang 等 - 2022 - Preparation and characterization of alumina-coated hollow quartz fiber reinforced Al2O3-SiO2 aerogel ? high_manual_review_ratio
+- [C] applications / 333_Zhao 等 - 2025 - Fluorescent alumina fibers A fluorescent sensor for detecting trace amounts of water in organic sol ? high_manual_review_ratio
+- [C] applications / 335_Zhou 等 - 2023 - Preparation of the Al13 sol via electrodialysis as an effective binder of FCC catalysts ? high_manual_review_ratio
+- [C] applications / 341_JACS_49-2_Azis ? high_manual_review_ratio
+- [C] fiber_process / 002_PVA作纺丝助剂制备莫来石-氧化铝长纤维 ? high_manual_review_ratio
+- [C] fiber_process / 011_固相反应合成MgAl_2O_4多孔纤维的研究_王昕悦 ? high_manual_review_ratio
+- [C] fiber_process / 013_多孔莫来石纤维基隔热陶瓷的制备与性能研究 ? schema_validation_failed
+- [C] fiber_process / 014_多晶型氧化铝连续纤维的研制及性能 ? range_peak_midpoint_error
+- [C] fiber_process / 015_多晶莫来石纤维的制备研究 ? high_manual_review_ratio
+- [C] fiber_process / 016_多晶莫来石纤维纺丝原液制备与可纺性研究 ? high_manual_review_ratio
+- [C] fiber_process / 030_气电纺丝法制备硅铝增强氧化铈纳微纤维 ? high_manual_review_ratio
+- [C] fiber_process / 031_氧化硅_氧化铝前驱体结晶结构演变及其在氧化铝纤维制备中的应用研究 ? high_manual_review_ratio
+- [C] fiber_process / 032_氧化铝-莫来石前驱体纤维的溶胶设计及预烧结机理研究 ? high_manual_review_ratio
+- [C] fiber_process / 033_氧化铝_氧化锆前驱体纤维纺丝液的制备技术研究 ? high_manual_review_ratio
+- [C] fiber_process / 034_氧化铝基纤维_氧化铝复合材料的制备及其性能研究 ? high_manual_review_ratio
+- [C] fiber_process / 035_氧化铝基陶瓷连续纤维研究进展 ? high_manual_review_ratio
+- [C] fiber_process / 036_氧化铝溶胶浸渍法制备氧化铝纤维的工艺研究 ? high_manual_review_ratio
+- [C] fiber_process / 037_氧化铝纤维制备工艺及表面涂层性能表征研究 ? high_manual_review_ratio
+- [C] fiber_process / 038_氧化铝纤维基层状多孔陶瓷的制备与性能研究 ? high_manual_review_ratio
+- [C] fiber_process / 041_氧化铝连续纤维前驱体的制备与表征 ? high_manual_review_ratio
+- [C] fiber_process / 042_氧化铝连续纤维的研制及表征（初步搞到这里了） ? high_manual_review_ratio
+- [C] fiber_process / 044_溶胶—凝胶法制备ZrO_2掺杂和CuO@In_2O_3负载的氧化铝复合材料及其应用性能_阮铖涛 ? high_manual_review_ratio
+- [C] fiber_process / 045_溶胶—凝胶法制备α-Al_2O_3纤维的相变与微观形貌控制_李相东 ? high_manual_review_ratio
+- [C] fiber_process / 046_溶胶—凝胶法制备氧化铝基纤维研究 ? high_manual_review_ratio
+- [C] fiber_process / 048_溶胶—凝胶法制备钛酸铝纤维的研究 ? high_manual_review_ratio
+- [C] fiber_process / 049_溶胶组成对氧化铝纤维微观结构及性质的影响 ? high_manual_review_ratio
+- [C] fiber_process / 050_烧结温度对莫来石纤维组织结构和性能的影响 ? high_manual_review_ratio
+- [C] fiber_process / 051_稀土氧化物对低温固相合成镁铝尖晶石纤维的影响 ? high_manual_review_ratio
+- [C] fiber_process / 054_纳米α-Al_2O_3籽晶的合成及其在制备α-Al_2O_3纤维中的应用_肖泓芮 ? high_manual_review_ratio
+- [C] fiber_process / 055_纳米氧化铝纤维基多孔陶瓷的制备与性能研究 ? high_manual_review_ratio
+- [C] fiber_process / 056_莫来石-氧化铝复合连续纤维制备及研究 ? high_manual_review_ratio
+- [C] fiber_process / 057_莫来石纤维复合网络二级结构的可控化研究 ? high_manual_review_ratio
+- [C] fiber_process / 058_莫来石纳米纤维复合材料的制备及隔热研究 ? high_manual_review_ratio
+- [C] fiber_process / 059_连续氧化铝纤维及其复合材料的研究进展 ? high_manual_review_ratio
+- [C] fiber_process / 060_连续氧化铝纤维增强氧化铝基复合材料的制备与性能研究 ? high_manual_review_ratio
+- [C] fiber_process / 061_连续氧化铝纤维高温烧结的相变行为及致密化机理研究 ? high_manual_review_ratio
+- [C] fiber_process / 062_连续铝硅酸盐纤维增强Al_2O_3-ZrO_2陶瓷基复合材料的制备与表征_张锦昌 ? high_manual_review_ratio
+- [C] fiber_process / 064_铁复合铝硅系溶胶制备及其性能基础研究 ? high_manual_review_ratio
+- [C] fiber_process / 068_镁铝尖晶石纤维及纤维板的制备与性能研究 ? high_manual_review_ratio
+- [C] fiber_process / 069_静电纺氧化铝！！会议！！纤维膜的制备与构效关系 ? no_successful_extractions
+- [C] fiber_process / 072_Abdullah 等 - 2010 - Effects of the polyvinyl alcohol (PVA) on the synthesis of alumina fibers through electrospinning te ? high_manual_review_ratio
+- [C] fiber_process / 081_Al_sub_2__sub_O_sub_3__sub_-ZrO_sub_2__sub_复合膜的制备与表征 ? high_manual_review_ratio
+- [C] fiber_process / 095_Buining 等 - 1991 - Preparation of colloidal boehmite needles by hydrothermal treatment of aluminum alkoxide precursors ? high_manual_review_ratio
+- [C] fiber_process / 098_Chandradass 等 - 2008 - Synthesis and characterization of sol–gel alumina fiber by seeding α-alumina through extended ball m ? high_manual_review_ratio
+- [C] fiber_process / 099_Chandradass和Balasubramanian - 2005 - Sol–gel based extrusion of alumina–zirconia fibres ? high_manual_review_ratio
+- [C] fiber_process / 100_Chandradass和Balasubramanian - 2006 - Effect of magnesium oxide on sol–gel spun alumina and alumina–zirconia fibres ? high_manual_review_ratio
+- [C] fiber_process / 101_Chandradass和Balasubramanian - 2006 - Sol-gel based extrusion of alumina fibers ? high_manual_review_ratio
+- [C] fiber_process / 102_Chandradass和Balasubramanian - 2007 - Extrusion of alumina fibers using zirconia sol as binder ? high_manual_review_ratio
+- [C] fiber_process / 103_Chandradass和Balasubramanian - 2008 - Synthesis and characterization of CaO doped alumina–zirconia fibers by sol-gel process ? high_manual_review_ratio
+- [C] fiber_process / 104_Chen 等 - 1996 - Preparation of mullite fiber ? high_manual_review_ratio
+- [C] fiber_process / 107_Chen和Gu - 2008 - The sol–gel transition of mullite spinning solution in relation to the formation of ceramic fibers ? high_manual_review_ratio
+- [C] fiber_process / 108_Chen和Gu - 2009 - Sol–gel dry spinning of mullite fibers from ANTEOSAIP system ? high_manual_review_ratio
+- [C] fiber_process / 109_Chen和Gu - 2009 - Structural evolution of sol–gel derived mullite fibers with different solid contents during sinterin ? high_manual_review_ratio
+- [C] fiber_process / 110_Chiou 等 - 1994 - The preparation of alumina fibre by sol-gel processing ? high_manual_review_ratio
+- [C] fiber_process / 111_Choi 等 - 2013 - Preparation of alumina rods by electrospinning aluminum sec-butoxidepolyvinylpyrrolidone blended so ? high_manual_review_ratio
+- [D] fiber_process / 112_Clauss - 1994 - Preparation and characterization of spinning dopes for dry spinning of continuous alumina green fibe ? no_successful_extraction_with_candidates
+- [D] fiber_process / 115_Davies 等 - 2000 - Preparation of barium hexa-aluminate ceramic fibres and refractories ? no_successful_extraction_with_candidates
+- [C] fiber_process / 128_Feng 等 - 2019 - Low-temperature preparation of novel stabilized aluminum titanate ceramic fibers via nonhydrolytic s ? high_manual_review_ratio
+- [C] fiber_process / 135_Gao 等 - 2019 - Preparation, characterization and mechanical properties of continuous mullite fibers derived from th ? high_manual_review_ratio
+- [C] fiber_process / 136_Gao 等 - 2019 - Thermal decomposition of aluminum carboxylates based precursor for alumina fibers ? high_manual_review_ratio
+- [C] fiber_process / 139_Glaubitt 等 - 1994 - A new way to spinnable sols derived from modified aluminumalkoxides Code EP6 ? high_manual_review_ratio
+- [C] fiber_process / 142_Gotoh 等 - 2004 - Preparation of transparent alumina film and fiber from a composite of aluminum polynuclear complexm ? high_manual_review_ratio
+- [C] fiber_process / 153_Influence of Processing Parameters Control on Preparation ofA80 Polycrystalline Alumina Fiber中文 ? high_manual_review_ratio
+- [C] fiber_process / 157_JIA 等 - 2023 - Preparation of alumina ceramic continuous fibers with inorganic acidic aluminum sol as precursor ? high_manual_review_ratio
+- [C] fiber_process / 158_Jing 等 - 2007 - Synthesis of sub-micro-sized solid alpha alumina fibers with smooth surfaces by sol–gel method ? high_manual_review_ratio
+- [C] fiber_process / 163_Kang和Gu - 2011 - Dispersion of multi-walled carbon nanotubes in alumina sol for carbon nanotubealumina composite fib ? high_manual_review_ratio
+- [C] fiber_process / 164_Kang和Gu - 2011 - Sol-gel synthesis of multi-walled carbon nanotubes reinforced alumina-silica fibers ? high_manual_review_ratio
+- [C] fiber_process / 165_Kebbede和Carim - 1998 - Influence of process variations on microstructure in doped sol–gel derived α-alumina ? high_manual_review_ratio
+- [C] fiber_process / 174_Kuiry 等 - 2005 - Solution-based chemical synthesis of boehmite nanofibers and alumina nanorods ? high_manual_review_ratio
+- [C] fiber_process / 184_Li 等 - 2009 - Preparation, microstructure and properties of yttrium aluminum garnet fibers prepared by sol–gel met ? high_manual_review_ratio
+- [C] fiber_process / 189_Li 等 - 2021 - Research progress of ultrafine alumina fiber prepared by sol-gel method A review ? high_manual_review_ratio
+- [C] fiber_process / 193_Liu 等 - 2019 - Preparation of alumina precursor sols with a high solid content for alumina fibers ? high_manual_review_ratio
+- [C] fiber_process / 194_Liu 等 - 2020 - Preparation of continuous alumina fiber with nano grains by the addition of iron sol ? high_manual_review_ratio
+- [C] fiber_process / 195_Liu 等 - 2023 - Effect of the alumina and silica source mixing procedure on the microstructural evolution of alumina ? high_manual_review_ratio
+- [C] fiber_process / 196_Liu 等 - 2023 - Removal of hydroxyl groups and its influence on the microstructures evolution of alumina-mullite fib ? high_manual_review_ratio
+- [C] fiber_process / 199_Ma - 2018 - Preparation and grain-growth of magnesia-alumina spinelyttrium aluminum garnet composite fibers ? high_manual_review_ratio
+- [C] fiber_process / 200_Ma 等 - 2016 - Preparation and crystal activation energy of long yttrium aluminum garnet gel fibers ? high_manual_review_ratio
+- [C] fiber_process / 201_Ma 等 - 2017 - Preparation and grain-growth of chromia-yttrium aluminum garnet composites fibers by sol–gel method ? high_manual_review_ratio
+- [C] fiber_process / 204_Mahapatra 等 - 2011 - Synthesis of ultra-fine α-Al2O3 fibers via electrospinning method ? high_manual_review_ratio
+- [C] fiber_process / 213_Mirjalili 等 - 2020 - The effect of adding different amount of   spinning additives   on preparation of nano alumina fiber ? high_manual_review_ratio
+- [C] fiber_process / 219_Natarajan和Bhargava - 2018 - Influence of spinning parameters on synthesis of alumina fibres by centrifugal spinning ? high_manual_review_ratio
+- [C] fiber_process / 224_Okada 等 - 2000 - Sol–gel synthesis of YAGAl2O3 long fibres from water solvent systems ? high_manual_review_ratio
+- [C] fiber_process / 234_Pfeifer 等 - 2016 - Synthesis of zirconia toughened alumina (ZTA) fibers for high performance materials ? high_manual_review_ratio
+- [C] fiber_process / 241_Preparation of New Polycrystalline Yttrium Aluminium Garnet Fibersby the Sol-Gel Method ? high_manual_review_ratio
+- [C] fiber_process / 243_Preparation_of_yttrium_aluminum_garnet_fibers_by_t ? high_manual_review_ratio
+- [C] fiber_process / 246_QIU 等 - 2016 - Preparation of polycrystalline high temperature refractory mullite fibers via precursor method ? high_manual_review_ratio
+- [C] fiber_process / 249_Refractory oxides containing barium and aluminium ? high_manual_review_ratio
+- [C] fiber_process / 270_Sohrabi-Kashani 等 - 2025 - Cost-effective fabrication of mesoporous alumina nanofibers via electrospinning Enhanced ceramic-to ? high_manual_review_ratio
+- [C] fiber_process / 271_Sol-gel processing of alumina-zirconia fibers ? high_manual_review_ratio
+- [C] fiber_process / 272_Song - 1998 - Preparation of mullite fibers by the sol-gel method ? high_manual_review_ratio
+- [C] fiber_process / 273_Song - 1998 - Preparation of mullite fibers from aluminum isopropoxide–aluminum nitrate–tetraethylorthosilicate so ? high_manual_review_ratio
+- [C] fiber_process / 274_Song 等 - 1999 - Preparation of alumina fibers from aluminum salts by the sol-gel method ? high_manual_review_ratio
+- [C] fiber_process / 279_Tan - 2011 - Mullite fibre preparation by extrusion method using alumina sol as binder ? high_manual_review_ratio
+- [C] fiber_process / 280_Tan - 2011 - Preparation of long alumina fibers by sol-gel method using tartaric acid ? high_manual_review_ratio
+- [C] fiber_process / 281_Tan 等 - 2010 - Mullite fibres preparation by aqueous sol–gel process and activation energy of mullitization ? high_manual_review_ratio
+- [C] fiber_process / 282_Tan 等 - 2011 - Preparation of mullite fibers by sol-gel process and study of their morphology ? high_manual_review_ratio
+- [C] fiber_process / 283_Tan 等 - 2011 - Preparation of mullite fibres by sol–gel processes using aluminium carboxylates and tetraethylorthos ? high_manual_review_ratio
+- [C] fiber_process / 284_TAN 等 - 2012 - Activation energy for mullitization of gel fibres obtained from aluminum isopropoxide ? high_manual_review_ratio
+- [C] fiber_process / 285_TAN 等 - 2013 - Preparation of continuous alumina gel fibres by aqueous sol–gel process ? high_manual_review_ratio
+- [C] fiber_process / 287_Tang和Yu - 2015 - Electrospinning preparation and characterization of alumina nanofibers with high aspect ratio ? high_manual_review_ratio
+- [C] fiber_process / 288_TAN和GUO - 2011 - Preparation of long alumina fibers by sol-gel method using malic acid ? high_manual_review_ratio
+- [C] fiber_process / 289_Teoh 等 - 2007 - Synthesis and characterization of sol–gel alumina nanofibers ? high_manual_review_ratio
+- [C] fiber_process / 290_The effect of adding different amount of spinning additives on ? high_manual_review_ratio
+- [C] fiber_process / 293_Towata 等 - 2001 - Preparation of polycrystalline YAGalumina composite fibers and YAG fiber by sol–gel method ? high_manual_review_ratio
+- [C] fiber_process / 299_Venkatesh 等 - 1999 - Preparation of alumina fibre mats by a sol–gel spinning technique ? high_manual_review_ratio
+- [C] fiber_process / 300_Venkatesh和Ramanan - 2002 - Influence of processing variables on the microstructure of sol–gel spun alumina fibres ? high_manual_review_ratio
+- [C] fiber_process / 304_Wang 等 - 2007 - A novel sol–gel synthetic route to alumina nanofibers via aluminum nitrate and hexamethylenetetramin ? high_manual_review_ratio
+- [C] fiber_process / 309_Xie 等 - 2019 - Preparation, mechanical properties, and diffuse reflectance of YAG continuous fibers and nanofibers ? high_manual_review_ratio
+- [C] fiber_process / 310_Xin 等 - 2024 - Alumina fiber membrane prepared by electrospinning technology for passive daytime radiative cooling ? high_manual_review_ratio
+- [C] fiber_process / 320_Zhang 等 - 2008 - Synthesis and characterization of polyvinyl butyral–al(NO3)3 composite sol used for alumina based fi ? high_manual_review_ratio
+- [C] fiber_process / 321_Zhang 等 - 2011 - Mullite fibers prepared by sol-gel method using aluminum chloride aluminum isopropoxide and tetraeth ? high_manual_review_ratio
+- [C] fiber_process / 323_Zhang 等 - 2013 - Fabrication of electrospun Al2O3 fibers with CaO–SiO2 additive ? high_manual_review_ratio
+- [C] fiber_process / 325_Zhang 等 - 2014 - Synthesis and characterization of sol–gel derived continuous spinning alumina based fibers with sili ? high_manual_review_ratio
+- [C] fiber_process / 326_Zhang 等 - 2015 - Preparation and characterization of continuous alumina based fiber reinforced with orientated mullit ? high_manual_review_ratio
+- [C] fiber_process / 327_Zhang 等 - 2016 - Fabrication of flexible and amphiphobic alumina mats by electrospinning ? high_manual_review_ratio
+- [C] fiber_process / 336_Ádám 等 - 2023 - Sol-gel derived porous aluminum oxide cryogel – fiber composite systems ? high_manual_review_ratio
+- [C] fiber_process / 338_以离子液体为铝源和模板合成氧化铝纳米纤维 ? high_manual_review_ratio
+- [C] fiber_process / 340_High Temperature Ceramic Matrix Composites 8 - 2014 - Zhang - Suppression of  ‐Al2O3 Formation from Alumina GEL Fibers by ? high_manual_review_ratio
+- [C] mechanism / 001_Al_2O_3－SiO_2系透明溶胶的制备及溶胶特性_徐明霞 ? high_manual_review_ratio
+- [C] mechanism / 008_前驱体铝溶胶中的水解和聚合反应的机理研究 ? high_manual_review_ratio
+- [C] mechanism / 017_小角X射线散射技术对铝、硅及聚合物溶胶-凝胶分形结构的探索 ? high_manual_review_ratio
+- [C] mechanism / 023_拟薄水铝石胶溶机理的探究 ? high_manual_review_ratio
+- [C] mechanism / 024_拟薄水铝石胶溶过程参数及胶团结构 ? high_manual_review_ratio
+- [C] mechanism / 025_拟薄水铝石胶溶过程研究 ? high_manual_review_ratio
+- [C] mechanism / 026_拟薄水铝石胶溶过程规律及微结构分析 ? high_manual_review_ratio
+- [D] mechanism / 047_溶胶—凝胶法制备超滤Al_2O_3膜的研究I勃姆石溶胶的制备_周健儿 ? no_successful_extraction_with_candidates
+- [C] mechanism / 053_纤维用铝溶胶前驱体的制备及表征 ? high_manual_review_ratio
+- [C] mechanism / 066_铝离子水解及铝低聚物形成的密度泛函理论研究 ? high_manual_review_ratio
+- [C] mechanism / 070_2002-equilibrium-and-structural-studies-of-silicon(iv)-and-aluminum(iii)-in-aqueous-solution-21-a-potentiometric-and ? high_manual_review_ratio
+- [C] mechanism / 071_Ab initio molecular dynamics simulations of aluminum ion solvation in water clusters ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 073_Abeysinghe 等 - 2012 - Crystallization of keggin-type polyaluminum species by supramolecular interactions with disulfonate ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 074_Abeysinghe 等 - 2013 - Surface modification of Al30 keggin-type polyaluminum molecular clusters ? high_manual_review_ratio
+- [D] mechanism / 075_Achilli 等 - 1991 - Aluminium speciation in aqueous solutions ? no_successful_extraction_with_candidates
+- [C] mechanism / 076_Acosta 等 - 1994 - Preparation of alumina gels by a non-hydrolytic sol-gel processing method ? high_manual_review_ratio
+- [C] mechanism / 078_Akitt 等 - 1989 - Multinuclear magnetic resonance studies of the hydrolysis of aluminium(III). Part 10. Proton, carbon ? high_manual_review_ratio
+- [C] mechanism / 080_Alves 等 - 2005 - The effects of pH on the preparation of alumina by sol-gel process ? high_manual_review_ratio
+- [C] mechanism / 082_Amini 等 - 2003 - Sol–gel processing of β-eucryptite An nuclear magnetic resonance investigation in sol stage ? high_manual_review_ratio
+- [C] mechanism / 083_Amini和Mirzaee - 2005 - Effect of solution chemistry on preparation of boehmite by hydrothermal assisted sol-gel processing ? high_manual_review_ratio
+- [C] mechanism / 087_Berger 等 - 2018 - 27Al NMR study of the pH dependent hydrolysis products of Al2(SO4)3 in different physiological media ? high_manual_review_ratio
+- [C] mechanism / 088_Bi - 2004 - Studies on the mechanism of hydrolysis and polymerization of aluminum salts in aqueous solution Cor ? high_manual_review_ratio
+- [C] mechanism / 089_Bokhimi 等 - 2005 - Synthesis and characterization of nanocapsules with shells made up of Al13 tridecamers ? high_manual_review_ratio
+- [C] mechanism / 090_Bokhimi 等 - 2006 - Sulfate ions and boehmite crystallization in a sol made with aluminum tri-sec-butoxide and 2-propano ? high_manual_review_ratio
+- [C] mechanism / 091_Bonhomme-Coury 等 - 1994 - Investigation of the sol-gel chemistry of ethylacetoacetate modified aluminum sec-butoxide ? high_manual_review_ratio
+- [C] mechanism / 093_Bradley和Hanna - 1993 - Aluminium-27 MAS NMR investigations of sodium aluminates formed from high pH solutions Evidence of ? high_failed_record_rate
+- [C] mechanism / 094_Bradley和Hanna - 1994 - 27Al and 23Na MAS NMR and powder X-ray diffraction studies of sodium aluminate speciation and the me ? high_manual_review_ratio
+- [C] mechanism / 097_Casey 等 - 2000 - Rates and mechanisms of oxygen exchanges between sites in the AlO4Al12(OH)24(H2O)127+(aq) complex an ? high_manual_review_ratio
+- [C] mechanism / 105_Chen 等 - 2007 - Effect of thermal treatment on the formation and transformation of keggin Al13 and Al30 species in h ? high_manual_review_ratio
+- [C] mechanism / 113_Control preparation of aluminium chromium mixed oxides by sol-gel process ? high_manual_review_ratio
+- [C] mechanism / 114_Coster和Fripiat - 1993 - Memory effects in gel-solid transformations Coordinately unsaturated aluminum sites in nanosized al ? high_manual_review_ratio
+- [C] mechanism / 116_Deschaume 等 - 2006 - Interactions of bovine serum albumin with aluminum polyoxocations and aluminum hydroxide ? high_manual_review_ratio
+- [C] mechanism / 117_Deschaume 等 - 2017 - Impact of amino acids on the isomerization of the aluminum tridecamer Al13 ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 118_Deshpande和Eckert - 2009 - Sol-gel preparation of mesoporous sodium aluminosilicate glasses Mechanistic and structural investi ? high_manual_review_ratio
+- [C] mechanism / 119_Dressler 等 - 2007 - Aluminum speciation and thermal evolution of aluminas resulting from modified yoldas sols ? high_manual_review_ratio
+- [C] mechanism / 121_Drljaca 等 - 1999 - Selective isolation of keggin ions using self-assembled superanion capsules † ? high_manual_review_ratio
+- [C] mechanism / 123_Eliseev 等 - 1999 - The effect of copolymerization of tetraethylorthosilicate and aluminum hydroxonitrates ? high_manual_review_ratio
+- [C] mechanism / 124_ESI-MS_Study_of_Speciation_in_Hydrolyzed_Aluminum_ ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 126_Feng 等 - 2007 - Speciation of hydroxyl-al polymers formed through simultaneous hydrolysis of aluminum salts and urea ? high_manual_review_ratio
+- [C] mechanism / 127_Feng 等 - 2011 - Effect of aging condition on species transformation in polymeric al salt coagulants ? high_manual_review_ratio
+- [C] mechanism / 129_Fernandez 等 - 2008 - Theoretical study of oligomeric alumatranes present in the chemistry of materials from micro to meso ? high_manual_review_ratio
+- [C] mechanism / 131_Fournier 等 - 2008 - Potentiometric determination of the ‘formal’ hydrolysis ratio of aluminium species in aqueous soluti ? high_manual_review_ratio
+- [C] mechanism / 132_Fournier 等 - 2009 - A multi-technique study of the effect of aqueous aluminium speciation on hydrolytic gelation of alum ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 133_Fu 等 - 1991 - Aging processes of alumina sol-gels Characterization of new aluminum polyoxycations by aluminum-27 ? high_manual_review_ratio
+- [C] mechanism / 134_FUJITA 等 - 1993 - Chemical species-in polyaluminum hydroxide solution ? high_manual_review_ratio
+- [C] mechanism / 137_Gerson 等 - 1996 - An investigation of the mechanism of gibbsite nucleation using molecular modelling ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 138_Gil 等 - 1995 - Preparation and characterization of microporosity and acidity of silica-alumina pillared clays ? high_manual_review_ratio
+- [C] mechanism / 143_Goudarzi 等 - 2009 - Study of the ethanolic tributylmethylammonium aluminosilicate solutions using 27Al NMR ? high_manual_review_ratio
+- [C] mechanism / 144_Graham 等 - 2020 - Intermediate species in the crystallization of sodium aluminate hydroxy hydrates ? high_manual_review_ratio
+- [C] mechanism / 145_Guo 等 - 2009 - High-concentration ɛ-Al13 nanoclusters sol prepared by chemical synthesis and membrane distillation ? high_manual_review_ratio
+- [C] mechanism / 146_Guo 等 - 2023 - Ab initio molecular dynamics study of the proton transfer in hydroxyl ion-induced hydrolysis of alum ? high_manual_review_ratio
+- [C] mechanism / 147_Harrison和Luo - 1994 - Studies of mixed silicaalumina and silicaboric oxide materials Code AP11 ? high_manual_review_ratio
+- [C] mechanism / 149_Hayden和Rubin - 1986 - Determination of monomeric and polynuclear aluminum(III) species and hydrolysis constants ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 150_Hochepied和Nortier - 2002 - Influence of precipitation conditions (pH and temperature) on the morphology and porosity of boehmit ? high_manual_review_ratio
+- [C] mechanism / 151_Houston 等 - 2008 - Association of dissolved aluminum with silica Connecting molecular structure to surface reactivity ? high_manual_review_ratio
+- [C] mechanism / 155_Janosovits 等 - 1997 - Structural characterization of intermediate species during synthesis of Al2O3-aerogels ? high_manual_review_ratio
+- [C] mechanism / 156_Jaymes 等 - 1995 - Synthesis of a mullite precursor from aluminum nitrate and tetraethoxysilane via aqueous homogeneous ? high_manual_review_ratio
+- [C] mechanism / 159_Jolivet 等 - 2011 - Basic concepts of the crystallization from aqueous solutions The example of aluminum oxy(hydroxi)de ? high_manual_review_ratio
+- [C] mechanism / 160_Kabelitz 等 - 2019 - Early stage in situ detection of polynuclear aluminum phases in aqueous solution ? high_manual_review_ratio
+- [C] mechanism / 161_Kalashnikov 等 - 2007 - In SituUltrasonic monitoring of aluminum ion hydrolysis in aqueous solutions Instrumentation, techn ? high_manual_review_ratio
+- [C] mechanism / 162_Kambe 等 - 2017 - Solution-phase synthesis of Al13 − using a dendrimer template ? high_manual_review_ratio
+- [C] mechanism / 166_Kerven 等 - 1995 - Detrimental sulfate effects on formation of al‐13 tridecameric polycation in synthetic soil solution ? high_manual_review_ratio
+- [C] mechanism / 168_Kloprogge 等 - 1992 - A 27Al nuclear magnetic resonance study on the optimalization of the development of the Al13 polymer ? high_manual_review_ratio
+- [C] mechanism / 169_Kloprogge 等 - 1992 - Temperature influence on the Al13 complex in partially neutralized aluminum solutions A 27Al nuclea ? high_manual_review_ratio
+- [C] mechanism / 170_Kloprogge 等 - 2000 - Near-infrared spectroscopic study of [AlO4Al12(OH)23(H2O)12]7+-O-si(OH)3 nitrate crystals formed by ? high_manual_review_ratio
+- [C] mechanism / 171_Krishnamurti 等 - 1999 - Role of tartaric acid in the inhibition of the formation of Al13 tridecamer using sulfate precipitat ? high_manual_review_ratio
+- [C] mechanism / 172_Krishnamurti 等 - 2004 - Effects of pyrogallol on Al13 tridecamer formation and humification ? high_manual_review_ratio
+- [C] mechanism / 175_Kumru和Bale - 1994 - Aggregation in aluminium hydroxide solutions investigated by small-angle X-ray scattering ? high_manual_review_ratio
+- [C] mechanism / 176_Kurajica 等 - 2019 - Multinuclear magnetic resonance study on aluminium sec-butoxide chelated with ethyl acetoacetate in ? high_manual_review_ratio
+- [C] mechanism / 177_Kureti和Weisweiler - 2002 - A novel sol–gel method for the synthesis of γ-aluminium oxide Development of the sol–gel transforma ? high_manual_review_ratio
+- [C] mechanism / 178_König 等 - 2009 - Local structural changes in aluminum isopropoxide fluoride xerogels and solids as a consequence of t ? high_manual_review_ratio
+- [C] mechanism / 179_König 等 - 2010 - The fluorolytic sol–gel reaction of aluminium alkoxides A multinuclear MAS NMR study of structural ? high_manual_review_ratio
+- [C] mechanism / 180_Lalik 等 - 1993 - Transformations of the aluminum (Al13) polyoxycation intercalated in the layered lattice of molybden ? high_manual_review_ratio
+- [C] mechanism / 181_Lanzani 等 - 2012 - Study of the stability of aluminium trimeric clusters in aqueous solutions ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 182_Lartiges 等 - 1997 - Flocculation of colloidal silica with hydrolyzed aluminum An 27Al solid state NMR investigation ? high_manual_review_ratio
+- [C] mechanism / 183_Letterman和Asolekar - 1990 - Surface ionization of polynuclear species in al(III) hydrolysis—II. A conditional equilibrium model ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 186_Li 等 - 2019 - DFT studies on the al-speciation and its structure in aqueous aluminum sol formed by aluminum formoa ? high_manual_review_ratio;high_unknown_ratio
+- [C] mechanism / 187_Li 等 - 2019 - Influence of H3O+ on the structure formation of oligomers in aluminium sols prepared from basic alum ? high_manual_review_ratio
+- [C] mechanism / 188_Li 等 - 2020 - A density functional theory study on the structure formation of al(III) carboxylate complexes in aqu ? high_manual_review_ratio
+- [C] mechanism / 190_Lima 等 - 2005 - Structural evolution of phosphated alumina during sol−gel synthesis ? high_manual_review_ratio
+- [C] mechanism / 192_Liu 等 - 2003 - Characteristics of nanosized polyaluminum chloride coagulant prepared by electrolysis process ? high_manual_review_ratio
+- [C] mechanism / 197_Liu 等 - 2024 - Elucidating the hydrolysis and polymerization reactions of Al3+-solvated molecules by reactive molec ? high_manual_review_ratio
+- [C] mechanism / 198_Liu 等 - 2025 - Direct observation of key aluminum hydroxide prenucleation oligomers for gibbsite nucleation and cry ? high_manual_review_ratio
+- [C] mechanism / 203_Macêdo 等 - 2004 - Sol-gel synthesis of transparent alumina gel and pure gamma alumina by urea hydrolysis of aluminum n ? high_manual_review_ratio
+- [C] mechanism / 207_Masion 等 - 1994 - Chemistry and structure of al(OH)organic precipitates. A small-angle X-ray scattering study. 3. Dep ? high_manual_review_ratio
+- [C] mechanism / 209_Mathieu 等 - 2007 - Control of the morphology and particle size of boehmite nanoparticles synthesized under hydrothermal ? high_manual_review_ratio
+- [C] mechanism / 217_Morgado 等 - 1997 - Formation of peptizable boehmites by hydrolysis of aluminum nitrate in aqueous solution ? high_manual_review_ratio
+- [C] mechanism / 223_Occelli 等 - 2000 - Physicochemical characterization of a texas montmorillonite pillared with polyoxocations of aluminum ? high_manual_review_ratio
+- [C] mechanism / 225_Ouadah 等 - 2017 - Analysis and characterization of aluminum chlorohydrate oligocations by capillary electrophoresis ? high_manual_review_ratio
+- [C] mechanism / 229_Pascual-Cosp 等 - 2009 - Synthesis and characterization of a new aluminium-based compound ? high_manual_review_ratio
+- [C] mechanism / 236_Phillips 等 - 2016 - Characterization of al 30 in commercial poly-aluminum chlorohydrate by solid-state 27 al NMR spectro ? high_manual_review_ratio
+- [C] mechanism / 247_Quartararo 等 - 1999 - Sol–gel synthesis of alumina modified by phosphorus A solid state NMR characterization study ? high_manual_review_ratio
+- [C] mechanism / 256_Sarpola 等 - 2007 - Identification of hydrolysis products of AlCl3·6H2O in the presence of sulfate by electrospray ioniz ? high_manual_review_ratio
+- [C] mechanism / 258_Shafran和Perry - 2005 - A systematic investigation of aluminium ion speciation at high temperature. Part. 1. Solution studie ? high_manual_review_ratio
+- [C] mechanism / 260_Shang 等 - 2012 - Facile strategy for synthesis of mesoporous crystalline γ-alumina by partially hydrolyzing aluminum ? high_manual_review_ratio
+- [C] mechanism / 278_Sun 等 - 2013 - Effects of structure of ionic liquids and phosphoric acid on structure of aluminum isopropoxide ? high_manual_review_ratio
+- [C] mechanism / 306_Wang和Muhammed - 1999 - Novel synthesis of Al13-cluster based alumina materials ? high_manual_review_ratio
+- [C] mechanism / 313_Yao 等 - 2001 - Preparation of novel uniform mesoporous alumina catalysts by the sol–gel method ? high_manual_review_ratio
+- [C] mechanism / 316_Yucelen 等 - 2011 - Formation of single-walled aluminosilicate nanotubes from molecular precursors and curved nanoscale ? high_manual_review_ratio
+- [C] mechanism / 319_Zhang 等 - 2003 - Novel sol−gel synthesis of sodium aluminophosphate glass based on aluminum lactate ? high_manual_review_ratio
+- [C] mechanism / 324_Zhang 等 - 2014 - Determination time of the mononuclear aluminum species in the hydroxyl polyaluminum solution by ferr ? high_manual_review_ratio
+- [C] mechanism / 329_Zhang和Eckert - 2004 - Multinuclear NMR studies on the sol–gel preparation of sodium aluminophosphate glasses ? high_manual_review_ratio
+- [C] mechanism / 330_Zhang和Eckert - 2004 - Sol–gel synthesis of Al2O3–P2O5glasses Mechanistic studies by solution and solid state NMR ? high_manual_review_ratio
+- [C] mechanism / 332_Zhao 等 - 2025 - Dual pathways and transient intermediates reveal hydrolysis-driven assembly of aluminum keggin clust ? high_manual_review_ratio
+- [C] rheology / 007_两种钛源对钛酸铝溶胶可纺性影响的对比研究 ? high_manual_review_ratio
+- [C] rheology / 018_干法纺丝中羧酸铝溶胶的流变行为及结构演变模拟 ? high_manual_review_ratio
+- [D] rheology / 022_拟薄水铝石溶胶性能的影响因素研究 ? no_successful_extraction_with_candidates
+- [D] rheology / 043_浅谈氧化铝溶胶制备中溶胶黏度的变化 ? no_successful_extraction_with_candidates
+- [C] rheology / 065_铝基水溶胶体的制备和特性研究 ? high_manual_review_ratio
+- [C] rheology / 120_Dressler 等 - 2008 - Influence of polyvinylpyrrolidone (PVP) on alumina sols prepared by a modified yoldas procedure ? high_manual_review_ratio
+- [D] rheology / 140_González 等 - 1992 - Rheology of alumina sols ? no_successful_extraction_with_candidates
+- [C] rheology / 148_Hasmaliza 等 - Inﬂuence of alkoxide molar ratio on rheological study of alumina sol for fiber preparation ? high_manual_review_ratio
+- [C] rheology / 152_Influence of Alkoxide Molar Ratio on Rheological Study ? high_manual_review_ratio
+- [C] rheology / 154_Influence of the synthesis conditions on some properties of boehmite hydrosols ? high_manual_review_ratio;high_unknown_ratio
+- [C] rheology / 334_Zhao 等 - 2026 - Synthesis of the biphasic mullite precursor sols with low viscosity and high-solid-content ? high_manual_review_ratio

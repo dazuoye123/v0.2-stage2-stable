@@ -1,0 +1,46 @@
+# Stage 1 Run Groups
+
+Priority order: fiber_process > mechanism > rheology > applications
+
+## fiber_process
+- pdf_count: 130
+- markdown_exists_count: 130
+- markdown_missing_count: 0
+- run_stage1_pdf_to_markdown: none
+- inspect_markdown: none
+- run_stage3_next: fiber_process__002_pva作纺丝助剂制备莫来石_氧化铝长纤维, fiber_process__004_sol_gel法制备新型多晶钇_铝石榴石纤维, fiber_process__005_α_a12o3连续纤维的制备与表征, fiber_process__009_含硅氧化物连续纤维的制备及其性质的研究, fiber_process__010_含硼氧化铝基陶瓷连续纤维的制备及表征, fiber_process__011_固相反应合成mgal_2o_4多孔纤维的研究_王昕悦, fiber_process__013_多孔莫来石纤维基隔热陶瓷的制备与性能研究, fiber_process__014_多晶型氧化铝连续纤维的研制及性能, fiber_process__015_多晶莫来石纤维的制备研究, fiber_process__016_多晶莫来石纤维纺丝原液制备与可纺性研究
+
+## mechanism
+- pdf_count: 163
+- markdown_exists_count: 163
+- markdown_missing_count: 0
+- run_stage1_pdf_to_markdown: none
+- inspect_markdown: none
+- run_stage3_next: mechanism__001_al_2o_3_sio_2系透明溶胶的制备及溶胶特性_徐明霞, mechanism__008_前驱体铝溶胶中的水解和聚合反应的机理研究, mechanism__017_小角x射线散射技术对铝_硅及聚合物溶胶_凝胶分形结构的探索, mechanism__020_拟薄水铝石中水的存在形式及对其溶胶性能的影响, mechanism__021_拟薄水铝石溶胶_凝胶过程的影响因素研究, mechanism__023_拟薄水铝石胶溶机理的探究, mechanism__024_拟薄水铝石胶溶过程参数及胶团结构, mechanism__025_拟薄水铝石胶溶过程研究, mechanism__026_拟薄水铝石胶溶过程规律及微结构分析, mechanism__027_拟薄水铝石酸化胶溶过程中溶胶粒径的变化
+
+## rheology
+- pdf_count: 14
+- markdown_exists_count: 14
+- markdown_missing_count: 0
+- run_stage1_pdf_to_markdown: none
+- inspect_markdown: none
+- run_stage3_next: rheology__007_两种钛源对钛酸铝溶胶可纺性影响的对比研究, rheology__018_干法纺丝中羧酸铝溶胶的流变行为及结构演变模拟, rheology__022_拟薄水铝石溶胶性能的影响因素研究, rheology__043_浅谈氧化铝溶胶制备中溶胶黏度的变化, rheology__063_钇铝石榴石纤维纺丝原液的制备及结构与流变性研究, rheology__065_铝基水溶胶体的制备和特性研究, rheology__120_dressler_等_2008_influence_of_polyvinylpyrrolidone_pvp_on_alumina_sols_prepared_by_a_modified_yoldas_procedure, rheology__140_gonzález_等_1992_rheology_of_alumina_sols, rheology__148_hasmaliza_等_inﬂuence_of_alkoxide_molar_ratio_on_rheological_study_of_alumina_sol_for_fiber_preparation, rheology__152_influence_of_alkoxide_molar_ratio_on_rheological_study
+
+## applications
+- pdf_count: 36
+- markdown_exists_count: 36
+- markdown_missing_count: 0
+- run_stage1_pdf_to_markdown: none
+- inspect_markdown: none
+- run_stage3_next: applications__003_sio_2_al_2o_3复合中空纤维膜的制备与透氢性能研究_白丽, applications__006_γ_al_2o_3_a_al_2o_3中空纤维复合膜的制备与性能研究_张许, applications__012_基于拟薄水铝石氧化铝气凝胶制备工艺研究, applications__028_整装fiber_γ_al_2o_3的涂层制备及其负载ni基催化剂甲烷干气重整研究_盛雯倩, applications__040_氧化铝纤维负载氧化铈_氧化铜的制备及其光催化性能研究, applications__052_纤维增强氧化铝基气凝胶复合材料的制备及性能研究, applications__077_aghayan_等_2014_functionalization_of_gamma_alumina_nanofibers_by_alpha_alumina_via_solution_combustion_synthesis, applications__084_bahlawane_2001_novel_sol_gel_process_depositing_α_al2o3_for_the_improvement_of_graphite_oxidation_resistance, applications__085_baumann_等_2004_synthesis_of_high_surface_area_alumina_aerogels_without_the_use_of_alkoxide_precursors, applications__086_bera_等_2021_fabrication_of_sol_gel_derived_cladding_for_sapphire_fibers_and_their_performance_evaluation_under_h
+
+## uncategorized
+- pdf_count: 0
+- markdown_exists_count: 0
+- markdown_missing_count: 0
+- run_stage1_pdf_to_markdown: none
+- inspect_markdown: none
+- run_stage3_next: none
+
+## Recommended Stage1 Smoke 10
+- none

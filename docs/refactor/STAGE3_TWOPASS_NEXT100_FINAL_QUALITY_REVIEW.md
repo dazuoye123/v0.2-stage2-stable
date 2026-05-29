@@ -1,0 +1,24 @@
+# Stage 3 Two-pass Next100 Final Quality Review
+
+- tested_papers_count = 100
+- A = 60
+- B = 29
+- C = 11
+- D = 0
+- manual_hold = 3
+- usable_set_A = 60
+- usable_set_B = 29
+- usable_set_C = 8
+- usable_set_D = 0
+- raw_name_key_value_bug_count = 0
+- list_value_validation_error_count = 0
+- evidence_zero_with_scientific_figures_count = 0
+- cleaned_body_image_residue_count = 0
+- average_canonical_key_errors_count = 0.0
+- average_rejected_parameter_records_count = 0.0
+- process_steps_warning_count = 34
+- average_other_action_ratio = 0.3117
+- average_missing_evidence_text_ratio = 0.03
+- process_steps_zero_count = 2
+- severe_process_steps_warning_count = 3
+- pass_quality_gate = True
