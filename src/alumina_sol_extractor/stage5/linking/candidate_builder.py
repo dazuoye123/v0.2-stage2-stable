@@ -585,13 +585,13 @@ def _candidate(
         source_type=source_type,
         source_id=str(source_id),
         source_text=source_text,
-        source_value=source_value,
+        source_value=_sanitize_link_value(source_value),
         source_unit=source_unit,
         source_figure_id=source_figure_id,
         target_type=target_type,
         target_id=str(target_id),
         target_text=target_text,
-        target_value=target_value,
+        target_value=_sanitize_link_value(target_value),
         target_unit=target_unit,
         target_figure_id=target_figure_id,
         candidate_reason=candidate_reason,
@@ -615,6 +615,39 @@ def _join_text(value: Any) -> str | None:
         return " ".join(str(item) for item in value if item)
     if value is None:
         return None
+    text = str(value).strip()
+    return text or None
+
+
+def _sanitize_link_value(value: Any) -> float | int | str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, dict):
+        if len(value) == 1:
+            only_value = next(iter(value.values()))
+            if only_value is None:
+                return None
+            if isinstance(only_value, bool):
+                return str(only_value)
+            if isinstance(only_value, (int, float)):
+                return only_value
+            if isinstance(only_value, str):
+                text = only_value.strip()
+                return text or None
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            return None
+        if len(value) == 1:
+            return _sanitize_link_value(value[0])
+        return json.dumps(list(value), ensure_ascii=False, separators=(",", ":"))
     text = str(value).strip()
     return text or None
 
