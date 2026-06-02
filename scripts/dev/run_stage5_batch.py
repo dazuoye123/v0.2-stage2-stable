@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--paper-filter")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument("--only-incomplete", action="store_true")
     parser.add_argument("--stage5-only", action="store_true")
     parser.add_argument("--with-linking", action="store_true")
     parser.add_argument("--no-linking", action="store_true")
@@ -93,7 +94,6 @@ def discover_papers(
     *,
     categories: list[str],
     paper_filter: str | None = None,
-    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for category in categories:
@@ -112,7 +112,7 @@ def discover_papers(
                 }
             )
     rows.sort(key=lambda item: (item["category"], item["paper_id"]))
-    return rows[:limit] if limit else rows
+    return rows
 
 
 def discover_stage_dirs(paper_dir: Path) -> tuple[Path | None, Path | None]:
@@ -153,6 +153,42 @@ def has_complete_stage5_outputs(paper_dir: Path, *, with_linking: bool) -> bool:
             ]
         )
     return all(path.exists() for path in required)
+
+
+def missing_stage5_outputs(paper_dir: Path, *, with_linking: bool) -> list[str]:
+    dataset_dir = paper_dir / "final_dataset"
+    required = [
+        "final_dataset/stage5_summary.json",
+        "final_dataset/paper.json",
+        "final_dataset/parameters.jsonl",
+        "final_dataset/process_steps.jsonl",
+        "final_dataset/evidence.jsonl",
+        "final_dataset/spectra.jsonl",
+        "final_dataset/quality_summary.json",
+        "final_dataset/fusion_report.md",
+    ]
+    if with_linking:
+        required.extend(
+            [
+                "final_dataset/linking/links.jsonl",
+                "final_dataset/linking/linking_summary.json",
+                "final_dataset/link_aware_exports/final_parameters_linked.csv",
+                "final_dataset/link_aware_exports/sample_parameter_matrix.csv",
+                "final_dataset/link_aware_exports/process_steps_table.csv",
+                "final_dataset/link_aware_exports/evidence_parameter_links.csv",
+                "final_dataset/link_aware_exports/spectra_parameter_links.csv",
+                "final_dataset/link_aware_exports/link_aware_export_summary.json",
+            ]
+        )
+    return [rel for rel in required if not (paper_dir / rel).exists()]
+
+
+def filter_incomplete_papers(
+    rows: list[dict[str, Any]],
+    *,
+    with_linking: bool,
+) -> list[dict[str, Any]]:
+    return [row for row in rows if missing_stage5_outputs(row["paper_dir"], with_linking=with_linking)]
 
 
 def summarize_existing_outputs(
@@ -753,8 +789,13 @@ def run_stage5_batch(
     dry_run: bool,
     continue_on_error: bool,
     workers: int,
+    only_incomplete: bool = False,
 ) -> dict[str, Any]:
-    discovered = discover_papers(outputs_dir, categories=categories, paper_filter=paper_filter, limit=limit)
+    discovered = discover_papers(outputs_dir, categories=categories, paper_filter=paper_filter)
+    if only_incomplete:
+        discovered = filter_incomplete_papers(discovered, with_linking=with_linking)
+    if limit:
+        discovered = discovered[:limit]
     report_dir.mkdir(parents=True, exist_ok=True)
 
     def _job(row: dict[str, Any]) -> dict[str, Any]:
@@ -876,6 +917,7 @@ def main() -> int:
         paper_filter=args.paper_filter,
         force=args.force,
         skip_existing=True if not args.force else False or args.skip_existing,
+        only_incomplete=args.only_incomplete,
         with_linking=with_linking,
         dry_run=args.dry_run,
         continue_on_error=args.continue_on_error,

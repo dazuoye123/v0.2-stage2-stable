@@ -178,3 +178,143 @@ def test_stage5_batch_runner_skip_existing_reuses_complete_outputs(tmp_path: Pat
     assert row["planned_action"] == "skip_existing"
     assert row["attempted_stage5"] == "False"
     assert result["summary"]["total_success"] == 1
+
+
+def test_only_incomplete_excludes_complete_final_dataset(tmp_path: Path) -> None:
+    outputs_dir = tmp_path / "outputs"
+    paper_dir = outputs_dir / "fiber_process" / "paper-complete"
+    _build_success_paper(paper_dir)
+    report_dir = tmp_path / "reports"
+
+    MODULE.run_stage5_batch(
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        categories=["fiber_process"],
+        limit=None,
+        paper_filter=None,
+        force=False,
+        skip_existing=False,
+        only_incomplete=False,
+        with_linking=True,
+        dry_run=False,
+        continue_on_error=False,
+        workers=1,
+    )
+
+    result = MODULE.run_stage5_batch(
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        categories=["fiber_process"],
+        limit=None,
+        paper_filter=None,
+        force=False,
+        skip_existing=True,
+        only_incomplete=True,
+        with_linking=True,
+        dry_run=True,
+        continue_on_error=False,
+        workers=1,
+    )
+
+    assert result["summary"]["total_papers_scanned"] == 0
+
+
+def test_only_incomplete_keeps_paper_missing_linking_outputs(tmp_path: Path) -> None:
+    outputs_dir = tmp_path / "outputs"
+    paper_dir = outputs_dir / "fiber_process" / "paper-incomplete"
+    _build_success_paper(paper_dir)
+    report_dir = tmp_path / "reports"
+
+    MODULE.run_stage5_batch(
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        categories=["fiber_process"],
+        limit=None,
+        paper_filter=None,
+        force=False,
+        skip_existing=False,
+        only_incomplete=False,
+        with_linking=True,
+        dry_run=False,
+        continue_on_error=False,
+        workers=1,
+    )
+
+    (paper_dir / "final_dataset" / "link_aware_exports" / "spectra_parameter_links.csv").unlink()
+
+    result = MODULE.run_stage5_batch(
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        categories=["fiber_process"],
+        limit=None,
+        paper_filter=None,
+        force=False,
+        skip_existing=True,
+        only_incomplete=True,
+        with_linking=True,
+        dry_run=True,
+        continue_on_error=False,
+        workers=1,
+    )
+
+    assert result["summary"]["total_papers_scanned"] == 1
+    row = list(csv.DictReader((report_dir / "stage5_batch_paper_summary.csv").open("r", encoding="utf-8-sig", newline="")))[0]
+    assert row["paper_id"] == "paper-incomplete"
+
+
+def test_only_incomplete_applies_limit_after_filter(tmp_path: Path) -> None:
+    outputs_dir = tmp_path / "outputs"
+    report_dir = tmp_path / "reports"
+
+    complete_dir = outputs_dir / "fiber_process" / "paper-complete"
+    _build_success_paper(complete_dir)
+    MODULE.run_stage5_batch(
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        categories=["fiber_process"],
+        limit=None,
+        paper_filter=None,
+        force=False,
+        skip_existing=False,
+        only_incomplete=False,
+        with_linking=True,
+        dry_run=False,
+        continue_on_error=False,
+        workers=1,
+    )
+
+    for paper_id in ["paper-a", "paper-b", "paper-c"]:
+        paper_dir = outputs_dir / "fiber_process" / paper_id
+        _build_success_paper(paper_dir)
+        MODULE.run_stage5_batch(
+            outputs_dir=outputs_dir,
+            report_dir=report_dir,
+            categories=["fiber_process"],
+            limit=None,
+            paper_filter=paper_id,
+            force=False,
+            skip_existing=False,
+            only_incomplete=False,
+            with_linking=True,
+            dry_run=False,
+            continue_on_error=False,
+            workers=1,
+        )
+        (paper_dir / "final_dataset" / "link_aware_exports" / "spectra_parameter_links.csv").unlink()
+
+    result = MODULE.run_stage5_batch(
+        outputs_dir=outputs_dir,
+        report_dir=report_dir,
+        categories=["fiber_process"],
+        limit=2,
+        paper_filter=None,
+        force=False,
+        skip_existing=True,
+        only_incomplete=True,
+        with_linking=True,
+        dry_run=True,
+        continue_on_error=False,
+        workers=1,
+    )
+
+    assert result["summary"]["total_papers_scanned"] == 2
