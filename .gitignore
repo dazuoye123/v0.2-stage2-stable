@@ -53,8 +53,18 @@ data/batch_validation_reports/
 data/gold_outputs/
 data/analysis_outputs_stage3/
 data/analysis_outputs_stage3_refined/
+data/analysis_outputs_stage3_publication/
+data/analysis_outputs_stage3_v2/
+data/analysis_outputs_stage4a_audit/
+data/analysis_outputs_stage5_batch/
 **/figures_all/
 **/figures_for_vision/
+presentation_outputs/
+tmp_figure_atlas_audit_check/
+tmp_figure_atlas_diag/
+tmp_*/
+archive/data/
+archive/docs/refactor/
 
 *.log
 *.tmp

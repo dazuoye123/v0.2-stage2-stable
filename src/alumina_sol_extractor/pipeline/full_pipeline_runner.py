@@ -56,6 +56,8 @@ from .resume_status import detect_stage_status, discover_resume_candidates
 
 
 STAGE_ORDER = ("stage2", "stage3", "stage4a", "stage5", "stage55")
+OFFICIAL_STAGE_ORDER = ("stage2", "stage3", "stage4", "stage5", "linking")
+LEGACY_STAGE_NAME_MAP = {"stage4a": "stage4", "stage55": "linking", "stage6c": "full_pipeline"}
 STAGE4_PRIORITY_TYPES = (
     "ftir_spectrum",
     "ir_spectrum",
@@ -154,6 +156,11 @@ def build_full_resume_plan(
     return actions
 
 
+def build_full_pipeline_plan(*args: Any, **kwargs: Any) -> dict[str, str]:
+    """Preferred public name for the full-pipeline planner."""
+    return build_full_resume_plan(*args, **kwargs)
+
+
 def run_stage6c_full_resume(
     *,
     project_root: Path | str,
@@ -184,6 +191,10 @@ def run_stage6c_full_resume(
     stage4_figure_ids: list[str] | None = None,
     output_dir: Path | str | None = None,
 ) -> dict[str, Any]:
+    """Legacy compatibility wrapper.
+
+    Prefer :func:`run_full_pipeline_orchestrated` for new code.
+    """
     project_root = Path(project_root)
     markdown_dir = Path(markdown_dir)
     outputs_dir = Path(outputs_dir)
@@ -310,6 +321,15 @@ def run_stage6c_full_resume(
         "full_resume_summary": summary,
         "per_paper_summary": per_paper_summary,
     }
+
+
+def run_full_pipeline_orchestrated(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Preferred public orchestrator entrypoint.
+
+    Internally delegates to the legacy-named implementation so historical
+    callers remain compatible.
+    """
+    return run_stage6c_full_resume(*args, **kwargs)
 
 
 def build_full_resume_summary(per_paper_summary: list[dict[str, Any]]) -> dict[str, Any]:

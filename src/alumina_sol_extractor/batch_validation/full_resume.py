@@ -40,6 +40,7 @@ detect_stage_status = _impl.detect_stage_status
 discover_resume_candidates = _impl.discover_resume_candidates
 
 STAGE_ORDER = _impl.STAGE_ORDER
+OFFICIAL_STAGE_ORDER = getattr(_impl, "OFFICIAL_STAGE_ORDER", ("stage2", "stage3", "stage4", "stage5", "linking"))
 STAGE4_PRIORITY_TYPES = _impl.STAGE4_PRIORITY_TYPES
 DEFAULT_STAGE3_SECTION_KEYWORDS = _impl.DEFAULT_STAGE3_SECTION_KEYWORDS
 
@@ -132,6 +133,10 @@ def run_stage6c_full_resume(
     stage4a_figure_types: list[str] | tuple[str, ...] | set[str] | None = None,
     output_dir: Path | str | None = None,
 ) -> dict[str, Any]:
+    """Legacy compatibility wrapper.
+
+    Prefer :func:`run_full_pipeline_orchestrated` for new code.
+    """
     _sync_impl()
     return _impl.run_stage6c_full_resume(
         project_root=project_root,
@@ -157,6 +162,11 @@ def run_stage6c_full_resume(
         stage4a_figure_types=stage4a_figure_types,
         output_dir=output_dir,
     )
+
+
+def run_full_pipeline_orchestrated(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Preferred public name for the full-pipeline orchestrator wrapper."""
+    return run_stage6c_full_resume(*args, **kwargs)
 
 
 def _execute_full_resume_plan(
@@ -280,10 +290,12 @@ _write_json = _impl._write_json
 
 __all__ = [
     "STAGE_ORDER",
+    "OFFICIAL_STAGE_ORDER",
     "STAGE4_PRIORITY_TYPES",
     "DEFAULT_STAGE3_SECTION_KEYWORDS",
     "build_full_resume_plan",
     "build_full_resume_summary",
     "render_full_resume_report",
+    "run_full_pipeline_orchestrated",
     "run_stage6c_full_resume",
 ]

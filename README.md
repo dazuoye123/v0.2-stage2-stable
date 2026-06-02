@@ -71,6 +71,8 @@ Other maintained entrypoints:
   Runtime and operational entry scripts.
 - `scripts/dev/`
   Manual inspection, batch planning, manifest, and developer utilities. These are not the main pipeline.
+- `archive/`
+  Archived legacy tools retained for compatibility and historical traceability.
 - `tests/`
   Regression tests. These protect runtime behavior and are not part of the main pipeline itself.
 - `docs/`
@@ -150,5 +152,6 @@ python -m compileall .\src .\scripts .\tests
 
 - `scripts/dev/` is intentionally separate from the core runtime flow.
 - `scripts/run_research_figures.py` and `src/alumina_sol_extractor/research_figures/` are kept only for legacy compatibility. New batch-level figure work should use `scripts/run_figure_atlas.py`.
+- Legacy tool guidance is summarized in `docs/LEGACY_TOOLS.md`.
 - `tests/` should be kept as regression protection, especially for Stage 3, Stage 4A, Stage 5, linking, and sample-matrix behavior.
 - `data/outputs/`, `data/markdown/`, `data/pdfs/`, and other generated or local source data should not be committed.
