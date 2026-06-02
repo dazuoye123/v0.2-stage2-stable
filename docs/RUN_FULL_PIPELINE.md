@@ -50,6 +50,11 @@ Stage 4 in this flow is routed through the official Stage 4 implementation:
 - `src/alumina_sol_extractor/stage4/extractor.py`
 - `scripts/run_stage4_batch.py`
 
+Stage 5 batch work is routed through:
+
+- `src/alumina_sol_extractor/stage5/batch_runner.py`
+- `scripts/run_stage5_batch.py`
+
 Default Stage 4 settings used by the official path:
 
 - `stage3_subdir = stage3_twopass`
@@ -105,6 +110,18 @@ python .\scripts\run_full_pipeline.py `
   --force-linking `
   --export-link-aware `
   --no-showcase
+```
+
+For direct Stage 5 batch maintenance without the full pipeline wrapper, prefer:
+
+```powershell
+python .\scripts\run_stage5_batch.py `
+  --outputs-dir ".\data\outputs" `
+  --report-dir ".\data\analysis_outputs_stage5_batch" `
+  --with-linking `
+  --skip-existing `
+  --continue-on-error `
+  --workers 1
 ```
 
 ## Stage 4 retry and previous-success fallback
@@ -184,6 +201,7 @@ python .\scripts\export_batch_link_aware_dataset.py `
 
 - `scripts/` root is kept for user-facing entrypoints such as pipeline runners and export commands.
 - `scripts/dev/` contains historical audit, replay, repair, rerun, and review helpers. These are maintenance tools, not the recommended primary execution path.
+- `scripts/run_research_figures.py` remains only as a legacy compatibility entrypoint. New batch figure generation should use `scripts/run_figure_atlas.py`.
 
 ## Where results go
 

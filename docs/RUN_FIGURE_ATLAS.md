@@ -1,18 +1,23 @@
-# RUN_FIGURE_ATLAS
+# Run Figure Atlas
 
-`figure_atlas` 是一个新的 Stage3 / Stage4 / Stage5 批量科研图谱模块。
+`figure_atlas` is the maintained batch-level figure generation path for Stage 3,
+Stage 4, and Stage 5 analysis outputs.
 
-它只读取已有结果：
+It only reads existing results from:
 
-- Stage3 analysis outputs
-- Stage4 per-paper spectra outputs
-- Stage5 batch final exports
+- Stage 3 analysis outputs
+- Stage 4 per-paper spectra outputs
+- Stage 5 batch final exports
 
-它不会：
+It does not:
 
-- 重跑 Stage3 / Stage4 / Stage5
-- 调用 LLM / VLM
-- 写入 `data/outputs` 下新的 per-paper 结果
+- rerun Stage 3 / Stage 4 / Stage 5
+- call LLM / VLM models
+- overwrite per-paper outputs under `data/outputs`
+- archive or delete legacy code as part of runtime execution
+
+`scripts/run_research_figures.py` remains in the repository only for legacy
+compatibility. New batch-level figure work should use `scripts/run_figure_atlas.py`.
 
 ## Audit only
 

@@ -31,8 +31,6 @@ def run_figure_atlas(
     generate_figures: bool = True,
     skip_auto_figures: bool = False,
     max_auto_figures: int = 50,
-    delete_old_research_figures_code: bool = False,
-    dry_run_delete_old_code: bool = False,
     continue_on_error: bool = False,
 ) -> dict[str, Any]:
     timestamp_dir = ensure_dir(batch_output_dir / datetime.now().strftime("%Y%m%d_%H%M%S") / "figure_atlas")
@@ -127,8 +125,6 @@ def run_figure_atlas(
     )
     write_frame(timestamp_dir / "figure_index.csv", pd.DataFrame(artifacts))
     write_markdown(timestamp_dir / "figure_atlas_readme.md", _readme_text(artifacts, timestamp_dir))
-
-    legacy_cleanup = _handle_legacy_cleanup(project_root, delete_old_research_figures_code=delete_old_research_figures_code, dry_run_delete_old_code=dry_run_delete_old_code)
     return {
         "output_dir": str(timestamp_dir),
         "audit_dir": str(audit_dir),
@@ -137,7 +133,6 @@ def run_figure_atlas(
         "figures_root": str(figures_root),
         "manifest": str(manifest_path),
         "figure_count": len(artifacts),
-        "legacy_cleanup": legacy_cleanup,
     }
 
 
@@ -215,25 +210,3 @@ def _readme_text(artifacts: list[dict[str, Any]], output_dir: Path) -> str:
         ]
     )
     return "\n".join(lines) + "\n"
-
-
-def _handle_legacy_cleanup(project_root: Path, *, delete_old_research_figures_code: bool, dry_run_delete_old_code: bool) -> dict[str, Any]:
-    targets = [
-        project_root / "src" / "alumina_sol_extractor" / "research_figures",
-        project_root / "scripts" / "run_research_figures.py",
-    ]
-    if not delete_old_research_figures_code:
-        return {"performed": False, "targets": [str(path) for path in targets]}
-    archive_dir = ensure_dir(project_root / "archive" / "research_figures_legacy")
-    if dry_run_delete_old_code:
-        return {"performed": False, "dry_run": True, "targets": [str(path) for path in targets], "archive_dir": str(archive_dir)}
-    moved: list[str] = []
-    for target in targets:
-        if not target.exists():
-            continue
-        destination = archive_dir / target.name
-        if destination.exists():
-            continue
-        target.rename(destination)
-        moved.append(str(destination))
-    return {"performed": True, "archive_dir": str(archive_dir), "moved": moved}

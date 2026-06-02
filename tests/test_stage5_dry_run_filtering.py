@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
 
 from alumina_sol_extractor.dataset_fusion.loaders import load_paper_inputs
-
-
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "dev" / "run_stage5_batch.py"
-SPEC = importlib.util.spec_from_file_location("run_stage5_batch_script", SCRIPT_PATH)
-MODULE = importlib.util.module_from_spec(SPEC)
-assert SPEC and SPEC.loader
-SPEC.loader.exec_module(MODULE)
+from alumina_sol_extractor.stage5 import batch_runner as MODULE
 
 
 def _write_json(path: Path, payload: object) -> None:

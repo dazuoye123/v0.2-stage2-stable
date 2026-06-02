@@ -28,6 +28,14 @@ python scripts/run_full_pipeline.py --outputs-dir .\data\outputs ...
 
 `python main.py` remains in the repository as a legacy lightweight entry, but it is no longer the recommended full-pipeline command.
 
+Other maintained entrypoints:
+
+- `python scripts/run_stage4_batch.py ...`
+- `python scripts/run_stage5_batch.py ...`
+- `python scripts/export_link_aware_dataset.py ...`
+- `python scripts/export_batch_link_aware_dataset.py ...`
+- `python scripts/run_figure_atlas.py ...`
+
 ## Core Stages
 
 ### Stage 1: PDF -> Markdown
@@ -106,6 +114,12 @@ Stage 5 only:
 python scripts/run_stage5_dataset_fusion.py ...
 ```
 
+Stage 5 batch:
+
+```bash
+python scripts/run_stage5_batch.py ...
+```
+
 Linking only:
 
 ```bash
@@ -135,5 +149,6 @@ python -m compileall .\src .\scripts .\tests
 ## Repository Notes
 
 - `scripts/dev/` is intentionally separate from the core runtime flow.
+- `scripts/run_research_figures.py` and `src/alumina_sol_extractor/research_figures/` are kept only for legacy compatibility. New batch-level figure work should use `scripts/run_figure_atlas.py`.
 - `tests/` should be kept as regression protection, especially for Stage 3, Stage 4A, Stage 5, linking, and sample-matrix behavior.
 - `data/outputs/`, `data/markdown/`, `data/pdfs/`, and other generated or local source data should not be committed.

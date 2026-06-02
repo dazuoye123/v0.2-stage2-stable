@@ -1,4 +1,10 @@
 from __future__ import annotations
+"""Legacy compatibility entrypoint.
+
+Prefer ``scripts/run_figure_atlas.py`` for maintained batch-level figure output.
+This script remains only so older notes and tests keep working during the
+entrypoint simplification.
+"""
 
 import argparse
 import json

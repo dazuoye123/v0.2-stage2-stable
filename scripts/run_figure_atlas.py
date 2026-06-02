@@ -25,8 +25,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--generate-figures", dest="generate_figures", action="store_true")
     parser.add_argument("--skip-auto-figures", action="store_true")
     parser.add_argument("--max-auto-figures", type=int, default=50)
-    parser.add_argument("--delete-old-research-figures-code", action="store_true")
-    parser.add_argument("--dry-run-delete-old-code", action="store_true")
     parser.add_argument("--continue-on-error", action="store_true")
     parser.set_defaults(generate_figures=True)
     return parser.parse_args()
@@ -52,8 +50,6 @@ def main() -> int:
         generate_figures=args.generate_figures,
         skip_auto_figures=args.skip_auto_figures,
         max_auto_figures=args.max_auto_figures,
-        delete_old_research_figures_code=args.delete_old_research_figures_code,
-        dry_run_delete_old_code=args.dry_run_delete_old_code,
         continue_on_error=args.continue_on_error,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))

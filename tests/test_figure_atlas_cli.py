@@ -31,3 +31,5 @@ def test_parse_args_for_figure_atlas(monkeypatch) -> None:
     assert args.batch_final_export_dir == "data/outputs/_batch_final_exports"
     assert args.audit_only is True
     assert args.skip_auto_figures is True
+    assert not hasattr(args, "delete_old_research_figures_code")
+    assert not hasattr(args, "dry_run_delete_old_code")
