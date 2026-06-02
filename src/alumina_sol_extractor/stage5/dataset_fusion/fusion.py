@@ -237,6 +237,19 @@ def _build_spectra_records(
     return payload
 
 
+def _infer_source_distribution(record: dict[str, Any]) -> dict[str, int]:
+    distribution: dict[str, int] = defaultdict(int)
+    for peak in record.get("peaks") or []:
+        source = str((peak or {}).get("source") or "").strip()
+        if source:
+            distribution[source] += 1
+    if distribution:
+        return dict(distribution)
+    if record.get("input_context_summary"):
+        return {"image_and_text": 1}
+    return {"image_only": 1}
+
+
 def _build_parameter_rows(
     *,
     paper_id: str,

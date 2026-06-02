@@ -93,6 +93,9 @@ def generate_link_aware_exports(
         links=links,
         indexes=indexes,
     )
+    process_step_parameter_links = [
+        row for row in evidence_parameter_links if row.get("source_type") == "process_step"
+    ]
     spectra_parameter_links = _build_spectra_parameter_links(
         paper_id=paper_id,
         parameters=parameters,
@@ -209,6 +212,13 @@ def generate_link_aware_exports(
         fallback_outputs=fallback_outputs,
     )
     safe_write(
+        output_dir / "process_step_parameter_links.csv",
+        lambda path: write_csv_with_fields(path, process_step_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
+        write_warnings,
+        locked_files=locked_files,
+        fallback_outputs=fallback_outputs,
+    )
+    safe_write(
         output_dir / "spectra_parameter_links.csv",
         lambda path: write_csv_with_fields(path, spectra_parameter_links, SPECTRA_PARAMETER_LINK_FIELDS),
         write_warnings,
@@ -249,6 +259,7 @@ def generate_link_aware_exports(
         "sample_matrix_missing_diagnosis": sample_matrix_missing_diagnosis,
         "process_steps_table": process_steps_table,
         "evidence_parameter_links": evidence_parameter_links,
+        "process_step_parameter_links": process_step_parameter_links,
         "spectra_parameter_links": spectra_parameter_links,
         "final_showcase_table": final_showcase_table,
     }

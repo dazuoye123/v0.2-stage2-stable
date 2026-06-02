@@ -45,8 +45,8 @@ class VLMRequestError(RuntimeError):
 
 class VisionLanguageModelClient:
     DEFAULT_TIMEOUT_SECONDS = 300
-    DEFAULT_MAX_RETRIES = 1
-    DEFAULT_RETRY_BACKOFF_SECONDS = 2
+    DEFAULT_MAX_RETRIES = 3
+    DEFAULT_RETRY_BACKOFF_SECONDS = 5
 
     def __init__(
         self,

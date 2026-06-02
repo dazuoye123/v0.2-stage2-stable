@@ -75,6 +75,7 @@ def build_link_aware_summary(
         "recommended_primary_tables": [
             "final_parameters_linked.csv",
             "process_steps_table.csv",
+            "process_step_parameter_links.csv",
             "evidence_parameter_links.csv",
             "spectra_parameter_links.csv",
             "sample_parameter_matrix.csv",
@@ -106,6 +107,7 @@ def build_link_aware_readme(*, include_showcase: bool, output_warnings: list[str
             "## Primary Tables",
             "- `final_parameters_linked.csv`: the main parameter-level table with resolved sample, evidence, process-step, and spectra links.",
             "- `process_steps_table.csv`: ordered experimental procedure steps with linked parameters and evidence text.",
+            "- `process_step_parameter_links.csv`: direct process-step to parameter links extracted from the linking results.",
             "- `evidence_parameter_links.csv`: direct process-step and evidence-object links to parameters.",
             "- `spectra_parameter_links.csv`: direct spectra peak links and indirect spectra-evidence-parameter links.",
             "- `sample_parameter_matrix.csv`: sample-centric comparison matrix for meetings and sample-level review.",
@@ -208,6 +210,7 @@ def build_link_aware_diagnosis(output_dir: Path | str) -> str:
     table_summaries = [
         _collect_table_count(output_dir, "final_parameters_linked.csv", warnings, summary),
         _collect_table_count(output_dir, "process_steps_table.csv", warnings, summary),
+        _collect_table_count(output_dir, "process_step_parameter_links.csv", warnings, summary),
         _collect_table_count(output_dir, "evidence_parameter_links.csv", warnings, summary),
         _collect_table_count(output_dir, "spectra_parameter_links.csv", warnings, summary),
         _collect_table_count(output_dir, "sample_parameter_matrix.csv", warnings, summary),

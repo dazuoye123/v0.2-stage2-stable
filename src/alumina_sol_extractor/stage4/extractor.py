@@ -512,6 +512,8 @@ class Stage4VisionSpectraExtractor:
                 "figure_label": figure_meta.get("figure_label"),
                 "page_number": figure_meta.get("page_number"),
                 "subfigure_id": figure_meta.get("subfigure_id"),
+                "source_file": figure_meta.get("source_file"),
+                "source_pdf": figure_meta.get("source_pdf"),
                 "evidence_object_context": context.get("evidence_object_context", {}),
                 "related_stage3_parameters": context.get("related_stage3_parameters", []),
                 "context_source": context.get("context_source", {}),
