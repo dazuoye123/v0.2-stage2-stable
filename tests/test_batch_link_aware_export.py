@@ -38,9 +38,19 @@ def _build_export_dir(root: Path, paper_id: str, *, include_spectra: bool = True
         [[paper_id, "ev-1", "param-1"]],
     )
     _write_csv(
+        export_dir / "process_step_parameter_links.csv",
+        ["paper_id", "evidence_id", "parameter_id"],
+        [[paper_id, "step-1", "param-1"]],
+    )
+    _write_csv(
         export_dir / "spectra_parameter_links.csv",
         ["paper_id", "spectra_id", "parameter_id"],
         [[paper_id, "spectra-1", "param-1"]] if include_spectra else [],
+    )
+    _write_csv(
+        export_dir / "process_steps_table.csv",
+        ["paper_id", "process_step_id", "step_order"],
+        [[paper_id, "step-1", "1"]],
     )
     _write_csv(
         export_dir / "final_showcase_table.csv",
@@ -57,6 +67,7 @@ def _build_export_dir(root: Path, paper_id: str, *, include_spectra: bool = True
             "parameters_with_spectra_link": 1 if include_spectra else 0,
             "parameters_missing_all_links": 0,
             "total_evidence_parameter_links": 1,
+            "process_step_parameter_links": 1,
             "total_spectra_parameter_links": 1 if include_spectra else 0,
             "total_samples": 1,
             "showcase_rows": 1,
