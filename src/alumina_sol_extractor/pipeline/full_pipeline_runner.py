@@ -1,4 +1,9 @@
-"""Controlled full-pipeline runner and resume helpers."""
+"""Controlled full-pipeline runner and resume helpers.
+
+The public ``run_full_pipeline.py`` entrypoint still routes through this module
+for backward compatibility. Stage 4 execution itself should flow through the
+official :mod:`alumina_sol_extractor.stage4` runner/extractor path.
+"""
 
 from __future__ import annotations
 
@@ -30,15 +35,22 @@ from alumina_sol_extractor.linking.validators import (
     validate_llm_link_decisions,
 )
 from alumina_sol_extractor.pipeline.stage2_figure_pipeline import run_stage2_figure_pipeline
-from alumina_sol_extractor.utils.jsonl import write_jsonl
-from alumina_sol_extractor.vision_spectra.extractor import Stage4VisionSpectraExtractor
-from alumina_sol_extractor.vision_spectra.io import read_json, read_jsonl
-from alumina_sol_extractor.vision_spectra.quality_review import (
+from alumina_sol_extractor.stage4.batch_runner import (
+    DEFAULT_CANDIDATE_SOURCE as DEFAULT_STAGE4_CANDIDATE_SOURCE,
+    DEFAULT_ROUTING_MODE as DEFAULT_STAGE4_ROUTING_MODE,
+    DEFAULT_STAGE3_SUBDIR as DEFAULT_STAGE4_STAGE3_SUBDIR,
+    DEFAULT_STAGE4_SUBDIR as DEFAULT_STAGE4_SUBDIR,
+    run_stage4_for_paper,
+)
+from alumina_sol_extractor.stage4.extractor import Stage4VisionSpectraExtractor
+from alumina_sol_extractor.stage4.io import read_json, read_jsonl
+from alumina_sol_extractor.stage4.quality_review import (
     load_stage4_outputs,
     review_stage4_extractions,
     write_stage4_quality_review,
 )
-from alumina_sol_extractor.vision_spectra.vlm_client import VisionLanguageModelClient
+from alumina_sol_extractor.stage4.vlm_client import VisionLanguageModelClient
+from alumina_sol_extractor.utils.jsonl import write_jsonl
 
 from .resume_status import detect_stage_status, discover_resume_candidates
 
@@ -165,6 +177,11 @@ def run_stage6c_full_resume(
     max_stage4a_papers: int = 2,
     max_total_model_calls: int = 10,
     stage4a_figure_types: list[str] | tuple[str, ...] | set[str] | None = None,
+    stage3_subdir: str = DEFAULT_STAGE4_STAGE3_SUBDIR,
+    stage4_subdir: str = DEFAULT_STAGE4_SUBDIR,
+    stage4_routing_mode: str = DEFAULT_STAGE4_ROUTING_MODE,
+    stage4_candidate_source: str = DEFAULT_STAGE4_CANDIDATE_SOURCE,
+    stage4_figure_ids: list[str] | None = None,
     output_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     project_root = Path(project_root)
@@ -236,6 +253,11 @@ def run_stage6c_full_resume(
                     plan=plan,
                     max_stage4a_figures_per_paper=max_stage4a_figures_per_paper,
                     stage4a_figure_types=allowed_stage4a_types,
+                    stage3_subdir=stage3_subdir,
+                    stage4_subdir=stage4_subdir,
+                    stage4_routing_mode=stage4_routing_mode,
+                    stage4_candidate_source=stage4_candidate_source,
+                    stage4_figure_ids=stage4_figure_ids,
                 )
             except Exception as exc:  # pragma: no cover - top-level batch guard
                 paper_failed_reason = f"{type(exc).__name__}: {exc}"
@@ -392,6 +414,11 @@ def _execute_full_resume_plan(
     plan: dict[str, str],
     max_stage4a_figures_per_paper: int,
     stage4a_figure_types: tuple[str, ...],
+    stage3_subdir: str,
+    stage4_subdir: str,
+    stage4_routing_mode: str,
+    stage4_candidate_source: str,
+    stage4_figure_ids: list[str] | None,
 ) -> list[dict[str, Any]]:
     logs: list[dict[str, Any]] = []
     current_status = detect_stage_status(project_root=project_root, paper_id=paper_id, markdown_path=markdown_path, output_dir=output_dir)
@@ -428,25 +455,22 @@ def _execute_full_resume_plan(
                     log_item["reason"] = reason
                     logs.append(log_item)
                     continue
-                selected_figure_ids = _select_stage4_figure_ids(
+                stage4_summary = _run_stage4a_live(
                     paper_id=paper_id,
                     output_dir=output_dir,
+                    stage3_subdir=stage3_subdir,
+                    stage4_subdir=stage4_subdir,
+                    routing_mode=stage4_routing_mode,
+                    candidate_source=stage4_candidate_source,
+                    figure_ids=stage4_figure_ids,
                     max_figures=max_stage4a_figures_per_paper,
-                    allowed_figure_types=stage4a_figure_types,
                 )
-                if not selected_figure_ids:
-                    _write_stage4a_not_applicable(paper_id=paper_id, output_dir=output_dir)
+                log_item["figure_ids"] = list(stage4_figure_ids or [])
+                if bool(stage4_summary.get("not_applicable")) or int(stage4_summary.get("total_candidates") or 0) == 0:
                     log_item["status"] = "not_applicable"
-                    log_item["reason"] = "no_high_value_spectra_candidates"
+                    log_item["reason"] = "no_stage2_selected_candidates"
                     logs.append(log_item)
                     continue
-                log_item["figure_ids"] = selected_figure_ids
-                _run_stage4a_live(
-                    paper_id=paper_id,
-                    output_dir=output_dir,
-                    figure_ids=selected_figure_ids,
-                    allowed_figure_types=stage4a_figure_types,
-                )
             elif stage == "stage5":
                 current_status = detect_stage_status(project_root=project_root, paper_id=paper_id, markdown_path=markdown_path, output_dir=output_dir)
                 if not current_status["stage3"]["completed"]:
@@ -543,6 +567,9 @@ def _select_stage4_figure_ids(
     max_figures: int = 4,
     allowed_figure_types: tuple[str, ...] | None = None,
 ) -> list[str]:
+    """Legacy compatibility helper for the old Stage4A pre-selection flow."""
+    from alumina_sol_extractor.stage4.extractor import Stage4VisionSpectraExtractor
+
     extractor = Stage4VisionSpectraExtractor(
         paper_id=paper_id,
         output_dir=output_dir,
@@ -571,28 +598,37 @@ def _run_stage4a_live(
     *,
     paper_id: str,
     output_dir: Path,
-    figure_ids: list[str],
-    allowed_figure_types: tuple[str, ...] | None = None,
-) -> None:
-    extractor = Stage4VisionSpectraExtractor(
+    stage3_subdir: str,
+    stage4_subdir: str,
+    routing_mode: str,
+    candidate_source: str,
+    figure_ids: list[str] | None = None,
+    max_figures: int = 0,
+) -> dict[str, Any]:
+    summary = run_stage4_for_paper(
         paper_id=paper_id,
-        output_dir=output_dir,
-        max_figures=len(figure_ids) or 4,
-        allowed_figure_types=set(allowed_figure_types or STAGE4_PRIORITY_TYPES),
-        figure_ids=figure_ids,
+        paper_output_dir=output_dir,
         dry_run=False,
+        force_stage4=False,
+        stage4_figure_ids=figure_ids,
+        stage3_subdir=stage3_subdir,
+        stage4_subdir=stage4_subdir,
+        routing_mode=routing_mode,
+        candidate_source=candidate_source,
+        max_figures_per_paper=max_figures,
     )
-    extractor.run()
-    stage4_dir = output_dir / "stage4_vision_spectra"
+    stage4_dir = output_dir / stage4_subdir
     review_payload = review_stage4_extractions(load_stage4_outputs(stage4_dir))
     write_stage4_quality_review(
         review_payload,
         output_md=stage4_dir / "stage4_quality_review.md",
         output_json=stage4_dir / "stage4_quality_review.json",
     )
+    return summary
 
 
 def _write_stage4a_not_applicable(*, paper_id: str, output_dir: Path) -> None:
+    """Legacy compatibility writer for historical Stage4A paths."""
     stage4_dir = output_dir / "stage4_vision_spectra"
     stage4_dir.mkdir(parents=True, exist_ok=True)
     summary = {

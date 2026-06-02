@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from alumina_sol_extractor.config.settings_loader import build_runtime_settings, resolve_project_path
+from alumina_sol_extractor.stage4.processed_index import is_live_successful_stage4_summary
 from alumina_sol_extractor.dataset_fusion.exporters import export_fusion_outputs
 from alumina_sol_extractor.dataset_fusion.fusion import run_stage5_dataset_fusion
 from alumina_sol_extractor.dataset_fusion.loaders import read_json
@@ -38,6 +39,50 @@ LOW_PRIORITY_KEYWORDS = ("example", "excerpt", ".gitkeep")
 
 
 STAGE_ORDER = ("stage2", "stage3", "stage4a", "stage5", "stage55")
+PREFERRED_STAGE3_SUBDIRS = ("stage3_twopass", "stage3_dspy_smoke", "stage3")
+PREFERRED_STAGE4_SUBDIRS = ("stage4_vision_spectra_universal", "stage4_vision_spectra")
+
+
+def _iter_markdown_files(markdown_dir: Path) -> list[Path]:
+    return sorted(path for path in markdown_dir.rglob("*.md") if path.is_file())
+
+
+def _resolve_output_dir(outputs_dir: Path, paper_id: str) -> Path:
+    direct = outputs_dir / paper_id
+    if direct.exists():
+        return direct
+    matches = [
+        child / paper_id
+        for child in sorted(path for path in outputs_dir.iterdir() if path.is_dir())
+        if (child / paper_id).exists()
+    ]
+    if matches:
+        return matches[0]
+    return direct
+
+
+def _first_existing_subdir(output_dir: Path, candidates: tuple[str, ...]) -> Path:
+    for name in candidates:
+        candidate = output_dir / name
+        if candidate.exists():
+            return candidate
+    return output_dir / candidates[0]
+
+
+def _stage3_summary_path(stage3_dir: Path) -> Path:
+    for filename in ("stage3_summary.json", "stage3_smoke_summary.json"):
+        path = stage3_dir / filename
+        if path.exists():
+            return path
+    return stage3_dir / "stage3_summary.json"
+
+
+def _stage4_summary_path(stage4_dir: Path) -> Path:
+    for filename in ("stage4a_summary.json", "stage4_summary.json"):
+        path = stage4_dir / filename
+        if path.exists():
+            return path
+    return stage4_dir / "stage4a_summary.json"
 
 
 def discover_resume_candidates(
@@ -49,14 +94,14 @@ def discover_resume_candidates(
     markdown_dir = Path(markdown_dir)
     outputs_dir = Path(outputs_dir)
     candidates: list[dict[str, Any]] = []
-    for markdown_path in markdown_dir.glob("*.md"):
-        if not markdown_path.is_file():
-            continue
+    for markdown_path in _iter_markdown_files(markdown_dir):
         paper_id = markdown_path.stem
-        output_dir = outputs_dir / paper_id
+        output_dir = _resolve_output_dir(outputs_dir, paper_id)
+        stage3_dir = _first_existing_subdir(output_dir, PREFERRED_STAGE3_SUBDIRS)
+        stage4_dir = _first_existing_subdir(output_dir, PREFERRED_STAGE4_SUBDIRS)
         has_stage2 = output_dir.exists() and all((output_dir / name).exists() for name in STAGE2_REQUIRED_FILES)
-        has_stage3 = (output_dir / "stage3_dspy_smoke" / "stage3_smoke_summary.json").exists()
-        has_stage4a = (output_dir / "stage4_vision_spectra" / "stage4_summary.json").exists()
+        has_stage3 = _stage3_summary_path(stage3_dir).exists()
+        has_stage4a = _stage4_summary_path(stage4_dir).exists()
         has_stage5 = (output_dir / "final_dataset" / "quality_summary.json").exists()
         has_stage55 = (output_dir / "final_dataset" / "linking" / "linking_summary.json").exists()
         missing_inputs: list[str] = []
@@ -102,27 +147,32 @@ def detect_stage_status(
     mineru_raw_dir = mineru_raw_root / paper_id
     mineru_raw_exists = mineru_raw_dir.exists()
 
-    stage3_dir = output_dir / "stage3_dspy_smoke"
-    stage4_dir = output_dir / "stage4_vision_spectra"
+    stage3_dir = _first_existing_subdir(output_dir, PREFERRED_STAGE3_SUBDIRS)
+    stage4_dir = _first_existing_subdir(output_dir, PREFERRED_STAGE4_SUBDIRS)
     stage5_dir = output_dir / "final_dataset"
     stage55_dir = stage5_dir / "linking"
 
-    stage3_summary = read_json(stage3_dir / "stage3_smoke_summary.json", default={}) or {}
-    stage4_summary = read_json(stage4_dir / "stage4_summary.json", default={}) or {}
+    stage3_summary = read_json(_stage3_summary_path(stage3_dir), default={}) or {}
+    stage4_summary = read_json(_stage4_summary_path(stage4_dir), default={}) or {}
     stage5_summary = read_json(stage5_dir / "quality_summary.json", default={}) or {}
     stage55_summary = read_json(stage55_dir / "linking_summary.json", default={}) or {}
 
     stage2_completed = (output_dir / "figures.jsonl").exists() and (output_dir / "vision_inputs.jsonl").exists()
     stage3_completed = (
-        (stage3_dir / "stage3_smoke_summary.json").exists()
-        and (stage3_dir / "paper_extraction.schema_v2.json").exists()
+        _stage3_summary_path(stage3_dir).exists()
+        and any((stage3_dir / name).exists() for name in ("paper_extraction.schema_v2.json", "schema_v2.json"))
         and (stage3_dir / "evidence_objects.jsonl").exists()
-        and bool(stage3_summary.get("schema_valid"))
+        and bool(stage3_summary.get("schema_valid", True))
     )
     stage4_completed = (
-        (stage4_dir / "stage4_summary.json").exists()
+        _stage4_summary_path(stage4_dir).exists()
         and (stage4_dir / "spectra_extractions.jsonl").exists()
-        and (stage4_dir / "stage4_quality_review.json").exists()
+        and (
+            (stage4_dir / "stage4_quality_review.json").exists()
+            or (stage4_dir / "stage4_quality_review.md").exists()
+            or (stage4_dir / "stage4a_validation_report.md").exists()
+        )
+        and is_live_successful_stage4_summary(stage4_summary)
     )
     stage5_completed = (
         (stage5_dir / "quality_summary.json").exists()

@@ -231,15 +231,24 @@ def _run_stage4a_live(
     *,
     paper_id: str,
     output_dir: Path,
-    figure_ids: list[str],
+    stage3_subdir: str = "stage3_twopass",
+    stage4_subdir: str = "stage4_vision_spectra_universal",
+    routing_mode: str = "universal_compact",
+    candidate_source: str = "stage2-selected",
+    figure_ids: list[str] | None = None,
+    max_figures: int = 0,
     allowed_figure_types: tuple[str, ...] | None = None,
-) -> None:
+) -> dict[str, Any] | None:
     _sync_impl()
-    _ORIG_RUN_STAGE4A_LIVE(
+    return _ORIG_RUN_STAGE4A_LIVE(
         paper_id=paper_id,
         output_dir=output_dir,
+        stage3_subdir=stage3_subdir,
+        stage4_subdir=stage4_subdir,
+        routing_mode=routing_mode,
+        candidate_source=candidate_source,
         figure_ids=figure_ids,
-        allowed_figure_types=allowed_figure_types,
+        max_figures=max_figures,
     )
 
 

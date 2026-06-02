@@ -40,23 +40,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--allow-stage1", action="store_true")
     parser.add_argument("--allow-stage2-refresh", action="store_true")
     parser.add_argument("--live-stage3", action="store_true")
-    parser.add_argument("--live-stage4a", action="store_true")
+    parser.add_argument("--live-stage4", "--live-stage4a", dest="live_stage4", action="store_true")
     parser.add_argument("--live-linking", action="store_true")
     parser.add_argument("--force-stage3", action="store_true")
-    parser.add_argument("--force-stage4a", action="store_true")
+    parser.add_argument("--force-stage4", "--force-stage4a", dest="force_stage4", action="store_true")
     parser.add_argument("--force-stage5", action="store_true")
     parser.add_argument("--force-linking", action="store_true")
     parser.add_argument("--export-link-aware", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--safe", action="store_true")
     parser.add_argument("--max-stage3-papers", type=int, default=2)
-    parser.add_argument("--max-stage4a-papers", type=int, default=2)
-    parser.add_argument("--max-stage4a-figures-per-paper", type=int, default=4)
+    parser.add_argument("--max-stage4-papers", "--max-stage4a-papers", dest="max_stage4_papers", type=int, default=2)
+    parser.add_argument(
+        "--max-stage4-figures-per-paper",
+        "--max-stage4a-figures-per-paper",
+        dest="max_stage4_figures_per_paper",
+        type=int,
+        default=0,
+    )
     parser.add_argument("--max-total-model-calls", type=int, default=10)
     parser.add_argument(
+        "--stage4-figure-types",
         "--stage4a-figure-types",
+        dest="stage4_figure_types",
         default="ftir_spectrum,xrd_pattern,nmr_spectrum,raman_spectrum,ferron_curve,tg_curve,dsc_curve,tg_dsc_curve,sem_image,tem_image",
     )
+    parser.add_argument("--stage4-figure-ids", default="")
+    parser.add_argument("--stage3-subdir", default="stage3_twopass")
+    parser.add_argument("--stage4-subdir", default="stage4_vision_spectra_universal")
+    parser.add_argument("--stage4-routing-mode", default="universal_compact")
+    parser.add_argument("--stage4-candidate-source", default="stage2-selected")
     parser.add_argument("--no-showcase", "--skip-preview-showcase", dest="no_showcase", action="store_true")
     parser.add_argument("--output-dir")
     return parser.parse_args()
@@ -71,6 +84,20 @@ def _resolve(path_text: str | None) -> Path | None:
 
 def _split_csv(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _resolve_paper_output_dir(outputs_dir: Path, paper_id: str) -> Path:
+    direct = outputs_dir / paper_id
+    if direct.exists():
+        return direct
+    matches = [
+        category_dir / paper_id
+        for category_dir in sorted(path for path in outputs_dir.iterdir() if path.is_dir())
+        if (category_dir / paper_id).exists()
+    ]
+    if matches:
+        return matches[0]
+    return direct
 
 
 def _discover_target_papers(
@@ -217,7 +244,7 @@ def _run_stage5_and_stage55_dry_run(
     exports: list[dict[str, Any]] = []
 
     for paper_id in paper_ids:
-        paper_output_dir = outputs_dir / paper_id
+        paper_output_dir = _resolve_paper_output_dir(outputs_dir, paper_id)
         final_dataset_dir = paper_output_dir / "final_dataset"
         if not paper_output_dir.exists():
             per_paper_summary.append(
@@ -333,23 +360,46 @@ def run_full_pipeline(
     allow_stage1: bool,
     allow_stage2_refresh: bool,
     live_stage3: bool,
-    live_stage4a: bool,
     live_linking: bool,
     force_stage3: bool,
-    force_stage4a: bool,
     force_stage5: bool,
     force_linking: bool,
     export_link_aware: bool,
     dry_run: bool,
     safe: bool,
     max_stage3_papers: int,
-    max_stage4a_papers: int,
-    max_stage4a_figures_per_paper: int,
     max_total_model_calls: int,
-    stage4a_figure_types: list[str],
     include_showcase: bool,
     output_dir: Path | None,
+    live_stage4: bool | None = None,
+    live_stage4a: bool | None = None,
+    force_stage4: bool | None = None,
+    force_stage4a: bool | None = None,
+    max_stage4_papers: int | None = None,
+    max_stage4a_papers: int | None = None,
+    max_stage4_figures_per_paper: int | None = None,
+    max_stage4a_figures_per_paper: int | None = None,
+    stage4_figure_types: list[str] | None = None,
+    stage4a_figure_types: list[str] | None = None,
+    stage4_figure_ids: list[str] | None = None,
+    stage3_subdir: str = "stage3_twopass",
+    stage4_subdir: str = "stage4_vision_spectra_universal",
+    stage4_routing_mode: str = "universal_compact",
+    stage4_candidate_source: str = "stage2-selected",
 ) -> dict[str, Any]:
+    effective_live_stage4 = live_stage4 if live_stage4 is not None else bool(live_stage4a)
+    effective_force_stage4 = force_stage4 if force_stage4 is not None else bool(force_stage4a)
+    effective_max_stage4_papers = (
+        max_stage4_papers
+        if max_stage4_papers is not None
+        else (max_stage4a_papers if max_stage4a_papers is not None else 0)
+    )
+    effective_max_stage4_figures = (
+        max_stage4_figures_per_paper
+        if max_stage4_figures_per_paper is not None
+        else (max_stage4a_figures_per_paper if max_stage4a_figures_per_paper is not None else 0)
+    )
+    effective_stage4_types = stage4_figure_types if stage4_figure_types is not None else (stage4a_figure_types or [])
     outputs_dir.mkdir(parents=True, exist_ok=True)
     selected_paper_ids = _discover_target_papers(
         markdown_dir=markdown_dir,
@@ -388,25 +438,30 @@ def run_full_pipeline(
             auto_complete=auto_complete and not safe,
             allow_stage2_refresh=allow_stage2_refresh,
             live_stage3=live_stage3 and not safe,
-            live_stage4a=live_stage4a and not safe,
+            live_stage4a=effective_live_stage4 and not safe,
             live_linking=live_linking and not safe,
             force_stage3=force_stage3,
-            force_stage4a=force_stage4a,
+            force_stage4a=effective_force_stage4,
             force_stage5=force_stage5,
             force_linking=force_linking,
             dry_run_plan_only=dry_run,
             max_stage3_papers=max_stage3_papers,
-            max_stage4a_papers=max_stage4a_papers,
-            max_stage4a_figures_per_paper=max_stage4a_figures_per_paper,
+            max_stage4a_papers=effective_max_stage4_papers,
+            max_stage4a_figures_per_paper=effective_max_stage4_figures,
             max_total_model_calls=max_total_model_calls,
-            stage4a_figure_types=stage4a_figure_types,
+            stage4a_figure_types=effective_stage4_types,
+            stage3_subdir=stage3_subdir,
+            stage4_subdir=stage4_subdir,
+            stage4_routing_mode=stage4_routing_mode,
+            stage4_candidate_source=stage4_candidate_source,
+            stage4_figure_ids=stage4_figure_ids,
             output_dir=batch_dir / "stage6c_full_resume",
         )
 
         exports = []
         if export_link_aware and not dry_run:
             for paper_id in selected_paper_ids:
-                final_dataset_dir = outputs_dir / paper_id / "final_dataset"
+                final_dataset_dir = _resolve_paper_output_dir(outputs_dir, paper_id) / "final_dataset"
                 if not final_dataset_dir.exists():
                     continue
                 exports.append(
@@ -466,20 +521,25 @@ def main() -> int:
         allow_stage1=args.allow_stage1,
         allow_stage2_refresh=args.allow_stage2_refresh,
         live_stage3=args.live_stage3,
-        live_stage4a=args.live_stage4a,
+        live_stage4=args.live_stage4,
         live_linking=args.live_linking,
         force_stage3=args.force_stage3,
-        force_stage4a=args.force_stage4a,
+        force_stage4=args.force_stage4,
         force_stage5=args.force_stage5,
         force_linking=args.force_linking,
         export_link_aware=args.export_link_aware,
         dry_run=args.dry_run,
         safe=args.safe,
         max_stage3_papers=max(0, args.max_stage3_papers),
-        max_stage4a_papers=max(0, args.max_stage4a_papers),
-        max_stage4a_figures_per_paper=max(1, args.max_stage4a_figures_per_paper),
+        max_stage4_papers=max(0, args.max_stage4_papers),
+        max_stage4_figures_per_paper=max(0, args.max_stage4_figures_per_paper),
         max_total_model_calls=max(0, args.max_total_model_calls),
-        stage4a_figure_types=_split_csv(args.stage4a_figure_types),
+        stage4_figure_types=_split_csv(args.stage4_figure_types),
+        stage4_figure_ids=_split_csv(args.stage4_figure_ids) or None,
+        stage3_subdir=args.stage3_subdir,
+        stage4_subdir=args.stage4_subdir,
+        stage4_routing_mode=args.stage4_routing_mode,
+        stage4_candidate_source=args.stage4_candidate_source,
         include_showcase=not args.no_showcase,
         output_dir=_resolve(args.output_dir),
     )

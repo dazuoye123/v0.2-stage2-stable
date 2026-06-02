@@ -207,15 +207,32 @@ class Stage4VisionSpectraExtractor:
     figure_ids: list[str] | None = None
     dry_run: bool = True
     client: VisionLanguageModelClient | None = None
-    routing_mode: str = "schema_specific"
-    stage3_subdir: str = "stage3_dspy_smoke"
-    stage4_subdir: str = "stage4_vision_spectra"
+    routing_mode: str = "universal_compact"
+    stage3_subdir: str = "stage3_twopass"
+    stage4_subdir: str = "stage4_vision_spectra_universal"
     candidate_source: str = "stage2-selected"
 
     def _should_require_real_image_file(self) -> bool:
         if self.dry_run:
             return False
         return self.client is None or isinstance(self.client, VisionLanguageModelClient)
+
+    def _effective_stage3_subdir(self) -> str:
+        if (Path(self.output_dir) / self.stage3_subdir).exists():
+            return self.stage3_subdir
+        if self.stage3_subdir == "stage3_twopass" and (Path(self.output_dir) / "stage3_dspy_smoke").exists():
+            return "stage3_dspy_smoke"
+        return self.stage3_subdir
+
+    def _effective_stage4_subdir(self) -> str:
+        if (Path(self.output_dir) / self.stage4_subdir).exists():
+            return self.stage4_subdir
+        if self.stage4_subdir == "stage4_vision_spectra_universal":
+            legacy_stage3 = Path(self.output_dir) / "stage3_dspy_smoke"
+            legacy_stage4 = Path(self.output_dir) / "stage4_vision_spectra"
+            if legacy_stage4.exists() or legacy_stage3.exists():
+                return "stage4_vision_spectra"
+        return self.stage4_subdir
 
     def run(self) -> dict[str, Any]:
         plan = self.build_candidate_plan()
@@ -275,7 +292,9 @@ class Stage4VisionSpectraExtractor:
         return summary
 
     def build_candidate_plan(self, *, create_stage4_dir: bool = True) -> dict[str, Any]:
-        stage4_dir = Path(self.output_dir) / self.stage4_subdir
+        effective_stage3_subdir = self._effective_stage3_subdir()
+        effective_stage4_subdir = self._effective_stage4_subdir()
+        stage4_dir = Path(self.output_dir) / effective_stage4_subdir
         if create_stage4_dir:
             stage4_dir.mkdir(parents=True, exist_ok=True)
         previous_extractions = read_jsonl(stage4_dir / "spectra_extractions.jsonl")
@@ -283,14 +302,14 @@ class Stage4VisionSpectraExtractor:
         previous_failed_records = read_jsonl(stage4_dir / "spectra_failed_records.jsonl")
         config_warnings: list[str] = []
 
-        stage3_dir = Path(self.output_dir) / self.stage3_subdir
+        stage3_dir = Path(self.output_dir) / effective_stage3_subdir
         evidence_objects = read_jsonl(stage3_dir / "evidence_objects.jsonl")
         stage3_schema_path = stage3_dir / "paper_extraction.schema_v2.json"
         stage3_schema = read_json(stage3_schema_path, default={}) or {}
         if not evidence_objects:
-            config_warnings.append(f"missing_or_empty_evidence_objects:{self.stage3_subdir}")
+            config_warnings.append(f"missing_or_empty_evidence_objects:{effective_stage3_subdir}")
         if not stage3_schema_path.exists():
-            config_warnings.append(f"missing_stage3_schema:{self.stage3_subdir}")
+            config_warnings.append(f"missing_stage3_schema:{effective_stage3_subdir}")
 
         if self.candidate_source != "stage2-selected":
             raise ValueError(f"Unsupported Stage4A candidate_source: {self.candidate_source}")
