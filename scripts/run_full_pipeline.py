@@ -15,10 +15,12 @@ from alumina_sol_extractor.dataset_fusion.batch_link_aware_export import export_
 from alumina_sol_extractor.dataset_fusion.link_aware_export import generate_link_aware_exports  # noqa: E402
 from alumina_sol_extractor.pipeline.full_pipeline_runner import run_stage6c_full_resume  # noqa: E402
 from alumina_sol_extractor.pipeline.orchestrator import (  # noqa: E402
-    _run_stage5_and_stage55_dry_run,
+    _run_stage5_and_linking_for_selected_papers,
     run_full_pipeline_orchestrated,
 )
 from alumina_sol_extractor.pipeline.stage1_pdf_to_markdown import run_stage1_pdf_to_markdown  # noqa: E402
+
+_run_stage5_and_stage55_dry_run = _run_stage5_and_linking_for_selected_papers
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,7 +89,7 @@ def run_full_pipeline(**kwargs):
         full_pipeline_resume_runner=run_stage6c_full_resume,
         link_exporter=generate_link_aware_exports,
         batch_exporter=export_batch_link_aware_dataset,
-        stage5_only_runner=_run_stage5_and_stage55_dry_run,
+        stage5_only_runner=_run_stage5_and_linking_for_selected_papers,
     )
 
 

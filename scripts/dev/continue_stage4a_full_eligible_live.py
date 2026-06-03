@@ -7,6 +7,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_ARCHIVE_PATH = Path(__file__).resolve().parents[2] / r"archive\\scripts\\stage4_legacy" / "continue_stage4a_full_eligible_live.py"
+_ARCHIVE_PATH = Path(__file__).resolve().parents[2] / "archive" / "scripts" / "stage4_legacy" / "continue_stage4a_full_eligible_live.py"
 _SOURCE = _ARCHIVE_PATH.read_text(encoding="utf-8")
 exec(compile(_SOURCE, str(_ARCHIVE_PATH), "exec"), globals())

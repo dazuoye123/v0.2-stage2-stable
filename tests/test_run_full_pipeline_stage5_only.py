@@ -35,7 +35,7 @@ def test_run_full_pipeline_stage5_only_without_markdown_dir(monkeypatch, tmp_pat
             {"output_dir": str(tmp_path / "_batch"), "summary": {"showcase_rows": 0}},
         )
 
-    monkeypatch.setattr(MODULE, "_run_stage5_and_stage55_dry_run", fake_stage5_only)
+    monkeypatch.setattr(MODULE, "_run_stage5_and_linking_for_selected_papers", fake_stage5_only)
 
     result = MODULE.run_full_pipeline(
         pdf_dir=None,

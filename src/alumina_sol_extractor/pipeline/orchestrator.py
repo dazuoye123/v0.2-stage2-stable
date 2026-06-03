@@ -181,7 +181,7 @@ def _build_run_report(
     return "\n".join(lines)
 
 
-def _run_stage5_and_stage55_dry_run(
+def _run_stage5_and_linking_for_selected_papers(
     *,
     outputs_dir: Path,
     paper_ids: list[str],
@@ -340,7 +340,7 @@ def run_full_pipeline(
     full_pipeline_resume_runner: Callable[..., dict[str, Any]] = run_full_pipeline_orchestrated,
     link_exporter: Callable[..., dict[str, Any]] = generate_link_aware_exports,
     batch_exporter: Callable[..., dict[str, Any]] = export_batch_link_aware_dataset,
-    stage5_only_runner: Callable[..., tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]] = _run_stage5_and_stage55_dry_run,
+    stage5_only_runner: Callable[..., tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]] = _run_stage5_and_linking_for_selected_papers,
 ) -> dict[str, Any]:
     effective_live_stage4 = live_stage4 if live_stage4 is not None else bool(live_stage4a)
     effective_force_stage4 = force_stage4 if force_stage4 is not None else bool(force_stage4a)
@@ -470,6 +470,26 @@ def run_full_pipeline(
 def run_full_pipeline_orchestrated(**kwargs: Any) -> dict[str, Any]:
     """Preferred orchestrator entrypoint for the full pipeline."""
     return run_full_pipeline(**kwargs)
+
+
+def _run_stage5_and_stage55_dry_run(
+    *,
+    outputs_dir: Path,
+    paper_ids: list[str],
+    include_showcase: bool,
+    export_link_aware: bool,
+    link_exporter: Callable[..., dict[str, Any]] = generate_link_aware_exports,
+    batch_exporter: Callable[..., dict[str, Any]] = export_batch_link_aware_dataset,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]:
+    """Legacy compatibility wrapper for the historical Stage5/Stage55 helper name."""
+    return _run_stage5_and_linking_for_selected_papers(
+        outputs_dir=outputs_dir,
+        paper_ids=paper_ids,
+        include_showcase=include_showcase,
+        export_link_aware=export_link_aware,
+        link_exporter=link_exporter,
+        batch_exporter=batch_exporter,
+    )
 
 
 __all__ = [
