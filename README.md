@@ -1,161 +1,97 @@
 # alumina_sol_extractor
 
-Alumina-sol and alumina-fiber literature extraction pipeline for building structured datasets from PDF / Markdown papers.
+Structured literature extraction pipeline for alumina sol and alumina fiber papers.
 
-## Project Goal
+## Project overview
 
-The maintained pipeline turns literature into structured outputs for downstream analysis:
+This repository converts PDF or Markdown literature into structured research data for downstream analysis.
 
-`PDF / Markdown -> Stage 3 / Stage 4 extraction -> Stage 5 fusion -> link-aware export`
+The maintained pipeline covers:
 
-Target objects include:
-- samples
-- parameters
-- process steps
-- evidence
-- spectra
-- figures
-- parameter links
-- sample parameter matrices
+- Stage 1 and Stage 2 preprocessing
+- Stage 3 text extraction
+- Stage 4 figure and spectra extraction
+- Stage 5 fusion, linking, and link-aware export
+- batch-level final exports
+- figure atlas generation from existing results
 
-## Main Entry
+## Official entrypoints
 
-The recommended runtime entry is:
+Use these scripts for normal operation:
 
-```bash
-python scripts/run_full_pipeline.py --outputs-dir .\data\outputs ...
-```
+- `python scripts/run_full_pipeline.py`
+- `python scripts/run_stage4_batch.py`
+- `python scripts/run_stage5_batch.py`
+- `python scripts/export_link_aware_dataset.py`
+- `python scripts/export_batch_link_aware_dataset.py`
+- `python scripts/run_figure_atlas.py`
 
-`python main.py` remains in the repository as a legacy lightweight entry, but it is no longer the recommended full-pipeline command.
+Legacy tools remain in the repository for compatibility, but they are not the recommended entrypoints for new work.
 
-Other maintained entrypoints:
+## Quick start
 
-- `python scripts/run_stage4_batch.py ...`
-- `python scripts/run_stage5_batch.py ...`
-- `python scripts/export_link_aware_dataset.py ...`
-- `python scripts/export_batch_link_aware_dataset.py ...`
-- `python scripts/run_figure_atlas.py ...`
-
-## Core Stages
-
-### Stage 1: PDF -> Markdown
-- MinerU-based PDF to Markdown conversion
-- image path rewriting
-- chemistry/symbol cleanup
-- cleaned markdown output
-
-### Stage 2: Figure / Table Preparation
-- figure extraction
-- vision input preparation
-- figure metadata for downstream Stage 4
-
-### Stage 3: Structured Text Extraction
-- cleaned-body text preparation
-- procedure section selection
-- structured extraction for samples, parameters, evidence, process steps, and related fields
-
-### Stage 4: Vision / Spectra Extraction
-- figure-level structured extraction for XRD, FTIR/IR, Raman, NMR, TG/TGA, DSC/DTA, TG-DSC/TG-DTA, Ferron, SEM, TEM, and related figure types
-
-Legacy note:
-- the historical name `Stage4A` still appears in some compatibility wrappers, tests, and archived notes
-- the maintained pipeline and current docs use `Stage4` as the official name
-
-### Stage 5: Fusion + Linking + Link-Aware Export
-- final dataset fusion
-- deterministic / controlled linking
-- link-aware export tables
-- sample matrix outputs
-
-## Important Directories
-
-- `src/alumina_sol_extractor/`
-  Core runtime package.
-- `scripts/`
-  Runtime and operational entry scripts.
-- `scripts/dev/`
-  Manual inspection, batch planning, manifest, and developer utilities. These are not the main pipeline.
-- `archive/`
-  Archived legacy tools retained for compatibility and historical traceability.
-- `tests/`
-  Regression tests. These protect runtime behavior and are not part of the main pipeline itself.
-- `docs/`
-  Design notes, operational docs, and cleanup planning.
-- `data/outputs/`
-  Generated paper outputs. Do not commit runtime result files from this directory.
-
-## Setup
-
-Install the project in your preferred environment. The repository currently includes both `pyproject.toml` and `requirements.txt`; `pyproject.toml` is the better long-term source of truth, while `requirements.txt` remains for compatibility.
-
-Example:
+Install the package in an isolated environment:
 
 ```bash
+python -m venv .venv
+.\.venv\Scripts\activate
 pip install -e .
 ```
 
-If you still use the compatibility path:
+Compatibility install:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Some stages require local environment variables or API credentials, depending on which parts of the pipeline you run.
-
-## Typical Usage
-
-Full pipeline:
+Example commands:
 
 ```bash
-python scripts/run_full_pipeline.py ^
-  --markdown-dir .\data\markdown ^
-  --outputs-dir .\data\outputs ^
-  --paper-ids "example_paper" ^
-  --export-link-aware
+python scripts/run_stage4_batch.py --outputs-dir .\data\outputs
+python scripts/run_stage5_batch.py --outputs-dir .\data\outputs --report-dir .\data\analysis_outputs_stage5_batch --with-linking --skip-existing
+python scripts/export_batch_link_aware_dataset.py --outputs-dir .\data\outputs --output-dir .\data\outputs\_batch_final_exports
+python scripts/run_figure_atlas.py --outputs-dir .\data\outputs --batch-final-export-dir .\data\outputs\_batch_final_exports --batch-output-dir .\data\batch_validation --audit-only
 ```
 
-Stage 5 only:
+## Output locations
 
-```bash
-python scripts/run_stage5_dataset_fusion.py ...
-```
+Common output locations:
 
-Stage 5 batch:
+- per-paper outputs: `data/outputs/{category}/{paper_id}/`
+- Stage 5 batch reports: `data/analysis_outputs_stage5_batch/`
+- batch link-aware exports: `data/outputs/_batch_final_exports/`
+- figure atlas runs: `data/batch_validation/{timestamp}/figure_atlas/`
 
-```bash
-python scripts/run_stage5_batch.py ...
-```
+## Documentation
 
-Linking only:
+- English and Chinese document index: [docs/README.md](./docs/README.md)
+- Chinese quick overview: [README.zh-CN.md](./README.zh-CN.md)
 
-```bash
-python scripts/run_stage5_linking.py ...
-```
+## Legacy tools note
 
-Link-aware export only:
+The following are legacy or compatibility concepts and are no longer the primary naming used in current documentation:
 
-```bash
-python scripts/export_link_aware_dataset.py ...
-```
+- `Stage4A` -> `Stage4`
+- `stage55` -> `linking`
+- `stage6c` -> `full pipeline`
+- `scripts/dev/*`
+- `scripts/run_research_figures.py`
 
-## Testing
+See [docs/LEGACY_TOOLS.md](./docs/LEGACY_TOOLS.md) for details.
 
-Run the regression suite with:
+## What not to commit
 
-```bash
-pytest
-```
+Do not commit generated runtime outputs such as:
 
-Optional compile check:
+- `data/outputs/`
+- `data/batch_validation/`
+- `data/analysis_outputs*/`
+- `presentation_outputs/`
+- `tmp_*/`
 
-```bash
-python -m compileall .\src .\scripts .\tests
-```
+## Repository status
 
-## Repository Notes
+- current maintained runtime package: `src/alumina_sol_extractor/`
+- archived historical helpers: `archive/`
+- regression protection: `tests/`
 
-- `scripts/dev/` is intentionally separate from the core runtime flow.
-- `scripts/run_research_figures.py` and `src/alumina_sol_extractor/research_figures/` are kept only for legacy compatibility. New batch-level figure work should use `scripts/run_figure_atlas.py`.
-- Legacy tool guidance is summarized in `docs/LEGACY_TOOLS.md`.
-- `tests/` should be kept as regression protection, especially for Stage 3, Stage 4, Stage 5, linking, and sample-matrix behavior.
-- `data/outputs/`, `data/markdown/`, `data/pdfs/`, and other generated or local source data should not be committed.
