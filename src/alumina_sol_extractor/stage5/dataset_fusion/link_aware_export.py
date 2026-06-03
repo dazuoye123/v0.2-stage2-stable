@@ -38,6 +38,7 @@ from alumina_sol_extractor.dataset_fusion.spectra_units import (
 from alumina_sol_extractor.ontology.ontology_loader import get_ontology_entry_map
 from alumina_sol_extractor.stage5.dataset_fusion.semantics import (
     CHARACTERIZATION_CATEGORY_HINTS,
+    build_qualified_paper_id,
     classify_parameter_semantic_role,
     resolve_paper_identity_from_final_dataset_dir,
 )
@@ -524,6 +525,7 @@ def _build_final_parameters_linked(
         rows.append(
             {
                 "paper_id": paper_id,
+                "qualified_paper_id": build_qualified_paper_id(paper_identity, paper_id),
                 "paper_category": paper_identity.get("paper_category"),
                 "paper_category_status": paper_identity.get("paper_category_status"),
                 "paper_dir": paper_identity.get("paper_dir"),
@@ -851,6 +853,7 @@ def _build_sample_matrix_long_row(
     linked_spectra_ids = _sorted_unique([row.get("spectra_id") for row in spectra_rows if row.get("spectra_id")])
     return {
         "paper_id": paper_id,
+        "qualified_paper_id": build_qualified_paper_id(paper_identity, paper_id),
         "paper_category": paper_identity.get("paper_category"),
         "paper_category_status": paper_identity.get("paper_category_status"),
         "paper_dir": paper_identity.get("paper_dir"),
@@ -947,6 +950,7 @@ def _build_sample_matrix_missing_diagnosis(
             diagnosis_rows.append(
                 {
                     "paper_id": paper_identity.get("paper_id"),
+                    "qualified_paper_id": build_qualified_paper_id(paper_identity, paper_identity.get("paper_id")),
                     "paper_category": paper_identity.get("paper_category"),
                     "paper_category_status": paper_identity.get("paper_category_status"),
                     "paper_dir": paper_identity.get("paper_dir"),
@@ -1075,6 +1079,7 @@ def _build_parameter_semantic_qa(
         rows.append(
             {
                 "paper_id": row.get("paper_id") or paper_identity.get("paper_id"),
+                "qualified_paper_id": build_qualified_paper_id(paper_identity, row.get("paper_id") or paper_identity.get("paper_id")),
                 "paper_category": paper_identity.get("paper_category"),
                 "paper_category_status": paper_identity.get("paper_category_status"),
                 "paper_dir": paper_identity.get("paper_dir"),
@@ -1107,11 +1112,13 @@ def _build_excluded_parameter_row(
 ) -> dict[str, Any]:
     return {
         "paper_id": row.get("paper_id") or paper_identity.get("paper_id"),
+        "qualified_paper_id": build_qualified_paper_id(paper_identity, row.get("paper_id") or paper_identity.get("paper_id")),
         "paper_category": paper_identity.get("paper_category"),
         "paper_category_status": paper_identity.get("paper_category_status"),
         "paper_dir": paper_identity.get("paper_dir"),
         "parameter_id": row.get("parameter_id"),
         "original_name": row.get("raw_name"),
+        "canonical_key": row.get("canonical_key"),
         "canonical_name": row.get("canonical_key"),
         "parameter_family": semantic_row.get("parameter_family"),
         "raw_value": row.get("value"),
@@ -1119,6 +1126,7 @@ def _build_excluded_parameter_row(
         "unit": row.get("unit"),
         "source_file": semantic_row.get("source_file"),
         "source_stage": semantic_row.get("source_stage"),
+        "source_scope": row.get("source_scope"),
         "exclusion_reason": semantic_row.get("exclusion_reason"),
         "parameter_semantic_role": semantic_row.get("parameter_semantic_role"),
     }
@@ -1184,6 +1192,7 @@ def _build_process_steps_table(
         rows.append(
             {
                 "paper_id": paper_id,
+                "qualified_paper_id": build_qualified_paper_id(paper_identity, paper_id),
                 "paper_category": paper_identity.get("paper_category"),
                 "paper_category_status": paper_identity.get("paper_category_status"),
                 "paper_dir": paper_identity.get("paper_dir"),
@@ -1266,6 +1275,7 @@ def _build_evidence_parameter_links(
         rows.append(
             {
                 "paper_id": paper_id,
+                "qualified_paper_id": build_qualified_paper_id(paper_identity, paper_id),
                 "paper_category": paper_identity.get("paper_category"),
                 "paper_category_status": paper_identity.get("paper_category_status"),
                 "paper_dir": paper_identity.get("paper_dir"),
@@ -1413,6 +1423,7 @@ def _build_spectra_parameter_links(
         rows.append(
             {
                 "paper_id": paper_id,
+                "qualified_paper_id": build_qualified_paper_id(paper_identity, paper_id),
                 "paper_category": paper_identity.get("paper_category"),
                 "paper_category_status": paper_identity.get("paper_category_status"),
                 "paper_dir": paper_identity.get("paper_dir"),

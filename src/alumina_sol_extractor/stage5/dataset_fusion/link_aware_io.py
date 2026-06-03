@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
+from alumina_sol_extractor.stage5.dataset_fusion.semantics import is_metadata_or_bookkeeping_key
+
 
 def build_link_aware_summary(
     *,
@@ -55,9 +57,15 @@ def build_link_aware_summary(
         for row in parameter_semantic_qa
         if row.get("parameter_semantic_role") == "characterization_output"
     )
+    residual_metadata_count = sum(
+        1
+        for row in final_parameters_linked
+        if is_metadata_or_bookkeeping_key(row.get("canonical_key"))
+    )
     return {
         "paper_category": paper_identity.get("paper_category"),
         "paper_category_status": paper_identity.get("paper_category_status"),
+        "main_parameter_count": len(final_parameters_linked),
         "total_parameters": len(final_parameters_linked),
         "parameters_with_any_link": sum(
             1
@@ -90,6 +98,7 @@ def build_link_aware_summary(
         "excluded_parameter_count": excluded_count,
         "metadata_or_bookkeeping_count": metadata_count,
         "characterization_output_parameter_count": characterization_count,
+        "residual_metadata_key_count": residual_metadata_count,
         "showcase_is_complete": showcase_complete,
         "showcase_warning": None
         if showcase_complete

@@ -29,6 +29,7 @@ CORE_SAMPLE_MATRIX_KEYS = [
 
 FINAL_PARAMETERS_LINKED_FIELDS = [
     "paper_id",
+    "qualified_paper_id",
     "paper_category",
     "paper_category_status",
     "paper_dir",
@@ -74,6 +75,7 @@ FINAL_PARAMETERS_LINKED_FIELDS = [
 
 SAMPLE_PARAMETER_MATRIX_BASE_FIELDS = [
     "paper_id",
+    "qualified_paper_id",
     "paper_category",
     "paper_category_status",
     "paper_dir",
@@ -127,6 +129,7 @@ SAMPLE_PARAMETER_MATRIX_FIELDS = build_sample_parameter_matrix_fields()
 
 SAMPLE_PARAMETER_MATRIX_LONG_FIELDS = [
     "paper_id",
+    "qualified_paper_id",
     "paper_category",
     "paper_category_status",
     "paper_dir",
@@ -147,6 +150,7 @@ SAMPLE_PARAMETER_MATRIX_LONG_FIELDS = [
 
 SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS = [
     "paper_id",
+    "qualified_paper_id",
     "paper_category",
     "paper_category_status",
     "paper_dir",
@@ -163,6 +167,7 @@ SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS = [
 
 EVIDENCE_PARAMETER_LINK_FIELDS = [
     "paper_id",
+    "qualified_paper_id",
     "paper_category",
     "paper_category_status",
     "paper_dir",
@@ -191,6 +196,7 @@ EVIDENCE_PARAMETER_LINK_FIELDS = [
 
 SPECTRA_PARAMETER_LINK_FIELDS = [
     "paper_id",
+    "qualified_paper_id",
     "paper_category",
     "paper_category_status",
     "paper_dir",
@@ -232,6 +238,7 @@ FINAL_SHOWCASE_FIELDS = [
 
 PROCESS_STEPS_TABLE_FIELDS = [
     "paper_id",
+    "qualified_paper_id",
     "paper_category",
     "paper_category_status",
     "paper_dir",

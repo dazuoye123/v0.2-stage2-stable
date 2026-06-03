@@ -43,15 +43,24 @@ def run_manuscript_figures(
     diagnosis_dir: Path,
     output_dir: Path,
     nature_skills_dir: Path | None = None,
+    support_tables_dir: Path | None = None,
+    legacy_v1_source_dir: Path | None = None,
     figures: list[str] | None = None,
+    version_label: str = "v2",
+    figure_dir_overrides: dict[str, str] | None = None,
     dry_run: bool = False,
     continue_on_error: bool = False,
 ) -> dict[str, Any]:
     selected = figures or ["Fig1", "Fig2", "Fig4"]
     payload = load_diagnosis_payload(Path(diagnosis_dir))
-    v2_payload = prepare_v2_payload(Path(diagnosis_dir))
+    v2_payload = prepare_v2_payload(
+        Path(diagnosis_dir),
+        support_tables_dir=support_tables_dir,
+        legacy_v1_source_dir=legacy_v1_source_dir,
+    )
     adapter = detect_nature_skills(nature_skills_dir)
     plan_lookup = figure_plan_lookup(payload["figure_plan_json"])
+    figure_dir_names = {**FIGURE_DIR_NAMES, **(figure_dir_overrides or {})}
 
     root = Path(output_dir)
     if dry_run:
@@ -63,6 +72,7 @@ def run_manuscript_figures(
             "figures": selected,
             "input_source_tables": [_source_table_path(payload["source_root"], figure_id) for figure_id in selected],
             "support_tables_dir": str(v2_payload["contexts"]["Fig1"].get("atlas_root", Path(diagnosis_dir).parent / "figure_atlas" / "tables")),
+            "version_label": version_label,
         }
 
     main_root = ensure_dir(root / "main_figures")
@@ -83,6 +93,7 @@ def run_manuscript_figures(
                     frame=v2_payload["figures"][figure_id],
                     plan=plan_lookup.get(figure_id, {}),
                     context=v2_payload["contexts"][figure_id],
+                    figure_dir_names=figure_dir_names,
                     main_root=main_root,
                     source_root=source_root,
                     figure_data_root=figure_data_root,
@@ -107,7 +118,10 @@ def run_manuscript_figures(
         "generated_at": datetime.now().isoformat(),
         "input_diagnosis_dir": str(diagnosis_dir),
         "input_source_tables": [_source_table_path(payload["source_root"], figure_id) for figure_id in selected],
+        "support_tables_dir": str(support_tables_dir) if support_tables_dir else "",
+        "legacy_v1_source_dir": str(legacy_v1_source_dir) if legacy_v1_source_dir else "",
         "output_dir": str(root),
+        "version_label": version_label,
         "nature_skills_used": adapter["nature_skills_used"],
         "nature_skills_path": adapter["nature_skills_path"],
         "nature_skills_mode": adapter["adapter_mode"],
@@ -127,7 +141,7 @@ def run_manuscript_figures(
     }
     write_json(root / "manuscript_figures_manifest.json", manifest)
     write_frame(root / "manuscript_figures_index.csv", pd.DataFrame(records))
-    write_markdown(root / "manuscript_figures_readme.md", _build_readme(records, adapter, warnings, contact_sheet))
+    write_markdown(root / "manuscript_figures_readme.md", _build_readme(records, adapter, warnings, contact_sheet, version_label=version_label))
     return {
         "output_dir": str(root),
         "manifest": str(root / "manuscript_figures_manifest.json"),
@@ -145,13 +159,14 @@ def _generate_one(
     frame: pd.DataFrame,
     plan: dict[str, Any],
     context: dict[str, Any],
+    figure_dir_names: dict[str, str],
     main_root: Path,
     source_root: Path,
     figure_data_root: Path,
     captions_root: Path,
     qc_root: Path,
 ) -> dict[str, Any]:
-    directory_name = FIGURE_DIR_NAMES[figure_id]
+    directory_name = figure_dir_names[figure_id]
     figure_dir = ensure_dir(main_root / directory_name)
     prefix = directory_name
     source_data_name = f"{prefix}_source_data.csv"
@@ -243,9 +258,9 @@ def _build_contact_sheet(records: list[dict[str, Any]], output_path: Path) -> Pa
     return output_path
 
 
-def _build_readme(records: list[dict[str, Any]], adapter: dict[str, Any], warnings: list[str], contact_sheet: Path) -> str:
+def _build_readme(records: list[dict[str, Any]], adapter: dict[str, Any], warnings: list[str], contact_sheet: Path, *, version_label: str) -> str:
     lines = [
-        "# Manuscript Figures Nature v2",
+        f"# Manuscript Figures Nature {version_label}",
         "",
         "## Nature-skills status",
         f"- nature_skills_used: {adapter['nature_skills_used']}",

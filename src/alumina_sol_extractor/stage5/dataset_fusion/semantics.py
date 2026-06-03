@@ -7,18 +7,163 @@ OFFICIAL_PAPER_CATEGORIES = ("mechanism", "fiber_process", "applications", "rheo
 OFFICIAL_PAPER_CATEGORY_SET = set(OFFICIAL_PAPER_CATEGORIES)
 
 METADATA_OR_BOOKKEEPING_KEYS = {
+    "axis_label",
+    "caption",
+    "comment",
+    "condition",
+    "context",
+    "description_only",
+    "evidence",
+    "evidence_ref",
+    "evidence_reference",
+    "experiment_series",
     "parent_series_id",
-    "series_id",
-    "value",
-    "raw_value",
-    "row_id",
-    "index",
-    "table_id",
     "figure_id",
+    "index",
+    "key",
+    "label",
+    "legend",
+    "material_system",
+    "metadata",
+    "notes",
+    "parameter",
+    "raw_value",
+    "record_id",
+    "row_id",
     "sample_id",
     "sample_label",
+    "series",
+    "series_id",
+    "series_name",
+    "series_ref",
     "source_id",
+    "source_text",
+    "table_id",
+    "unit",
+    "value",
+    "variables",
+    "x_label",
+    "y_label",
 }
+
+METADATA_SCOPE_HINTS = (
+    "bookkeeping",
+    "extended_data.parent_series_id",
+    "extended_data.series_id",
+    "extended_data.unclassified_results",
+)
+
+TRUE_PARAMETER_KEYS = {
+    "acid_type",
+    "acid_to_aluminum_ratio",
+    "aging_temperature_c",
+    "aging_time_h",
+    "air_gap_cm",
+    "al_concentration_mol_l",
+    "al_concentration_mol_per_l",
+    "al13_fraction_percent",
+    "aluminum_source",
+    "applied_voltage_kv",
+    "average_fiber_diameter_um",
+    "base_to_aluminum_ratio",
+    "bet_surface_area_m2_g",
+    "base_type",
+    "calcination_temperature_c",
+    "calcination_time_h",
+    "chelating_agent",
+    "coating_sintering_temperature_c",
+    "collector_distance_cm",
+    "concentration_temperature_c",
+    "concentration_time_h",
+    "density_g_cm3",
+    "density_kg_m3",
+    "dopant",
+    "drying_temperature_c",
+    "drying_time_h",
+    "elongation_at_break_percent",
+    "feed_rate_ml_h",
+    "fiber_diameter_um",
+    "flow_rate_ml_h",
+    "gel_time_h",
+    "heating_rate_c_min",
+    "holding_temperature_c",
+    "holding_time_h",
+    "hydrolysis_temperature_c",
+    "hydrolysis_time_h",
+    "mechanical_strength_mpa",
+    "modulus_gpa",
+    "particle_size_nm",
+    "peptization_temperature_c",
+    "peptization_time_h",
+    "ph",
+    "pore_volume_cm3_g",
+    "porosity_percent",
+    "precursor",
+    "relative_humidity_percent",
+    "sintering_temperature_c",
+    "sintering_time_h",
+    "solid_content_percent",
+    "solid_content_wt_percent",
+    "solvent",
+    "specific_surface_area_m2_g",
+    "spinneret_hole_diameter_mm",
+    "spinning_rate_m_min",
+    "spinnability",
+    "stabilizer",
+    "stirring_speed_rpm",
+    "take_up_speed_m_min",
+    "target_temperature_c",
+    "tensile_strength_mpa",
+    "thermal_conductivity_w_m_k",
+    "withdrawal_speed_m_min",
+    "viscosity_mpa_s",
+    "viscosity_pa_s",
+    "zeta_potential_mv",
+}
+
+TRUE_PARAMETER_KEY_SUBSTRINGS = (
+    "acid",
+    "additive",
+    "agent",
+    "aging",
+    "aluminum",
+    "base",
+    "calcination",
+    "chelating",
+    "collector_distance",
+    "concentration",
+    "content",
+    "diameter",
+    "dopant",
+    "drying",
+    "feed_rate",
+    "fiber",
+    "fraction",
+    "gel_time",
+    "heating_rate",
+    "holding",
+    "hydrolysis",
+    "humidity",
+    "particle_size",
+    "peptization",
+    "ph",
+    "porosity",
+    "potential",
+    "precursor",
+    "rheology",
+    "sintering",
+    "solid_content",
+    "solvent",
+    "spinneret",
+    "spinnability",
+    "stabilizer",
+    "stirring_speed",
+    "strength",
+    "take_up_speed",
+    "temperature",
+    "time",
+    "viscosity",
+)
 
 CHARACTERIZATION_OUTPUT_KEYS = {
     "xrd_peak_position_2theta_deg",
@@ -66,6 +211,34 @@ def resolve_paper_identity_from_final_dataset_dir(final_dataset_dir: Path) -> di
     return resolve_paper_identity_from_dir(final_dataset_dir.parent)
 
 
+def build_qualified_paper_id(paper_identity: dict[str, Any] | None, paper_id: Any) -> str:
+    paper_text = str(paper_id or "").strip()
+    if not paper_text:
+        return ""
+    category = normalize_official_paper_category((paper_identity or {}).get("paper_category"))
+    return f"{category}/{paper_text}" if category else paper_text
+
+
+def is_metadata_or_bookkeeping_key(value: Any) -> bool:
+    key = str(value or "").strip().lower()
+    if not key:
+        return False
+    if key in METADATA_OR_BOOKKEEPING_KEYS:
+        return True
+    if key.endswith("_id") or key.endswith("_ids"):
+        return True
+    return any(token in key for token in ("figure_id", "table_id", "series_id", "parent_series"))
+
+
+def is_true_parameter_key(value: Any) -> bool:
+    key = str(value or "").strip().lower()
+    if not key:
+        return False
+    if key in TRUE_PARAMETER_KEYS:
+        return True
+    return any(token in key for token in TRUE_PARAMETER_KEY_SUBSTRINGS)
+
+
 def classify_parameter_semantic_role(
     *,
     canonical_key: Any,
@@ -80,19 +253,12 @@ def classify_parameter_semantic_role(
     local = str(local_category or "").strip().lower()
     source = str(source_category or "").strip().lower()
     note = str(normalization_note or "").strip().lower()
+    whitelist_hit = is_true_parameter_key(key_lower)
 
     if not key and ("value_only" in note or scope.endswith(".value")):
         return "metadata_or_bookkeeping", False, "value_only_row"
-    if key_lower in METADATA_OR_BOOKKEEPING_KEYS:
+    if is_metadata_or_bookkeeping_key(key_lower):
         return "metadata_or_bookkeeping", False, "metadata_like_key"
-    if key_lower.endswith("_id") or key_lower.endswith("_ids"):
-        return "metadata_or_bookkeeping", False, "internal_id_field"
-    if any(token in key_lower for token in ("figure_id", "table_id", "series_id", "parent_series")):
-        return "metadata_or_bookkeeping", False, "bookkeeping_field"
-    if "extended_data.parent_series_id" in scope:
-        return "metadata_or_bookkeeping", False, "extended_data_bookkeeping"
-    if "bookkeeping" in scope:
-        return "metadata_or_bookkeeping", False, "bookkeeping_scope"
 
     if scope.startswith("stage4.spectra.peaks"):
         return "characterization_output", False, "characterization_peak_from_stage4"
@@ -104,6 +270,10 @@ def classify_parameter_semantic_role(
         return "characterization_output", False, "characterization_output_category"
     if "stage5_derived_from_stage4_spectra_peak" in note:
         return "characterization_output", False, "characterization_derived_peak_row"
+    if not whitelist_hit and any(token in scope for token in METADATA_SCOPE_HINTS):
+        return "metadata_or_bookkeeping", False, "bookkeeping_scope"
+    if scope.endswith(".value") and not whitelist_hit:
+        return "metadata_or_bookkeeping", False, "value_only_row"
 
     if not key:
         return "unknown", False, "missing_canonical_key"

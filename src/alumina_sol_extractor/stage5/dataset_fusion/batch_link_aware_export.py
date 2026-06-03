@@ -14,12 +14,18 @@ from alumina_sol_extractor.dataset_fusion.link_aware_fields import (
     FINAL_SHOWCASE_FIELDS,
     PROCESS_STEPS_TABLE_FIELDS,
     SAMPLE_PARAMETER_MATRIX_FIELDS,
+    SAMPLE_PARAMETER_MATRIX_LONG_FIELDS,
+    SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS,
     SPECTRA_PARAMETER_LINK_FIELDS,
     build_sample_parameter_matrix_fields,
 )
 from alumina_sol_extractor.dataset_fusion.loaders import read_json
 from alumina_sol_extractor.stage5.dataset_fusion.link_aware_export import generate_link_aware_exports
-from alumina_sol_extractor.stage5.dataset_fusion.semantics import resolve_paper_identity_from_dir
+from alumina_sol_extractor.stage5.dataset_fusion.semantics import (
+    build_qualified_paper_id,
+    is_metadata_or_bookkeeping_key,
+    resolve_paper_identity_from_dir,
+)
 
 REQUIRED_EXPORT_FILES = {
     "final_parameters_linked.csv": "final_parameters_linked.csv",
@@ -63,6 +69,8 @@ def export_batch_link_aware_dataset(
     aggregate_rows = {
         "final_parameters": [],
         "sample_matrix": [],
+        "sample_matrix_long": [],
+        "sample_matrix_missing_diagnosis": [],
         "evidence_links": [],
         "process_step_links": [],
         "spectra_links": [],
@@ -136,6 +144,8 @@ def export_batch_link_aware_dataset(
 
         aggregate_rows["final_parameters"].extend(export_payload.get("final_parameters_linked") or [])
         aggregate_rows["sample_matrix"].extend(export_payload.get("sample_parameter_matrix") or [])
+        aggregate_rows["sample_matrix_long"].extend(export_payload.get("sample_parameter_matrix_long") or [])
+        aggregate_rows["sample_matrix_missing_diagnosis"].extend(export_payload.get("sample_matrix_missing_diagnosis") or [])
         aggregate_rows["evidence_links"].extend(export_payload.get("evidence_parameter_links") or [])
         aggregate_rows["process_step_links"].extend(export_payload.get("process_step_parameter_links") or [])
         aggregate_rows["spectra_links"].extend(export_payload.get("spectra_parameter_links") or [])
@@ -172,6 +182,8 @@ def export_batch_link_aware_dataset(
     sample_matrix_fields = build_sample_parameter_matrix_fields(_collect_dynamic_sample_matrix_keys(aggregate_rows["sample_matrix"]))
     _write_csv_with_fields(output_dir / "all_papers_final_parameters_linked.csv", aggregate_rows["final_parameters"], FINAL_PARAMETERS_LINKED_FIELDS)
     _write_csv_with_fields(output_dir / "all_papers_sample_parameter_matrix.csv", aggregate_rows["sample_matrix"], sample_matrix_fields)
+    _write_csv_with_fields(output_dir / "all_papers_sample_parameter_matrix_long.csv", aggregate_rows["sample_matrix_long"], SAMPLE_PARAMETER_MATRIX_LONG_FIELDS)
+    _write_csv_with_fields(output_dir / "all_papers_sample_matrix_missing_diagnosis.csv", aggregate_rows["sample_matrix_missing_diagnosis"], SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS)
     _write_csv_with_fields(output_dir / "all_papers_evidence_parameter_links.csv", aggregate_rows["evidence_links"], EVIDENCE_PARAMETER_LINK_FIELDS)
     _write_csv_with_fields(output_dir / "all_papers_process_step_parameter_links.csv", aggregate_rows["process_step_links"], EVIDENCE_PARAMETER_LINK_FIELDS)
     _write_csv_with_fields(output_dir / "all_papers_spectra_parameter_links.csv", aggregate_rows["spectra_links"], SPECTRA_PARAMETER_LINK_FIELDS)
@@ -180,11 +192,17 @@ def export_batch_link_aware_dataset(
     _write_csv_with_dynamic_fields(output_dir / "all_papers_excluded_parameters.csv", aggregate_rows["excluded_parameters"])
     _write_csv_with_dynamic_fields(output_dir / "all_papers_parameter_semantic_qa.csv", aggregate_rows["parameter_semantic_qa"])
 
+    category_mismatch_rows = _count_category_mismatch_rows(aggregate_rows)
+    residual_metadata_key_count = sum(
+        1 for row in aggregate_rows["final_parameters"] if is_metadata_or_bookkeeping_key(row.get("canonical_key"))
+    )
     summary = {
+        "semantic_repair_version": "v1.1",
         "paper_count": len(summary_rows),
         "discovered_papers": len(discovered),
         "warnings": warnings,
         "per_paper": summary_rows,
+        "main_parameter_count": len(aggregate_rows["final_parameters"]),
         "total_parameters": sum(int(row.get("total_parameters") or 0) for row in summary_rows),
         "parameters_with_any_link": sum(int(row.get("parameters_with_any_link") or 0) for row in summary_rows),
         "parameters_with_sample_link": sum(int(row.get("parameters_with_sample_link") or 0) for row in summary_rows),
@@ -200,6 +218,8 @@ def export_batch_link_aware_dataset(
         "total_samples": sum(int(row.get("total_samples") or 0) for row in summary_rows),
         "showcase_rows": len(aggregate_rows["showcase"]),
         "sample_matrix_rows": len(aggregate_rows["sample_matrix"]),
+        "sample_matrix_long_rows": len(aggregate_rows["sample_matrix_long"]),
+        "sample_matrix_missing_diagnosis_rows": len(aggregate_rows["sample_matrix_missing_diagnosis"]),
         "process_steps_table_rows": len(aggregate_rows["process_steps_table"]),
         "exported_flat_paper_count": exported_flat_paper_count,
         "exported_category_paper_count": exported_category_paper_count,
@@ -208,6 +228,8 @@ def export_batch_link_aware_dataset(
         "official_paper_count": sum(1 for row in summary_rows if row.get("paper_category_status") == "official"),
         "non_primary_paper_count": sum(1 for row in summary_rows if row.get("paper_category_status") != "official"),
         "missing_identity_row_count": _count_missing_identity_rows(aggregate_rows),
+        "category_mismatch_rows": category_mismatch_rows,
+        "residual_metadata_key_count": residual_metadata_key_count,
         "by_category": by_category,
         "missing_required_file_count": missing_required_file_count,
         "missing_optional_file_count": missing_optional_file_count,
@@ -313,6 +335,8 @@ def _read_existing_export_payload(item: dict[str, Any]) -> dict[str, Any]:
         "summary": summary,
         "final_parameters_linked": _read_csv_rows(export_dir / "final_parameters_linked.csv", paper_id, paper_identity),
         "sample_parameter_matrix": _read_csv_rows(export_dir / "sample_parameter_matrix.csv", paper_id, paper_identity),
+        "sample_parameter_matrix_long": _read_csv_rows(export_dir / "sample_parameter_matrix_long.csv", paper_id, paper_identity),
+        "sample_matrix_missing_diagnosis": _read_csv_rows(export_dir / "sample_matrix_missing_diagnosis.csv", paper_id, paper_identity),
         "evidence_parameter_links": _read_csv_rows(export_dir / "evidence_parameter_links.csv", paper_id, paper_identity),
         "process_step_parameter_links": _read_csv_rows(export_dir / "process_step_parameter_links.csv", paper_id, paper_identity),
         "spectra_parameter_links": _read_csv_rows(export_dir / "spectra_parameter_links.csv", paper_id, paper_identity),
@@ -361,6 +385,7 @@ def _read_csv_rows(path: Path, paper_id: str, paper_identity: dict[str, Any]) ->
         for row in reader:
             payload = dict(row)
             payload.setdefault("paper_id", paper_id)
+            payload.setdefault("qualified_paper_id", build_qualified_paper_id(paper_identity, paper_id))
             payload.setdefault("paper_category", paper_identity.get("paper_category") or "")
             payload.setdefault("paper_category_status", paper_identity.get("paper_category_status") or "")
             payload.setdefault("paper_dir", paper_identity.get("paper_dir") or "")
@@ -419,6 +444,17 @@ def _count_missing_identity_rows(aggregate_rows: dict[str, list[dict[str, Any]]]
     return count
 
 
+def _count_category_mismatch_rows(aggregate_rows: dict[str, list[dict[str, Any]]]) -> int:
+    count = 0
+    for rows in aggregate_rows.values():
+        for row in rows:
+            category = str(row.get("category") or "").strip()
+            paper_category = str(row.get("paper_category") or "").strip()
+            if category and paper_category and category != paper_category:
+                count += 1
+    return count
+
+
 def _csv_value(value: Any) -> Any:
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False)
@@ -430,6 +466,7 @@ def _build_batch_export_report(summary: dict[str, Any]) -> str:
         "# Batch Link-aware Export Report",
         "",
         "## Overview",
+        f"- semantic_repair_version: {summary.get('semantic_repair_version', '')}",
         f"- discovered_papers: {summary['discovered_papers']}",
         f"- exported_papers: {summary['paper_count']}",
         f"- rebuilt_papers: {summary['rebuilt_paper_count']}",
@@ -439,10 +476,13 @@ def _build_batch_export_report(summary: dict[str, Any]) -> str:
         f"- missing_identity_row_count: {summary['missing_identity_row_count']}",
         f"- flat_papers: {summary['exported_flat_paper_count']}",
         f"- categorized_papers: {summary['exported_category_paper_count']}",
+        f"- main_parameter_count: {summary['main_parameter_count']}",
         f"- total_parameters: {summary['total_parameters']}",
         f"- excluded_parameter_count: {summary['excluded_parameter_count']}",
         f"- metadata_or_bookkeeping_count: {summary['metadata_or_bookkeeping_count']}",
         f"- characterization_output_parameter_count: {summary['characterization_output_parameter_count']}",
+        f"- residual_metadata_key_count: {summary['residual_metadata_key_count']}",
+        f"- category_mismatch_rows: {summary['category_mismatch_rows']}",
         f"- parameters_with_any_link: {summary['parameters_with_any_link']}",
         f"- parameters_with_sample_link: {summary['parameters_with_sample_link']}",
         f"- parameters_with_evidence_link: {summary['parameters_with_evidence_link']}",
@@ -453,6 +493,8 @@ def _build_batch_export_report(summary: dict[str, Any]) -> str:
         f"- total_spectra_parameter_links: {summary['total_spectra_parameter_links']}",
         f"- total_samples: {summary['total_samples']}",
         f"- sample_matrix_rows: {summary['sample_matrix_rows']}",
+        f"- sample_matrix_long_rows: {summary['sample_matrix_long_rows']}",
+        f"- sample_matrix_missing_diagnosis_rows: {summary['sample_matrix_missing_diagnosis_rows']}",
         f"- process_steps_table_rows: {summary['process_steps_table_rows']}",
         f"- missing_required_file_count: {summary['missing_required_file_count']}",
         f"- missing_optional_file_count: {summary['missing_optional_file_count']}",

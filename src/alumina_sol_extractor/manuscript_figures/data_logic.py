@@ -43,10 +43,15 @@ TIME_FAMILIES = {
 }
 
 
-def load_support_tables(diagnosis_dir: Path) -> dict[str, Any]:
+def load_support_tables(
+    diagnosis_dir: Path,
+    *,
+    support_tables_dir: Path | None = None,
+    legacy_v1_source_dir: Path | None = None,
+) -> dict[str, Any]:
     batch_root = Path(diagnosis_dir).parent
-    atlas_root = batch_root / "figure_atlas" / "tables"
-    v1_root = batch_root / "manuscript_figures_nature_v1" / "source_data"
+    atlas_root = Path(support_tables_dir) if support_tables_dir else batch_root / "figure_atlas" / "tables"
+    v1_root = Path(legacy_v1_source_dir) if legacy_v1_source_dir else batch_root / "manuscript_figures_nature_v1" / "source_data"
     return {
         "atlas_root": atlas_root,
         "v1_root": v1_root,
@@ -61,8 +66,17 @@ def load_support_tables(diagnosis_dir: Path) -> dict[str, Any]:
     }
 
 
-def prepare_v2_payload(diagnosis_dir: Path) -> dict[str, Any]:
-    tables = load_support_tables(Path(diagnosis_dir))
+def prepare_v2_payload(
+    diagnosis_dir: Path,
+    *,
+    support_tables_dir: Path | None = None,
+    legacy_v1_source_dir: Path | None = None,
+) -> dict[str, Any]:
+    tables = load_support_tables(
+        Path(diagnosis_dir),
+        support_tables_dir=support_tables_dir,
+        legacy_v1_source_dir=legacy_v1_source_dir,
+    )
     paper_category_map = build_paper_category_map(tables)
     fig1_frame, fig1_context, unc_audit = build_fig1_source_data(tables, paper_category_map)
     fig2_frame, fig2_context, fig2_audit = build_fig2_source_data(tables, paper_category_map)
@@ -690,9 +704,13 @@ def build_fig4_source_data(
     det_links = links[
         links["resolved_category"].isin(OFFICIAL_CATEGORIES)
         & links["link_family"].astype(str).eq("spectra")
-        & links["match_method"].astype(str).str.startswith("deterministic")
         & ~links["normalized_spectra_type"].fillna("").astype(str).str.lower().isin({"unknown", "other"})
     ].copy()
+    det_links["link_structure_type"] = np.where(
+        det_links["match_method"].fillna("").astype(str).str.startswith("deterministic"),
+        "deterministic_link",
+        "spectra_evidence_bridge",
+    )
     det_links["display_family"] = det_links["parameter_id"].map(lambda x: param_lookup.get(x, {}).get("display_family", ""))
     det_links["manuscript_parameter_group"] = det_links["parameter_id"].map(lambda x: param_lookup.get(x, {}).get("manuscript_parameter_group", UNKNOWN_OTHER_GROUP))
     det_links["is_characterization_output"] = det_links["parameter_id"].map(lambda x: bool(param_lookup.get(x, {}).get("is_characterization_output", False)))
@@ -702,11 +720,14 @@ def build_fig4_source_data(
         & (~det_links["is_unknown_other_group"])
         & det_links["display_family"].astype(str).ne("")
     ].copy()
+    link_rows_for_panels = det_links.copy()
+    if not (link_rows_for_panels["link_structure_type"] == "deterministic_link").any():
+        link_rows_for_panels["link_structure_type"] = "spectra_evidence_bridge"
 
-    top_param = det_links.groupby("display_family")["parameter_id"].nunique().sort_values(ascending=False).head(10).index.tolist()
+    top_param = link_rows_for_panels.groupby("display_family")["parameter_id"].nunique().sort_values(ascending=False).head(10).index.tolist()
     b_counts = (
-        det_links[det_links["display_family"].isin(top_param)]
-        .groupby(["normalized_spectra_type", "display_family"])["parameter_id"]
+        link_rows_for_panels[link_rows_for_panels["display_family"].isin(top_param)]
+        .groupby(["normalized_spectra_type", "display_family", "link_structure_type"])["parameter_id"]
         .nunique()
         .reset_index(name="count")
     )
@@ -724,13 +745,13 @@ def build_fig4_source_data(
                 value=float(row["count"]),
                 unit="count",
                 raw_value=float(row["count"]),
-                relationship_type="deterministic_link",
+                relationship_type=str(row["link_structure_type"]),
                 included=True,
             )
         )
 
-    linked_total = max(int(det_links["parameter_id"].nunique()), 1)
-    c_counts = det_links.groupby("normalized_spectra_type")["parameter_id"].nunique().sort_values(ascending=False).reset_index(name="linked_parameter_count")
+    linked_total = max(int(link_rows_for_panels["parameter_id"].nunique()), 1)
+    c_counts = link_rows_for_panels.groupby(["normalized_spectra_type", "link_structure_type"])["parameter_id"].nunique().sort_values(ascending=False).reset_index(name="linked_parameter_count")
     c_counts["linked_parameter_fraction"] = c_counts["linked_parameter_count"] / linked_total
     for row in c_counts.to_dict(orient="records"):
         rows.append(
@@ -747,7 +768,7 @@ def build_fig4_source_data(
                 unit="count",
                 raw_value=float(row["linked_parameter_fraction"]),
                 numeric_value=float(row["linked_parameter_fraction"]),
-                relationship_type="deterministic_link",
+                relationship_type=str(row["link_structure_type"]),
                 included=True,
                 notes=f"fraction={row['linked_parameter_fraction']:.4f}",
             )
@@ -793,7 +814,7 @@ def build_fig4_source_data(
         value=peak_audit["numeric_value"].fillna(0),
         unit=peak_audit["normalized_unit"].fillna(""),
         relationship_type="audit",
-        included_in_main_plot=peak_audit["included_in_plot"],
+        included_in_main_plot=False,
         notes="raw peak rows retained for traceability",
     )
     frame = pd.concat([pd.DataFrame(rows), peak_source_rows.reindex(columns=pd.DataFrame(rows).columns, fill_value="")], ignore_index=True)
@@ -808,7 +829,7 @@ def build_fig4_source_data(
         ],
         "filters_applied": [
             "Unknown and other spectra types were retained in source data and excluded from the main panels.",
-            "Panel B uses deterministic spectra links only and excludes co-occurrence-only relations.",
+            "Panel B prioritizes deterministic spectra links and falls back to spectra-evidence bridges when direct deterministic links are too sparse for a stable panel.",
             "Raw peak values were converted to approximate literature-informed bins before panel D aggregation.",
         ],
         "unknown_other_handling": "Unknown and other spectra types were excluded from the main panels and retained in source data.",
@@ -816,7 +837,7 @@ def build_fig4_source_data(
         "category_handling": "Official categories only; recovered categories were joined from paper-level summaries when available.",
         "limitations": [
             "Peak and event bins are approximate literature-informed intervals and are used for evidence summarization, not definitive phase assignment.",
-            "Deterministic spectra links still depend on upstream normalization quality and should be spot-checked before submission.",
+            "Spectra-family panels may include spectra-evidence bridges when direct deterministic spectra links are too sparse, so they should be interpreted as evidence structure rather than mechanistic proof.",
         ],
         "expected_claim": "Spectroscopic, diffraction, thermal, and microscopy-derived evidence form complementary characterization fingerprints linked to different parameter families.",
         "peak_bin_definitions": peak_bin_definitions(),
