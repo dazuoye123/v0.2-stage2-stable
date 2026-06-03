@@ -82,9 +82,10 @@ def build_paper_category_map(tables: dict[str, Any]) -> dict[str, str]:
     frames = []
     for key in ("stage3_paper_summary", "stage4_paper_summary", "normalized_parameters", "normalized_stage4_spectra", "normalized_stage5_links"):
         frame = tables[key].copy()
-        if "paper_id" not in frame.columns or "category" not in frame.columns:
+        category_col = "paper_category" if "paper_category" in frame.columns else "category"
+        if "paper_id" not in frame.columns or category_col not in frame.columns:
             continue
-        subset = frame[["paper_id", "category"]].dropna()
+        subset = frame[["paper_id", category_col]].dropna().rename(columns={category_col: "category"})
         subset["category"] = subset["category"].astype(str)
         subset = subset[subset["category"].isin(OFFICIAL_CATEGORIES)]
         frames.append(subset)
@@ -882,9 +883,12 @@ def build_peak_bin_audit(peaks: pd.DataFrame) -> pd.DataFrame:
 def attach_resolved_category(frame: pd.DataFrame, paper_category_map: dict[str, str]) -> pd.DataFrame:
     frame = frame.copy()
     original = frame["category"].fillna("").astype(str) if "category" in frame.columns else pd.Series("", index=frame.index)
-    resolved = original.where(original.isin(OFFICIAL_CATEGORIES), frame.get("paper_id", pd.Series("", index=frame.index)).map(paper_category_map))
+    paper_category = frame["paper_category"].fillna("").astype(str) if "paper_category" in frame.columns else pd.Series("", index=frame.index)
+    preferred = paper_category.where(paper_category.isin(OFFICIAL_CATEGORIES), original)
+    resolved = preferred.where(preferred.isin(OFFICIAL_CATEGORIES), frame.get("paper_id", pd.Series("", index=frame.index)).map(paper_category_map))
     frame["original_category"] = original
-    frame["resolved_category"] = resolved.fillna(original)
+    frame["paper_category_original"] = paper_category
+    frame["resolved_category"] = resolved.fillna(preferred).fillna(original)
     return frame
 
 

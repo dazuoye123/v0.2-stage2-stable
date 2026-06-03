@@ -16,7 +16,13 @@ def build_link_aware_summary(
     sample_parameter_matrix: list[dict[str, Any]],
     showcase_rows: list[dict[str, Any]],
     include_showcase: bool,
+    excluded_parameters: list[dict[str, Any]] | None = None,
+    parameter_semantic_qa: list[dict[str, Any]] | None = None,
+    paper_identity: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    excluded_parameters = excluded_parameters or []
+    parameter_semantic_qa = parameter_semantic_qa or []
+    paper_identity = paper_identity or {}
     primary_statuses = {"strong_evidence", "process_step_evidence", "linked_evidence", "linked_spectra"}
     evidence_link_statuses = {"strong_evidence", "process_step_evidence", "linked_evidence"}
     showcase_complete = include_showcase and bool(showcase_rows) and any(
@@ -38,7 +44,20 @@ def build_link_aware_summary(
         for row in spectra_parameter_links
         if row.get("created_by") == "deterministic_visual_value_match"
     )
+    excluded_count = len(excluded_parameters)
+    metadata_count = sum(
+        1
+        for row in parameter_semantic_qa
+        if row.get("parameter_semantic_role") == "metadata_or_bookkeeping"
+    )
+    characterization_count = sum(
+        1
+        for row in parameter_semantic_qa
+        if row.get("parameter_semantic_role") == "characterization_output"
+    )
     return {
+        "paper_category": paper_identity.get("paper_category"),
+        "paper_category_status": paper_identity.get("paper_category_status"),
         "total_parameters": len(final_parameters_linked),
         "parameters_with_any_link": sum(
             1
@@ -68,6 +87,9 @@ def build_link_aware_summary(
         "total_samples": len(sample_parameter_matrix),
         "sample_matrix_rows": len(sample_parameter_matrix),
         "showcase_rows": len(showcase_rows),
+        "excluded_parameter_count": excluded_count,
+        "metadata_or_bookkeeping_count": metadata_count,
+        "characterization_output_parameter_count": characterization_count,
         "showcase_is_complete": showcase_complete,
         "showcase_warning": None
         if showcase_complete

@@ -36,6 +36,11 @@ from alumina_sol_extractor.dataset_fusion.spectra_units import (
     normalize_unit_text as normalize_shared_unit_text,
 )
 from alumina_sol_extractor.ontology.ontology_loader import get_ontology_entry_map
+from alumina_sol_extractor.stage5.dataset_fusion.semantics import (
+    CHARACTERIZATION_CATEGORY_HINTS,
+    classify_parameter_semantic_role,
+    resolve_paper_identity_from_final_dataset_dir,
+)
 
 _build_link_aware_summary = build_link_aware_summary
 _build_link_aware_readme = build_link_aware_readme
@@ -70,6 +75,7 @@ def generate_link_aware_exports(
     paper_id: str | None = None,
     project_root: Path | str | None = None,
     include_showcase: bool = True,
+    write_outputs: bool = True,
 ) -> dict[str, Any]:
     inputs = load_link_aware_inputs(final_dataset_dir)
     ontology_map = get_ontology_entry_map(project_root)
@@ -77,6 +83,7 @@ def generate_link_aware_exports(
     paper_id = paper_id or paper.get("paper_id") or Path(final_dataset_dir).parent.name
     title = paper.get("title") or paper_id
     output_dir = Path(output_dir) if output_dir else Path(final_dataset_dir) / "link_aware_exports"
+    paper_identity = resolve_paper_identity_from_final_dataset_dir(Path(final_dataset_dir))
 
     parameters = inputs["parameters"]
     process_steps = inputs["process_steps"]
@@ -85,30 +92,54 @@ def generate_link_aware_exports(
     samples = inputs["samples"]
     links = inputs["links"]
 
-    indexes = _build_indexes(parameters, process_steps, evidence, spectra, samples, links)
+    parameter_semantic_qa = _build_parameter_semantic_qa(
+        parameters,
+        paper_identity=paper_identity,
+        ontology_map=ontology_map,
+    )
+    semantic_lookup = {row["parameter_id"]: row for row in parameter_semantic_qa}
+    included_parameter_ids = {
+        row["parameter_id"]
+        for row in parameter_semantic_qa
+        if bool(row.get("included_in_main_parameter_landscape"))
+    }
+    included_parameters = [row for row in parameters if row.get("parameter_id") in included_parameter_ids]
+    excluded_parameters = [
+        _build_excluded_parameter_row(
+            row,
+            semantic_lookup.get(row.get("parameter_id"), {}),
+            paper_identity=paper_identity,
+        )
+        for row in parameters
+        if row.get("parameter_id") not in included_parameter_ids
+    ]
+
+    indexes = _build_indexes(included_parameters, process_steps, evidence, spectra, samples, links)
     evidence_parameter_links = _build_evidence_parameter_links(
         paper_id=paper_id,
-        parameters=parameters,
+        parameters=included_parameters,
         evidence=evidence,
         links=links,
         indexes=indexes,
+        paper_identity=paper_identity,
     )
     process_step_parameter_links = [
         row for row in evidence_parameter_links if row.get("source_type") == "process_step"
     ]
     spectra_parameter_links = _build_spectra_parameter_links(
         paper_id=paper_id,
-        parameters=parameters,
+        parameters=included_parameters,
         evidence_parameter_links=evidence_parameter_links,
         spectra=spectra,
         links=links,
         indexes=indexes,
+        paper_identity=paper_identity,
     )
     final_parameters_linked = _build_final_parameters_linked(
         paper_id=paper_id,
         title=title,
         paper=paper,
-        parameters=parameters,
+        parameters=included_parameters,
         evidence=evidence,
         spectra=spectra,
         links=links,
@@ -116,6 +147,8 @@ def generate_link_aware_exports(
         indexes=indexes,
         evidence_parameter_links=evidence_parameter_links,
         spectra_parameter_links=spectra_parameter_links,
+        paper_identity=paper_identity,
+        semantic_lookup=semantic_lookup,
     )
     sample_parameter_matrix_long = _build_sample_parameter_matrix_long(
         paper_id=paper_id,
@@ -123,6 +156,7 @@ def generate_link_aware_exports(
         final_parameters_linked=final_parameters_linked,
         evidence_parameter_links=evidence_parameter_links,
         spectra_parameter_links=spectra_parameter_links,
+        paper_identity=paper_identity,
     )
     sample_parameter_matrix = _build_sample_parameter_matrix(
         paper_id=paper_id,
@@ -131,12 +165,14 @@ def generate_link_aware_exports(
         samples=samples,
         sample_parameter_matrix_long=sample_parameter_matrix_long,
         spectra=spectra,
+        paper_identity=paper_identity,
     )
     sample_matrix_missing_diagnosis = _build_sample_matrix_missing_diagnosis(
         samples=samples,
         final_parameters_linked=final_parameters_linked,
         sample_parameter_matrix=sample_parameter_matrix,
         sample_parameter_matrix_long=sample_parameter_matrix_long,
+        paper_identity=paper_identity,
     )
     sample_parameter_matrix_fields = build_sample_parameter_matrix_fields(
         _collect_sample_matrix_dynamic_keys(sample_parameter_matrix)
@@ -146,6 +182,7 @@ def generate_link_aware_exports(
         title=title,
         process_steps=process_steps,
         indexes=indexes,
+        paper_identity=paper_identity,
     )
     final_showcase_table = _build_final_showcase_table(
         paper_id=paper_id,
@@ -164,89 +201,126 @@ def generate_link_aware_exports(
         sample_parameter_matrix=sample_parameter_matrix,
         showcase_rows=final_showcase_table,
         include_showcase=include_showcase,
+        excluded_parameters=excluded_parameters,
+        parameter_semantic_qa=parameter_semantic_qa,
+        paper_identity=paper_identity,
     )
     summary["sample_parameter_matrix_long_rows"] = len(sample_parameter_matrix_long)
     summary["sample_matrix_missing_diagnosis_rows"] = len(sample_matrix_missing_diagnosis)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    safe_write(
-        output_dir / "final_parameters_linked.csv",
-        lambda path: write_csv_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "final_parameters_linked.parquet",
-        lambda path: write_parquet_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "sample_parameter_matrix.csv",
-        lambda path: write_csv_with_fields(path, sample_parameter_matrix, sample_parameter_matrix_fields),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "sample_parameter_matrix_long.csv",
-        lambda path: write_csv_with_fields(path, sample_parameter_matrix_long, SAMPLE_PARAMETER_MATRIX_LONG_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "sample_matrix_missing_diagnosis.csv",
-        lambda path: write_csv_with_fields(path, sample_matrix_missing_diagnosis, SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "evidence_parameter_links.csv",
-        lambda path: write_csv_with_fields(path, evidence_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "process_step_parameter_links.csv",
-        lambda path: write_csv_with_fields(path, process_step_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "spectra_parameter_links.csv",
-        lambda path: write_csv_with_fields(path, spectra_parameter_links, SPECTRA_PARAMETER_LINK_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "process_steps_table.csv",
-        lambda path: write_csv_with_fields(path, process_steps_table, PROCESS_STEPS_TABLE_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    safe_write(
-        output_dir / "final_showcase_table.csv",
-        lambda path: write_csv_with_fields(path, final_showcase_table, FINAL_SHOWCASE_FIELDS),
-        write_warnings,
-        locked_files=locked_files,
-        fallback_outputs=fallback_outputs,
-    )
-    summary["output_warnings"] = write_warnings
-    summary["locked_files"] = locked_files
-    summary["fallback_outputs"] = fallback_outputs
-    summary["process_steps_table_current_is_stale"] = "process_steps_table.csv" in locked_files
-    readme = build_link_aware_readme(include_showcase=include_showcase, output_warnings=write_warnings)
-    write_json(output_dir / "link_aware_export_summary.json", summary)
-    write_markdown(output_dir / "link_aware_export_readme.md", readme)
-    write_markdown(output_dir / "link_aware_export_diagnosis.md", build_link_aware_diagnosis(output_dir))
+    if write_outputs:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        safe_write(
+            output_dir / "final_parameters_linked.csv",
+            lambda path: write_csv_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "final_parameters_linked.parquet",
+            lambda path: write_parquet_with_fields(path, final_parameters_linked, FINAL_PARAMETERS_LINKED_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "sample_parameter_matrix.csv",
+            lambda path: write_csv_with_fields(path, sample_parameter_matrix, sample_parameter_matrix_fields),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "sample_parameter_matrix_long.csv",
+            lambda path: write_csv_with_fields(path, sample_parameter_matrix_long, SAMPLE_PARAMETER_MATRIX_LONG_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "sample_matrix_missing_diagnosis.csv",
+            lambda path: write_csv_with_fields(path, sample_matrix_missing_diagnosis, SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "evidence_parameter_links.csv",
+            lambda path: write_csv_with_fields(path, evidence_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "process_step_parameter_links.csv",
+            lambda path: write_csv_with_fields(path, process_step_parameter_links, EVIDENCE_PARAMETER_LINK_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "spectra_parameter_links.csv",
+            lambda path: write_csv_with_fields(path, spectra_parameter_links, SPECTRA_PARAMETER_LINK_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "process_steps_table.csv",
+            lambda path: write_csv_with_fields(path, process_steps_table, PROCESS_STEPS_TABLE_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        safe_write(
+            output_dir / "final_showcase_table.csv",
+            lambda path: write_csv_with_fields(path, final_showcase_table, FINAL_SHOWCASE_FIELDS),
+            write_warnings,
+            locked_files=locked_files,
+            fallback_outputs=fallback_outputs,
+        )
+        if excluded_parameters:
+            excluded_fields = list(excluded_parameters[0].keys())
+            safe_write(
+                output_dir / "excluded_parameters.csv",
+                lambda path: write_csv_with_fields(path, excluded_parameters, excluded_fields),
+                write_warnings,
+                locked_files=locked_files,
+                fallback_outputs=fallback_outputs,
+            )
+            _safe_write(
+                output_dir / "excluded_parameters.jsonl",
+                lambda path: path.write_text(
+                    "\n".join(json.dumps(row, ensure_ascii=False) for row in excluded_parameters) + "\n",
+                    encoding="utf-8",
+                ),
+                write_warnings,
+                locked_files=locked_files,
+                fallback_outputs=fallback_outputs,
+            )
+        if parameter_semantic_qa:
+            semantic_fields = list(parameter_semantic_qa[0].keys())
+            safe_write(
+                output_dir / "parameter_semantic_qa.csv",
+                lambda path: write_csv_with_fields(path, parameter_semantic_qa, semantic_fields),
+                write_warnings,
+                locked_files=locked_files,
+                fallback_outputs=fallback_outputs,
+            )
+        summary["output_warnings"] = write_warnings
+        summary["locked_files"] = locked_files
+        summary["fallback_outputs"] = fallback_outputs
+        summary["process_steps_table_current_is_stale"] = "process_steps_table.csv" in locked_files
+        readme = build_link_aware_readme(include_showcase=include_showcase, output_warnings=write_warnings)
+        write_json(output_dir / "link_aware_export_summary.json", summary)
+        write_markdown(output_dir / "link_aware_export_readme.md", readme)
+        write_markdown(output_dir / "link_aware_export_diagnosis.md", build_link_aware_diagnosis(output_dir))
+
+    summary.setdefault("output_warnings", write_warnings)
+    summary.setdefault("locked_files", locked_files)
+    summary.setdefault("fallback_outputs", fallback_outputs)
+    summary.setdefault("process_steps_table_current_is_stale", "process_steps_table.csv" in locked_files)
 
     return {
         "paper_id": paper_id,
@@ -262,6 +336,9 @@ def generate_link_aware_exports(
         "process_step_parameter_links": process_step_parameter_links,
         "spectra_parameter_links": spectra_parameter_links,
         "final_showcase_table": final_showcase_table,
+        "excluded_parameters": excluded_parameters,
+        "parameter_semantic_qa": parameter_semantic_qa,
+        "paper_identity": paper_identity,
     }
 
 
@@ -345,6 +422,8 @@ def _build_final_parameters_linked(
     indexes: dict[str, Any],
     evidence_parameter_links: list[dict[str, Any]],
     spectra_parameter_links: list[dict[str, Any]],
+    paper_identity: dict[str, Any],
+    semantic_lookup: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     evidence_link_rows_by_parameter = defaultdict(list)
     for row in evidence_parameter_links:
@@ -358,6 +437,7 @@ def _build_final_parameters_linked(
         parameter_id = parameter.get("parameter_id")
         canonical_key = parameter.get("canonical_key")
         ontology_entry = ontology_map.get(str(canonical_key), {}) if canonical_key else {}
+        semantic = semantic_lookup.get(str(parameter_id), {})
         parameter_links = indexes["links_by_parameter"].get(parameter_id, [])
         sample_links = [
             link
@@ -444,12 +524,20 @@ def _build_final_parameters_linked(
         rows.append(
             {
                 "paper_id": paper_id,
+                "paper_category": paper_identity.get("paper_category"),
+                "paper_category_status": paper_identity.get("paper_category_status"),
+                "paper_dir": paper_identity.get("paper_dir"),
                 "title": title,
                 "parameter_id": parameter_id,
                 "canonical_key": canonical_key,
                 "zh_name": ontology_entry.get("zh_name") or canonical_key,
                 "en_name": ontology_entry.get("en_name") or canonical_key,
-                "category": ontology_entry.get("category"),
+                "category": paper_identity.get("paper_category"),
+                "local_category": ontology_entry.get("category"),
+                "source_category": parameter.get("category"),
+                "parameter_semantic_role": semantic.get("parameter_semantic_role", "synthesis_process_property"),
+                "included_in_main_parameter_landscape": semantic.get("included_in_main_parameter_landscape", True),
+                "exclusion_reason": semantic.get("exclusion_reason", ""),
                 "sample_id_original": sample_id_original,
                 "linked_sample_ids": "; ".join(linked_sample_ids),
                 "resolved_sample_id": resolved_sample_id,
@@ -469,6 +557,8 @@ def _build_final_parameters_linked(
                 "link_confidences": "; ".join(link_confidences),
                 "link_reasoning_preview": " | ".join(link_reasoning_preview),
                 "evidence_text_preview": " | ".join(evidence_text_preview),
+                "source_file": f"{paper_identity.get('paper_dir')}/final_dataset/parameters.jsonl" if paper_identity.get("paper_dir") else "final_dataset/parameters.jsonl",
+                "source_stage": "stage3.final_dataset.parameters",
                 "link_count": len(parameter_links) + len(explicit_evidence_ids) + len(text_reference_rows),
                 "strong_link_count": strong_link_count,
                 "weak_link_count": weak_link_count,
@@ -488,6 +578,7 @@ def _build_sample_parameter_matrix(
     samples: list[dict[str, Any]],
     sample_parameter_matrix_long: list[dict[str, Any]],
     spectra: list[dict[str, Any]],
+    paper_identity: dict[str, Any],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     long_rows_by_sample = defaultdict(list)
@@ -566,6 +657,9 @@ def _build_sample_parameter_matrix(
         linked_spectra_edge_count = sum(int(item.get("_linked_spectra_edge_count") or 0) for item in sample_long_rows)
         row: dict[str, Any] = {
             "paper_id": paper_id,
+            "paper_category": paper_identity.get("paper_category"),
+            "paper_category_status": paper_identity.get("paper_category_status"),
+            "paper_dir": paper_identity.get("paper_dir"),
             "title": title,
             "sample_id": sample_id,
             "sample_name": sample.get("sample_name"),
@@ -648,6 +742,7 @@ def _build_sample_parameter_matrix_long(
     final_parameters_linked: list[dict[str, Any]],
     evidence_parameter_links: list[dict[str, Any]],
     spectra_parameter_links: list[dict[str, Any]],
+    paper_identity: dict[str, Any],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     sample_names = {
@@ -702,6 +797,7 @@ def _build_sample_parameter_matrix_long(
                         linked_process_step_ids=process_step_ids_by_parameter.get(parameter_id, []),
                         value_origin="direct_sample_link",
                         warning=None,
+                        paper_identity=paper_identity,
                     )
                 )
             continue
@@ -726,6 +822,7 @@ def _build_sample_parameter_matrix_long(
                     linked_process_step_ids=process_step_ids_by_parameter.get(parameter_id, []),
                     value_origin="broadcast_global",
                     warning="broadcast_from_global_constant",
+                    paper_identity=paper_identity,
                 )
             )
     return rows
@@ -742,6 +839,7 @@ def _build_sample_matrix_long_row(
     linked_process_step_ids: list[str],
     value_origin: str,
     warning: str | None,
+    paper_identity: dict[str, Any],
 ) -> dict[str, Any]:
     confidence = "high" if value_origin == "direct_sample_link" else "medium"
     if parameter_row.get("sample_resolution_source") == "unresolved":
@@ -753,6 +851,9 @@ def _build_sample_matrix_long_row(
     linked_spectra_ids = _sorted_unique([row.get("spectra_id") for row in spectra_rows if row.get("spectra_id")])
     return {
         "paper_id": paper_id,
+        "paper_category": paper_identity.get("paper_category"),
+        "paper_category_status": paper_identity.get("paper_category_status"),
+        "paper_dir": paper_identity.get("paper_dir"),
         "sample_id": sample_id,
         "sample_name": sample_name,
         "canonical_key": parameter_row.get("canonical_key"),
@@ -778,6 +879,7 @@ def _build_sample_matrix_missing_diagnosis(
     final_parameters_linked: list[dict[str, Any]],
     sample_parameter_matrix: list[dict[str, Any]],
     sample_parameter_matrix_long: list[dict[str, Any]],
+    paper_identity: dict[str, Any],
 ) -> list[dict[str, Any]]:
     matrix_rows_by_sample = {
         str(row.get("sample_id")): row
@@ -844,6 +946,10 @@ def _build_sample_matrix_missing_diagnosis(
             )
             diagnosis_rows.append(
                 {
+                    "paper_id": paper_identity.get("paper_id"),
+                    "paper_category": paper_identity.get("paper_category"),
+                    "paper_category_status": paper_identity.get("paper_category_status"),
+                    "paper_dir": paper_identity.get("paper_dir"),
                     "sample_id": sample_id,
                     "sample_name": sample_name,
                     "canonical_key": canonical_key,
@@ -942,6 +1048,104 @@ def _split_semicolon_field(value: Any) -> list[str]:
     return [part.strip() for part in text.split(";") if part.strip()]
 
 
+def _build_parameter_semantic_qa(
+    parameters: list[dict[str, Any]],
+    *,
+    paper_identity: dict[str, Any],
+    ontology_map: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in parameters:
+        canonical_key = row.get("canonical_key")
+        ontology_entry = ontology_map.get(str(canonical_key), {}) if canonical_key else {}
+        source_category = row.get("category")
+        local_category = ontology_entry.get("category")
+        semantic_role, included, exclusion_reason = classify_parameter_semantic_role(
+            canonical_key=canonical_key,
+            source_scope=row.get("source_scope"),
+            local_category=local_category,
+            source_category=source_category,
+            normalization_note=row.get("normalization_note"),
+        )
+        value_num = row.get("value")
+        try:
+            numeric_value = float(value_num)
+        except (TypeError, ValueError):
+            numeric_value = None
+        rows.append(
+            {
+                "paper_id": row.get("paper_id") or paper_identity.get("paper_id"),
+                "paper_category": paper_identity.get("paper_category"),
+                "paper_category_status": paper_identity.get("paper_category_status"),
+                "paper_dir": paper_identity.get("paper_dir"),
+                "parameter_id": row.get("parameter_id"),
+                "original_name": row.get("raw_name"),
+                "canonical_name": canonical_key,
+                "canonical_key": canonical_key,
+                "local_category": local_category,
+                "source_category": source_category,
+                "parameter_family": _infer_parameter_family_from_key(canonical_key, local_category, row.get("source_scope")),
+                "raw_value": row.get("value"),
+                "numeric_value": numeric_value,
+                "unit": row.get("unit"),
+                "source_scope": row.get("source_scope"),
+                "source_file": f"{paper_identity.get('paper_dir')}/final_dataset/parameters.jsonl" if paper_identity.get("paper_dir") else "final_dataset/parameters.jsonl",
+                "source_stage": "stage5.materialization",
+                "parameter_semantic_role": semantic_role,
+                "included_in_main_parameter_landscape": included,
+                "exclusion_reason": exclusion_reason,
+            }
+        )
+    return rows
+
+
+def _build_excluded_parameter_row(
+    row: dict[str, Any],
+    semantic_row: dict[str, Any],
+    *,
+    paper_identity: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "paper_id": row.get("paper_id") or paper_identity.get("paper_id"),
+        "paper_category": paper_identity.get("paper_category"),
+        "paper_category_status": paper_identity.get("paper_category_status"),
+        "paper_dir": paper_identity.get("paper_dir"),
+        "parameter_id": row.get("parameter_id"),
+        "original_name": row.get("raw_name"),
+        "canonical_name": row.get("canonical_key"),
+        "parameter_family": semantic_row.get("parameter_family"),
+        "raw_value": row.get("value"),
+        "numeric_value": semantic_row.get("numeric_value"),
+        "unit": row.get("unit"),
+        "source_file": semantic_row.get("source_file"),
+        "source_stage": semantic_row.get("source_stage"),
+        "exclusion_reason": semantic_row.get("exclusion_reason"),
+        "parameter_semantic_role": semantic_row.get("parameter_semantic_role"),
+    }
+
+
+def _infer_parameter_family_from_key(canonical_key: Any, local_category: Any, source_scope: Any) -> str:
+    key = _string_or_none(canonical_key) or ""
+    lower = key.lower()
+    local = (_string_or_none(local_category) or "").lower()
+    scope = (_string_or_none(source_scope) or "").lower()
+    if any(token in lower for token in ("xrd_peak", "2theta")):
+        return "XRD peak"
+    if "ftir_peak" in lower:
+        return "FTIR peak"
+    if lower.startswith("nmr_") or "chemical_shift" in lower:
+        return "NMR shift"
+    if "raman_peak" in lower:
+        return "Raman peak"
+    if lower.startswith(("tg_", "dsc_")) or "thermal_event" in lower:
+        return "TG/DSC event"
+    if "spectra" in scope or local in CHARACTERIZATION_CATEGORY_HINTS:
+        return "characterization output"
+    if "ph" == lower or lower.endswith("_ph"):
+        return "pH"
+    return local_category or "other"
+
+
 def _collect_sample_matrix_dynamic_keys(rows: list[dict[str, Any]]) -> list[str]:
     reserved_fields = set(SAMPLE_PARAMETER_MATRIX_FIELDS)
     dynamic_keys: list[str] = []
@@ -961,6 +1165,7 @@ def _build_process_steps_table(
     title: str,
     process_steps: list[dict[str, Any]],
     indexes: dict[str, Any],
+    paper_identity: dict[str, Any],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, step in enumerate(process_steps, start=1):
@@ -979,6 +1184,9 @@ def _build_process_steps_table(
         rows.append(
             {
                 "paper_id": paper_id,
+                "paper_category": paper_identity.get("paper_category"),
+                "paper_category_status": paper_identity.get("paper_category_status"),
+                "paper_dir": paper_identity.get("paper_dir"),
                 "title": title,
                 "step_id": step_id,
                 "step_order": step.get("step_order") or index,
@@ -1015,6 +1223,8 @@ def _build_process_steps_table(
                 ),
                 "link_confidences": "; ".join(_sorted_unique([link.get("confidence") for link, _ in linked_parameters])),
                 "evidence_text": step.get("evidence_text"),
+                "source_file": f"{paper_identity.get('paper_dir')}/final_dataset/process_steps.jsonl" if paper_identity.get("paper_dir") else "final_dataset/process_steps.jsonl",
+                "source_stage": "stage5.link_aware_export",
                 "confidence": step.get("confidence"),
                 "needs_manual_review": step.get("needs_manual_review"),
             }
@@ -1029,6 +1239,7 @@ def _build_evidence_parameter_links(
     evidence: list[dict[str, Any]],
     links: list[dict[str, Any]],
     indexes: dict[str, Any],
+    paper_identity: dict[str, Any],
 ) -> list[dict[str, Any]]:
     evidence_by_id = indexes["evidence_by_id"]
     parameter_by_id = indexes["parameters_by_id"]
@@ -1055,6 +1266,9 @@ def _build_evidence_parameter_links(
         rows.append(
             {
                 "paper_id": paper_id,
+                "paper_category": paper_identity.get("paper_category"),
+                "paper_category_status": paper_identity.get("paper_category_status"),
+                "paper_dir": paper_identity.get("paper_dir"),
                 "source_type": source_type,
                 "source_id": source_id,
                 "evidence_text_preview": evidence_text_preview,
@@ -1071,6 +1285,8 @@ def _build_evidence_parameter_links(
                 if parameter_row.get("unit") == "text"
                 else normalize_parameter_unit(parameter_row.get("unit"), parameter_row.get("canonical_key")),
                 "sample_id": parameter_row.get("sample_id"),
+                "source_file": f"{paper_identity.get('paper_dir')}/final_dataset/linking/links.jsonl" if paper_identity.get("paper_dir") else "final_dataset/linking/links.jsonl",
+                "source_stage": "stage5.link_aware_export",
                 "link_type": link_type,
                 "confidence": confidence,
                 "reasoning": reasoning,
@@ -1161,6 +1377,7 @@ def _build_spectra_parameter_links(
     spectra: list[dict[str, Any]],
     links: list[dict[str, Any]],
     indexes: dict[str, Any],
+    paper_identity: dict[str, Any],
 ) -> list[dict[str, Any]]:
     parameter_by_id = indexes["parameters_by_id"]
     spectra_by_id = indexes["spectra_by_id"]
@@ -1196,6 +1413,9 @@ def _build_spectra_parameter_links(
         rows.append(
             {
                 "paper_id": paper_id,
+                "paper_category": paper_identity.get("paper_category"),
+                "paper_category_status": paper_identity.get("paper_category_status"),
+                "paper_dir": paper_identity.get("paper_dir"),
                 "spectra_id": spectra_id,
                 "figure_id": figure_id,
                 "figure_type": figure_type,
@@ -1211,6 +1431,8 @@ def _build_spectra_parameter_links(
                 "parameter_value": parameter_value,
                 "unit": None if unit == "text" else normalize_parameter_unit(unit, canonical_key),
                 "sample_id": sample_id,
+                "source_file": f"{paper_identity.get('paper_dir')}/final_dataset/spectra.jsonl" if paper_identity.get("paper_dir") else "final_dataset/spectra.jsonl",
+                "source_stage": "stage5.link_aware_export",
                 "link_type": link_type,
                 "confidence": confidence,
                 "reasoning": reasoning,

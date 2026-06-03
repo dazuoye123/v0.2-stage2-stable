@@ -162,11 +162,12 @@ def test_link_aware_export_surfaces_spectra_links(tmp_path: Path) -> None:
 
     result = generate_link_aware_exports(dataset_dir, include_showcase=False)
 
-    assert result["summary"]["parameters_with_spectra_link"] == 1
-    assert result["summary"]["total_spectra_parameter_links"] == 1
-    assert result["spectra_parameter_links"]
-    assert result["spectra_parameter_links"][0]["canonical_key"] == "ftir_peak_position_cm_1"
-    assert result["final_parameters_linked"][0]["evidence_status"] == "linked_spectra"
+    assert result["summary"]["parameters_with_spectra_link"] == 0
+    assert result["summary"]["total_spectra_parameter_links"] == 0
+    assert result["spectra_parameter_links"] == []
+    assert result["final_parameters_linked"] == []
+    assert result["excluded_parameters"][0]["parameter_id"] == "param-ftir-467"
+    assert result["excluded_parameters"][0]["parameter_semantic_role"] == "characterization_output"
 
 
 def test_link_aware_export_normalizes_peak_units_by_spectrum_type(tmp_path: Path) -> None:
@@ -298,14 +299,12 @@ def test_link_aware_export_normalizes_peak_units_by_spectrum_type(tmp_path: Path
 
     result = generate_link_aware_exports(dataset_dir, include_showcase=False)
 
-    final_by_key = {row["canonical_key"]: row for row in result["final_parameters_linked"]}
-    spectra_by_key = {row["canonical_key"]: row for row in result["spectra_parameter_links"]}
-    assert final_by_key["ftir_peak_position_cm_1"]["unit"] == "cm-1"
-    assert final_by_key["xrd_peak_position_2theta_deg"]["unit"] == "2theta_deg"
-    assert final_by_key["nmr_27Al_peak_position_ppm"]["unit"] == "ppm"
-    assert spectra_by_key["ftir_peak_position_cm_1"]["peak_unit"] == "cm-1"
-    assert spectra_by_key["xrd_peak_position_2theta_deg"]["peak_unit"] == "2theta_deg"
-    assert spectra_by_key["nmr_27Al_peak_position_ppm"]["peak_unit"] == "ppm"
+    assert result["final_parameters_linked"] == []
+    assert result["spectra_parameter_links"] == []
+    qa_rows = {row["parameter_id"]: row for row in result["parameter_semantic_qa"]}
+    assert qa_rows["param-ftir-468"]["parameter_semantic_role"] == "characterization_output"
+    assert qa_rows["param-xrd-25"]["parameter_semantic_role"] == "characterization_output"
+    assert qa_rows["param-nmr-62"]["parameter_semantic_role"] == "characterization_output"
 
 
 def test_link_aware_export_counts_direct_text_refs_as_conservative_evidence(tmp_path: Path) -> None:

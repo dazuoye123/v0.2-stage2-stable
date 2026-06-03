@@ -29,12 +29,20 @@ CORE_SAMPLE_MATRIX_KEYS = [
 
 FINAL_PARAMETERS_LINKED_FIELDS = [
     "paper_id",
+    "paper_category",
+    "paper_category_status",
+    "paper_dir",
     "title",
     "parameter_id",
     "canonical_key",
     "zh_name",
     "en_name",
     "category",
+    "local_category",
+    "source_category",
+    "parameter_semantic_role",
+    "included_in_main_parameter_landscape",
+    "exclusion_reason",
     "sample_id_original",
     "linked_sample_ids",
     "resolved_sample_id",
@@ -54,6 +62,8 @@ FINAL_PARAMETERS_LINKED_FIELDS = [
     "link_confidences",
     "link_reasoning_preview",
     "evidence_text_preview",
+    "source_file",
+    "source_stage",
     "link_count",
     "strong_link_count",
     "weak_link_count",
@@ -64,6 +74,9 @@ FINAL_PARAMETERS_LINKED_FIELDS = [
 
 SAMPLE_PARAMETER_MATRIX_BASE_FIELDS = [
     "paper_id",
+    "paper_category",
+    "paper_category_status",
+    "paper_dir",
     "title",
     "sample_id",
     "sample_name",
@@ -114,6 +127,9 @@ SAMPLE_PARAMETER_MATRIX_FIELDS = build_sample_parameter_matrix_fields()
 
 SAMPLE_PARAMETER_MATRIX_LONG_FIELDS = [
     "paper_id",
+    "paper_category",
+    "paper_category_status",
+    "paper_dir",
     "sample_id",
     "sample_name",
     "canonical_key",
@@ -130,6 +146,10 @@ SAMPLE_PARAMETER_MATRIX_LONG_FIELDS = [
 ]
 
 SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS = [
+    "paper_id",
+    "paper_category",
+    "paper_category_status",
+    "paper_dir",
     "sample_id",
     "sample_name",
     "canonical_key",
@@ -143,6 +163,9 @@ SAMPLE_MATRIX_MISSING_DIAGNOSIS_FIELDS = [
 
 EVIDENCE_PARAMETER_LINK_FIELDS = [
     "paper_id",
+    "paper_category",
+    "paper_category_status",
+    "paper_dir",
     "source_type",
     "source_id",
     "evidence_text_preview",
@@ -157,6 +180,8 @@ EVIDENCE_PARAMETER_LINK_FIELDS = [
     "parameter_value",
     "unit",
     "sample_id",
+    "source_file",
+    "source_stage",
     "link_type",
     "confidence",
     "reasoning",
@@ -166,6 +191,9 @@ EVIDENCE_PARAMETER_LINK_FIELDS = [
 
 SPECTRA_PARAMETER_LINK_FIELDS = [
     "paper_id",
+    "paper_category",
+    "paper_category_status",
+    "paper_dir",
     "spectra_id",
     "figure_id",
     "figure_type",
@@ -181,6 +209,8 @@ SPECTRA_PARAMETER_LINK_FIELDS = [
     "parameter_value",
     "unit",
     "sample_id",
+    "source_file",
+    "source_stage",
     "link_type",
     "confidence",
     "reasoning",
@@ -202,6 +232,9 @@ FINAL_SHOWCASE_FIELDS = [
 
 PROCESS_STEPS_TABLE_FIELDS = [
     "paper_id",
+    "paper_category",
+    "paper_category_status",
+    "paper_dir",
     "title",
     "step_id",
     "step_order",
@@ -231,6 +264,8 @@ PROCESS_STEPS_TABLE_FIELDS = [
     "linked_units",
     "link_confidences",
     "evidence_text",
+    "source_file",
+    "source_stage",
     "confidence",
     "needs_manual_review",
 ]

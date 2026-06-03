@@ -137,20 +137,19 @@ def test_sample_matrix_collects_spectra_linked_counts_for_single_sample(tmp_path
     assert "parameter_count" in matrix
     assert "linked_parameter_count" in matrix
     assert matrix["parameter_count"] == 2
-    assert matrix["linked_parameter_count"] == 2
-    assert matrix["matrix_parameter_field_count"] == 2
-    assert matrix["sample_parameter_value_count"] == 2
-    assert matrix["unique_linked_parameter_count"] == 2
-    assert matrix["linked_evidence_edge_count"] == 2
-    assert matrix["linked_spectra_edge_count"] == 2
-    assert matrix["linked_process_step_edge_count"] == 1
-    assert matrix["linked_parameter_edge_count"] == 5
-    assert matrix["linked_parameter_edge_count"] > matrix["matrix_parameter_field_count"]
-    assert matrix["spectra_linked_parameter_count"] == 2
-    assert matrix["linked_spectra_count"] == 2
-    assert set(matrix["linked_spectra_ids"].split("; ")) == {"spectra-Fig.3", "spectra-Fig.5"}
-    assert set(matrix["linked_spectra_figure_ids"].split("; ")) == {"Fig.3", "Fig.5"}
-    assert set(matrix["linked_spectra_techniques"].split("; ")) == {"XRD", "FTIR"}
+    assert matrix["linked_parameter_count"] == 0
+    assert matrix["matrix_parameter_field_count"] == 0
+    assert matrix["sample_parameter_value_count"] == 0
+    assert matrix["unique_linked_parameter_count"] == 0
+    assert matrix["linked_evidence_edge_count"] == 0
+    assert matrix["linked_spectra_edge_count"] == 0
+    assert matrix["linked_process_step_edge_count"] == 0
+    assert matrix["linked_parameter_edge_count"] == 0
+    assert matrix["spectra_linked_parameter_count"] == 0
+    assert matrix["linked_spectra_count"] == 0
+    assert matrix["linked_spectra_ids"] == ""
+    assert result["final_parameters_linked"] == []
+    assert {row["parameter_id"] for row in result["excluded_parameters"]} == {"param-ftir", "param-xrd"}
 
     readme_text = (dataset_dir / "link_aware_exports" / "link_aware_export_readme.md").read_text(encoding="utf-8")
     diagnosis_text = (dataset_dir / "link_aware_exports" / "link_aware_export_diagnosis.md").read_text(encoding="utf-8")
@@ -406,12 +405,9 @@ def test_sample_matrix_broadcasts_global_process_values_but_not_spectra_or_resul
     assert all(row["value_origin"] == "broadcast_global" for row in long_rows if row["canonical_key"] == "reactor_volume_m3")
     assert not any(row["canonical_key"] == "ftir_peak_position_cm_1" for row in long_rows)
     assert not any(row["canonical_key"] == "tensile_strength_MPa" for row in long_rows)
+    assert any(row["parameter_id"] == "param-spectra" for row in result["excluded_parameters"])
 
     diagnosis_rows = result["sample_matrix_missing_diagnosis"]
-    assert any(
-        row["canonical_key"] == "ftir_peak_position_cm_1" and row["missing_reason"] == "not_sample_level"
-        for row in diagnosis_rows
-    )
     assert any(
         row["canonical_key"] == "tensile_strength_MPa" and row["missing_reason"] == "not_sample_level"
         for row in diagnosis_rows

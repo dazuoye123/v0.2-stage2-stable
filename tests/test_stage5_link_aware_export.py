@@ -48,7 +48,7 @@ def _build_dataset(tmp_path: Path, *, links: list[dict] | None = None, spectra: 
                 "sample_id": None,
                 "canonical_key": "aluminum_source",
                 "raw_name": "aluminum source",
-                "value": "异丙醇铝",
+                "value": "寮備笝閱囬摑",
                 "unit": "text",
                 "source_scope": "global_constants.additional_parameter_records",
                 "evidence_refs": [{"evidence_id": "ev-1"}],
@@ -110,20 +110,20 @@ def _build_dataset(tmp_path: Path, *, links: list[dict] | None = None, spectra: 
             {
                 "evidence_id": "ev-1",
                 "evidence_type": "figure",
-                "figure_id": "图1",
+                "figure_id": "fig-1",
                 "table_id": None,
                 "figure_type": "photo_image",
-                "caption": "图1 evidence",
+                "caption": "fig-1 evidence",
                 "fact_summary": ["evidence summary"],
                 "detailed_observation": "evidence details",
             },
             {
                 "evidence_id": "ev-2",
                 "evidence_type": "figure",
-                "figure_id": "图2.2",
+                "figure_id": "fig-2",
                 "table_id": None,
                 "figure_type": "nmr_spectrum",
-                "caption": "图2.2 NMR",
+                "caption": "fig-2 NMR",
                 "fact_summary": ["62.5 ppm peak"],
                 "detailed_observation": "NMR evidence",
             },
@@ -168,7 +168,7 @@ def test_link_aware_export_uses_links_and_does_not_modify_sources(tmp_path: Path
             "link_id": "link-3",
             "paper_id": "paper-1",
             "source_type": "spectra_record",
-            "source_id": "spectra-图2.2",
+            "source_id": "spectra-fig-2",
             "target_type": "evidence_object",
             "target_id": "ev-2",
             "link_type": "same_figure",
@@ -180,7 +180,7 @@ def test_link_aware_export_uses_links_and_does_not_modify_sources(tmp_path: Path
             "link_id": "link-4",
             "paper_id": "paper-1",
             "source_type": "spectra_peak",
-            "source_id": "spectra-图2.2-peak-01",
+            "source_id": "spectra-fig-2-peak-01",
             "target_type": "parameter",
             "target_id": "param-3",
             "link_type": "supports",
@@ -191,7 +191,7 @@ def test_link_aware_export_uses_links_and_does_not_modify_sources(tmp_path: Path
     ]
     spectra = [
         {
-            "figure_id": "图2.2",
+            "figure_id": "fig-2",
             "figure_type": "nmr_spectrum",
             "schema_name": "NMRExtraction",
             "technique": "27Al NMR",
@@ -222,25 +222,28 @@ def test_link_aware_export_uses_links_and_does_not_modify_sources(tmp_path: Path
     param2 = next(row for row in linked_rows if row["parameter_id"] == "param-2")
     assert param2["value_type"] == "range"
 
-    param3 = next(row for row in linked_rows if row["parameter_id"] == "param-3")
-    assert param3["linked_spectra_ids"] == "spectra-图2.2"
-    assert param3["linked_peak_positions"] == "62.5"
-    assert param3["evidence_status"] == "linked_spectra"
+    assert all(row["parameter_id"] != "param-3" for row in linked_rows)
+    assert any(
+        row["parameter_id"] == "param-3" and row["parameter_semantic_role"] == "characterization_output"
+        for row in result["parameter_semantic_qa"]
+    )
+    assert any(
+        row["parameter_id"] == "param-3" and row["exclusion_reason"] == "characterization_output_key"
+        for row in result["excluded_parameters"]
+    )
 
     sample_matrix = result["sample_parameter_matrix"]
     row_s1 = next(row for row in sample_matrix if row["sample_id"] == "S1")
-    assert row_s1["aluminum_source"] == "异丙醇铝"
-    assert row_s1["nmr_27Al_peak_position_ppm"] == "62.5 ppm"
+    assert row_s1["aluminum_source"] == "寮備笝閱囬摑"
+    assert row_s1.get("nmr_27Al_peak_position_ppm", "") in {"", None}
 
     evidence_links = result["evidence_parameter_links"]
-    assert len(evidence_links) == 2
-    assert {row["parameter_id"] for row in evidence_links} == {"param-1", "param-4"}
-    assert {row["evidence_id"] for row in evidence_links} == {"ev-1", "ev-2"}
+    assert len(evidence_links) == 1
+    assert {row["parameter_id"] for row in evidence_links} == {"param-1"}
+    assert {row["evidence_id"] for row in evidence_links} == {"ev-1"}
 
     spectra_links = result["spectra_parameter_links"]
-    assert len(spectra_links) >= 1
-    assert any(row["peak_position"] == 62.5 for row in spectra_links)
-    assert any(row["link_type"] == "indirect_spectra_evidence_parameter" and row["parameter_id"] == "param-4" for row in spectra_links)
+    assert all(row["parameter_id"] != "param-3" for row in spectra_links)
 
     showcase = result["final_showcase_table"]
     assert showcase
@@ -255,6 +258,8 @@ def test_link_aware_export_uses_links_and_does_not_modify_sources(tmp_path: Path
     assert (dataset_dir / "link_aware_exports" / "evidence_parameter_links.csv").exists()
     assert (dataset_dir / "link_aware_exports" / "spectra_parameter_links.csv").exists()
     assert (dataset_dir / "link_aware_exports" / "final_showcase_table.csv").exists()
+    assert (dataset_dir / "link_aware_exports" / "excluded_parameters.csv").exists()
+    assert (dataset_dir / "link_aware_exports" / "parameter_semantic_qa.csv").exists()
 
 
 def test_link_aware_export_handles_missing_links_and_empty_spectra(tmp_path: Path) -> None:
@@ -264,28 +269,7 @@ def test_link_aware_export_handles_missing_links_and_empty_spectra(tmp_path: Pat
     assert result["summary"]["parameters_missing_all_links"] >= 1
     spectra_table = dataset_dir / "link_aware_exports" / "spectra_parameter_links.csv"
     frame = pd.read_csv(spectra_table)
-    assert list(frame.columns) == [
-        "paper_id",
-        "spectra_id",
-        "figure_id",
-        "figure_type",
-        "technique",
-        "peak_position",
-        "peak_unit",
-        "assignment",
-        "source",
-        "observed_value",
-        "observed_unit",
-        "parameter_id",
-        "canonical_key",
-        "parameter_value",
-        "unit",
-        "sample_id",
-        "link_type",
-        "confidence",
-        "reasoning",
-        "created_by",
-    ]
+    assert {"paper_id", "paper_category", "paper_category_status", "paper_dir", "source_file", "source_stage", "spectra_id", "parameter_id"}.issubset(frame.columns)
     assert frame.empty
 
 

@@ -56,7 +56,9 @@ def _materialize_link_rows(
         parameter_id = normalize_text(row.get("parameter_id"))
         rows.append(
             {
-                "category": normalize_category(row.get("category")),
+                "category": normalize_category(row.get("paper_category") or row.get("category")),
+                "paper_category": normalize_category(row.get("paper_category") or row.get("category")),
+                "paper_category_status": normalize_text(row.get("paper_category_status")),
                 "paper_id": paper_id,
                 "link_family": link_family,
                 "source_id": source_id,
@@ -73,6 +75,8 @@ def _materialize_link_rows(
                 "link_count_or_weight": 1,
                 "source_table": source_table,
                 "match_method": normalize_text(row.get("created_by") or row.get("reasoning")),
+                "source_file": normalize_text(row.get("source_file")),
+                "source_stage": normalize_text(row.get("source_stage")),
             }
         )
     return rows
@@ -89,6 +93,8 @@ def _materialize_sample_links(normalized_parameters: pd.DataFrame, sample_matrix
         rows.append(
             {
                 "category": row.get("category"),
+                "paper_category": row.get("paper_category", row.get("category")),
+                "paper_category_status": row.get("paper_category_status", ""),
                 "paper_id": row.get("paper_id"),
                 "link_family": "sample",
                 "source_id": row.get("sample_id"),
@@ -102,6 +108,8 @@ def _materialize_sample_links(normalized_parameters: pd.DataFrame, sample_matrix
                 "link_count_or_weight": 1,
                 "source_table": "all_papers_final_parameters_linked.csv",
                 "match_method": "sample_link",
+                "source_file": "",
+                "source_stage": "stage5.link_aware_export",
             }
         )
     return rows
