@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from .captions import build_caption, write_caption
+from .data_logic import prepare_v2_payload
 from .io import copy_file, ensure_dir, write_frame, write_json, write_markdown
 from .loaders import figure_plan_lookup, load_diagnosis_payload
 from .main_figures import build_fig1, build_fig2, build_fig4
@@ -48,6 +49,7 @@ def run_manuscript_figures(
 ) -> dict[str, Any]:
     selected = figures or ["Fig1", "Fig2", "Fig4"]
     payload = load_diagnosis_payload(Path(diagnosis_dir))
+    v2_payload = prepare_v2_payload(Path(diagnosis_dir))
     adapter = detect_nature_skills(nature_skills_dir)
     plan_lookup = figure_plan_lookup(payload["figure_plan_json"])
 
@@ -60,6 +62,7 @@ def run_manuscript_figures(
             "nature_skills": adapter,
             "figures": selected,
             "input_source_tables": [_source_table_path(payload["source_root"], figure_id) for figure_id in selected],
+            "support_tables_dir": str(v2_payload["contexts"]["Fig1"].get("atlas_root", Path(diagnosis_dir).parent / "figure_atlas" / "tables")),
         }
 
     main_root = ensure_dir(root / "main_figures")
@@ -68,6 +71,7 @@ def run_manuscript_figures(
     captions_root = ensure_dir(root / "captions")
     contact_root = ensure_dir(root / "contact_sheets")
     qc_root = ensure_dir(root / "qc")
+    audit_records: list[dict[str, Any]] = []
 
     records: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -76,8 +80,9 @@ def run_manuscript_figures(
             records.append(
                 _generate_one(
                     figure_id=figure_id,
-                    frame=payload["figures"][figure_id],
+                    frame=v2_payload["figures"][figure_id],
                     plan=plan_lookup.get(figure_id, {}),
+                    context=v2_payload["contexts"][figure_id],
                     main_root=main_root,
                     source_root=source_root,
                     figure_data_root=figure_data_root,
@@ -91,7 +96,13 @@ def run_manuscript_figures(
                 continue
             raise
 
+    for audit_name, audit_frame in v2_payload["audits"].items():
+        audit_path = write_frame(qc_root / audit_name, audit_frame)
+        audit_records.append({"audit_name": audit_name, "path": str(audit_path), "row_count": int(len(audit_frame))})
+
     contact_sheet = _build_contact_sheet(records, contact_root / "main_figures_contact_sheet.png")
+    qc_summary = _build_qc_summary(records, audit_records)
+    qc_summary_path = write_frame(qc_root / "qc_summary.csv", qc_summary)
     manifest = {
         "generated_at": datetime.now().isoformat(),
         "input_diagnosis_dir": str(diagnosis_dir),
@@ -104,6 +115,7 @@ def run_manuscript_figures(
         "fallback_reason": adapter["fallback_reason"],
         "figure_count": len(records),
         "figures": records,
+        "qc_audits": audit_records,
         "warnings": warnings,
         "data_safety": {
             "stage3_rerun": False,
@@ -121,6 +133,7 @@ def run_manuscript_figures(
         "manifest": str(root / "manuscript_figures_manifest.json"),
         "index": str(root / "manuscript_figures_index.csv"),
         "contact_sheet": str(contact_sheet),
+        "qc_summary": str(qc_summary_path),
         "figure_count": len(records),
         "nature_skills": adapter,
     }
@@ -131,6 +144,7 @@ def _generate_one(
     figure_id: str,
     frame: pd.DataFrame,
     plan: dict[str, Any],
+    context: dict[str, Any],
     main_root: Path,
     source_root: Path,
     figure_data_root: Path,
@@ -148,21 +162,24 @@ def _generate_one(
     copy_file(source_csv_path, source_root / source_data_name)
 
     builder = FIGURE_BUILDERS[figure_id]
-    fig_paths, meta = builder(frame, figure_dir / prefix)
+    fig_paths, meta = builder(frame, figure_dir / prefix, context=context)
     figure_data = {
         "figure_id": figure_id,
         "title": FIGURE_TITLES[figure_id],
         "scientific_question": plan.get("scientific_question", ""),
-        "expected_claim": plan.get("expected_claim", ""),
+        "expected_claim": context.get("expected_claim", plan.get("expected_claim", "")),
         "source_tables": sorted(set(frame["source_table"].dropna().astype(str))) if "source_table" in frame.columns else [],
         "panels": meta["panels"],
         "filters_applied": meta["filters_applied"],
         "unknown_other_handling": meta["unknown_other_handling"],
         "unit_handling": meta["unit_handling"],
+        "category_handling": meta["category_handling"],
         "limitations": meta["limitations"],
         "row_counts": meta["row_counts"],
+        "excluded_row_counts": meta["excluded_row_counts"],
         "generated_at": datetime.now().isoformat(),
     }
+    figure_data.update(meta.get("extra_metadata", {}))
     figure_data_path = export_figure_data(figure_data, figure_dir / figure_data_name)
     copy_file(figure_data_path, figure_data_root / figure_data_name)
 
@@ -170,10 +187,10 @@ def _generate_one(
         figure_id=figure_id,
         title=FIGURE_TITLES[figure_id],
         scientific_question=plan.get("scientific_question", ""),
-        expected_claim=plan.get("expected_claim", ""),
-        panel_descriptions=[text.strip() for text in str(plan.get("panels", "")).split(";") if text.strip()],
+        expected_claim=context.get("expected_claim", plan.get("expected_claim", "")),
+        panel_descriptions=meta.get("panel_descriptions", [text.strip() for text in str(plan.get("panels", "")).split(";") if text.strip()]),
         source_tables=figure_data["source_tables"],
-        filtering_and_normalization=meta["filters_applied"] + [meta["unknown_other_handling"], meta["unit_handling"]],
+        filtering_and_normalization=meta["filters_applied"] + [meta["unknown_other_handling"], meta["unit_handling"], meta["category_handling"]],
         limitations=meta["limitations"],
     )
     caption_path = write_caption(figure_dir / caption_name, caption_text)
@@ -228,7 +245,7 @@ def _build_contact_sheet(records: list[dict[str, Any]], output_path: Path) -> Pa
 
 def _build_readme(records: list[dict[str, Any]], adapter: dict[str, Any], warnings: list[str], contact_sheet: Path) -> str:
     lines = [
-        "# Manuscript Figures Nature v1",
+        "# Manuscript Figures Nature v2",
         "",
         "## Nature-skills status",
         f"- nature_skills_used: {adapter['nature_skills_used']}",
@@ -258,3 +275,28 @@ def _build_readme(records: list[dict[str, Any]], adapter: dict[str, Any], warnin
 
 def _source_table_path(source_root: Path, figure_id: str) -> str:
     return str(source_root / f"{FIGURE_DIR_NAMES[figure_id]}_source.csv")
+
+
+def _build_qc_summary(records: list[dict[str, Any]], audit_records: list[dict[str, Any]]) -> pd.DataFrame:
+    rows = []
+    for record in records:
+        rows.append(
+            {
+                "entry_type": "figure",
+                "name": record["figure_id"],
+                "path": record["output_png"],
+                "row_count": "",
+                "status": "generated",
+            }
+        )
+    for audit in audit_records:
+        rows.append(
+            {
+                "entry_type": "audit_table",
+                "name": audit["audit_name"],
+                "path": audit["path"],
+                "row_count": audit["row_count"],
+                "status": "generated",
+            }
+        )
+    return pd.DataFrame(rows)

@@ -32,6 +32,8 @@ def safe_heatmap(
     value_col: str,
     cmap: str = "Blues",
     normalize: bool = False,
+    colorbar_label: str | None = None,
+    value_range: tuple[float, float] | None = None,
 ) -> pd.DataFrame:
     if frame.empty:
         ax.axis("off")
@@ -40,12 +42,18 @@ def safe_heatmap(
     pivot = frame.pivot_table(index=row_col, columns=col_col, values=value_col, aggfunc="sum", fill_value=0)
     if normalize:
         pivot = pivot.divide(pivot.max(axis=0).replace(0, 1), axis=1)
-    image = ax.imshow(pivot.to_numpy(dtype=float), aspect="auto", cmap=cmap)
+    imshow_kwargs: dict[str, Any] = {"aspect": "auto", "cmap": cmap}
+    if value_range is not None:
+        imshow_kwargs["vmin"] = value_range[0]
+        imshow_kwargs["vmax"] = value_range[1]
+    image = ax.imshow(pivot.to_numpy(dtype=float), **imshow_kwargs)
     ax.set_xticks(np.arange(pivot.shape[1]))
     ax.set_xticklabels(pivot.columns.tolist(), rotation=35, ha="right")
     ax.set_yticks(np.arange(pivot.shape[0]))
     ax.set_yticklabels(pivot.index.tolist())
-    plt.colorbar(image, ax=ax, fraction=0.04, pad=0.02)
+    colorbar = plt.colorbar(image, ax=ax, fraction=0.04, pad=0.02)
+    if colorbar_label:
+        colorbar.set_label(colorbar_label)
     return pivot
 
 

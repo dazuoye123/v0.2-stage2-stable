@@ -11,241 +11,295 @@ from .plot_utils import annotate_empty, safe_heatmap, save_figure_bundle
 from .style import DOUBLE_COLUMN_WIDTH_IN, OBJECT_TYPE_COLORS, PARAMETER_GROUP_COLORS, add_panel_label, configure_style
 
 
-def build_fig1(frame: pd.DataFrame, output_stem: Path) -> tuple[dict[str, str], dict[str, Any]]:
+def build_fig1(frame: pd.DataFrame, output_stem: Path, *, context: dict[str, Any] | None = None) -> tuple[dict[str, str], dict[str, Any]]:
+    context = context or {}
     configure_style()
-    fig = plt.figure(figsize=(DOUBLE_COLUMN_WIDTH_IN, 6.8))
-    gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.0], width_ratios=[1.15, 1.0])
+    fig = plt.figure(figsize=(DOUBLE_COLUMN_WIDTH_IN, 6.9))
+    gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.0], width_ratios=[1.08, 1.0])
     ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[0, 1])
     ax_c = fig.add_subplot(gs[1, 0])
     ax_d = fig.add_subplot(gs[1, 1])
 
-    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
-    _fig1_panel_a(ax_a, data[data["panel_id"] == "A"])
-    _fig1_panel_b(ax_b, data[data["panel_id"] == "B"])
-    _fig1_panel_c(ax_c, data[data["panel_id"] == "C"])
-    _fig1_panel_d(ax_d, data[data["panel_id"] == "D"])
+    _fig1_panel_a(ax_a, frame[frame["panel_id"] == "A"])
+    _fig1_panel_b(ax_b, frame[frame["panel_id"] == "B"])
+    _fig1_panel_c(ax_c, frame[frame["panel_id"] == "C"])
+    _fig1_panel_d(ax_d, frame[frame["panel_id"] == "D"])
+
     fig_paths = save_figure_bundle(fig, output_stem)
     meta = {
         "panels": ["A", "B", "C", "D"],
-        "filters_applied": ["included_in_main_plot == true"],
-        "unknown_other_handling": "No dominant Unknown/Other categories in this figure; counts were plotted directly.",
-        "unit_handling": "Count- and ratio-based panels only.",
-        "limitations": ["Coverage does not equal semantic perfection; Stage4 and linking quality still need caption context."],
+        "panel_descriptions": context.get("panel_descriptions", []),
+        "filters_applied": context.get("filters_applied", []),
+        "unknown_other_handling": context.get("unknown_other_handling", ""),
+        "unit_handling": context.get("unit_handling", ""),
+        "category_handling": context.get("category_handling", ""),
+        "limitations": context.get("limitations", []),
         "row_counts": _row_counts_by_panel(frame),
+        "excluded_row_counts": context.get("excluded_row_counts", {}),
+        "extra_metadata": {
+            "official_categories": context.get("official_categories", []),
+            "uncategorized_excluded_count": context.get("uncategorized_excluded_count", 0),
+            "link_completeness_formula": context.get("link_completeness_formula", ""),
+            "join_key_used": context.get("join_key_used", ""),
+            "completeness_value_range": context.get("completeness_value_range", [0.0, 1.0]),
+            "normalization_method": context.get("normalization_method_panel_d", ""),
+        },
     }
     return fig_paths, meta
 
 
-def build_fig2(frame: pd.DataFrame, output_stem: Path) -> tuple[dict[str, str], dict[str, Any]]:
+def build_fig2(frame: pd.DataFrame, output_stem: Path, *, context: dict[str, Any] | None = None) -> tuple[dict[str, str], dict[str, Any]]:
+    context = context or {}
     configure_style()
-    fig = plt.figure(figsize=(DOUBLE_COLUMN_WIDTH_IN, 8.4))
-    gs = fig.add_gridspec(3, 2, height_ratios=[1.0, 0.9, 1.0], width_ratios=[1.0, 1.0])
-    ax_a = fig.add_subplot(gs[0, 0])
-    ax_b = fig.add_subplot(gs[0, 1])
-    ax_c = fig.add_subplot(gs[1, 0])
-    ax_d = fig.add_subplot(gs[1, 1])
-    ax_e = fig.add_subplot(gs[2, :])
+    fig = plt.figure(figsize=(DOUBLE_COLUMN_WIDTH_IN, 9.1))
+    gs = fig.add_gridspec(3, 2, height_ratios=[1.0, 1.0, 1.05], width_ratios=[1.0, 1.0])
+    axes = [fig.add_subplot(gs[i, j]) for i in range(3) for j in range(2)]
 
-    data = frame.copy()
-    included = data[data["included_in_main_plot"].fillna(False)]
-    _fig2_panel_a(ax_a, included[included["panel_id"] == "A"])
-    _fig2_panel_b(ax_b, included[included["panel_id"] == "B"])
-    _fig2_panel_c(ax_c, data[data["panel_id"] == "C"])
-    _fig2_panel_d(ax_d, included[included["panel_id"] == "D"])
-    _fig2_panel_e(ax_e, included[included["panel_id"] == "E"])
-    fig_paths = save_figure_bundle(fig, output_stem)
-    meta = {
-        "panels": ["A", "B", "C", "D", "E"],
-        "filters_applied": [
-            "included_in_main_plot == true for plotted rows",
-            "Other/Unknown removed from heatmaps and top-family panel",
-            "Panel C downgraded to pH-only numeric distribution because concentration-related units remained mixed",
-        ],
-        "unknown_other_handling": "Unknown/Other rows were preserved in source data and excluded from main panels.",
-        "unit_handling": "pH used unitless numeric rows only; temperature/time windows used unit-consistent numeric rows; mixed concentration units stayed excluded.",
-        "limitations": [
-            "Al concentration and solid-content families still need semantic/unit cleanup before quantitative main-panel plotting.",
-        ],
-        "row_counts": _row_counts_by_panel(frame),
-    }
-    return fig_paths, meta
+    _fig2_panel_a(axes[0], frame[frame["panel_id"] == "A"])
+    _fig2_panel_b(axes[1], frame[frame["panel_id"] == "B"])
+    _fig2_panel_c(axes[2], frame[frame["panel_id"] == "C"])
+    _fig2_panel_d(axes[3], frame[frame["panel_id"] == "D"])
+    _fig2_panel_e(axes[4], frame[frame["panel_id"] == "E"])
+    _fig2_panel_f(axes[5], frame[frame["panel_id"] == "F"])
 
-
-def build_fig4(frame: pd.DataFrame, output_stem: Path) -> tuple[dict[str, str], dict[str, Any]]:
-    configure_style()
-    fig = plt.figure(figsize=(DOUBLE_COLUMN_WIDTH_IN, 8.6))
-    gs = fig.add_gridspec(3, 2, height_ratios=[0.95, 1.0, 1.0], width_ratios=[1.0, 1.0])
-    ax_a = fig.add_subplot(gs[0, 0])
-    ax_b = fig.add_subplot(gs[0, 1])
-    ax_c = fig.add_subplot(gs[1, 0])
-    ax_d = fig.add_subplot(gs[1, 1])
-    ax_e = fig.add_subplot(gs[2, 0])
-    ax_f = fig.add_subplot(gs[2, 1])
-
-    data = frame.copy()
-    included = data[data["included_in_main_plot"].fillna(False)]
-    _fig4_panel_a(ax_a, included[included["panel_id"] == "A"])
-    _fig4_panel_b(ax_b, included[included["panel_id"] == "B"])
-    _fig4_hist(ax_c, included[included["panel_id"] == "C"], xlabel="Wavenumber (cm$^{-1}$)", bins=30, title="FTIR peaks")
-    _fig4_hist(ax_d, included[included["panel_id"] == "D"], xlabel="2theta (degree)", bins=28, title="XRD peaks")
-    _fig4_hist(ax_e, included[included["panel_id"] == "E"], xlabel="Chemical shift (ppm)", bins=24, title="NMR shifts")
-    _fig4_hist(ax_f, included[included["panel_id"] == "F"], xlabel="Event temperature (deg C)", bins=26, title="TG/DSC events")
     fig_paths = save_figure_bundle(fig, output_stem)
     meta = {
         "panels": ["A", "B", "C", "D", "E", "F"],
-        "filters_applied": [
-            "included_in_main_plot == true for plotted rows",
-            "FTIR restricted to 400-4000 cm^-1",
-            "XRD restricted to 5-90 degree 2theta",
-            "NMR restricted to ppm rows in a plausible range",
-            "TG/DSC restricted to temperature-like rows in a bounded thermal range",
-        ],
-        "unknown_other_handling": "Other/Unknown characterization families were retained in source data and excluded from the main heatmaps.",
-        "unit_handling": "Each peak panel used unit-compatible subsets only; all excluded rows remain in the source-data CSV with filter reasons.",
-        "limitations": [
-            "Stage4 peak panels remain sensitive to upstream labeling quality and should be checked manually before submission.",
-        ],
+        "panel_descriptions": context.get("panel_descriptions", []),
+        "filters_applied": context.get("filters_applied", []),
+        "unknown_other_handling": context.get("unknown_other_handling", ""),
+        "unit_handling": context.get("unit_handling", ""),
+        "category_handling": context.get("category_handling", ""),
+        "limitations": context.get("limitations", []),
         "row_counts": _row_counts_by_panel(frame),
+        "excluded_row_counts": context.get("excluded_row_counts", {}),
+        "extra_metadata": {
+            "excluded_characterization_families": context.get("excluded_characterization_families", []),
+            "manuscript_parameter_group_mapping": context.get("manuscript_parameter_group_mapping", {}),
+            "temperature_unit_conversion": context.get("temperature_unit_conversion", {}),
+            "time_unit_conversion": context.get("time_unit_conversion", {}),
+            "temperature_filter_range": context.get("temperature_filter_range", []),
+            "time_filter_range": context.get("time_filter_range", []),
+            "number_of_rows_excluded_by_unit": context.get("number_of_rows_excluded_by_unit", 0),
+            "number_of_rows_excluded_by_range": context.get("number_of_rows_excluded_by_range", 0),
+        },
+    }
+    return fig_paths, meta
+
+
+def build_fig4(frame: pd.DataFrame, output_stem: Path, *, context: dict[str, Any] | None = None) -> tuple[dict[str, str], dict[str, Any]]:
+    context = context or {}
+    configure_style()
+    fig = plt.figure(figsize=(DOUBLE_COLUMN_WIDTH_IN, 7.6))
+    gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.95], width_ratios=[1.0, 1.0])
+    ax_a = fig.add_subplot(gs[0, 0])
+    ax_b = fig.add_subplot(gs[0, 1])
+    ax_c = fig.add_subplot(gs[1, 0])
+    ax_d = fig.add_subplot(gs[1, 1])
+
+    _fig4_panel_a(ax_a, frame[frame["panel_id"] == "A"])
+    _fig4_panel_b(ax_b, frame[frame["panel_id"] == "B"])
+    _fig4_panel_c(ax_c, frame[frame["panel_id"] == "C"])
+    _fig4_panel_d(ax_d, frame[frame["panel_id"] == "D"])
+
+    fig_paths = save_figure_bundle(fig, output_stem)
+    meta = {
+        "panels": ["A", "B", "C", "D"],
+        "panel_descriptions": context.get("panel_descriptions", []),
+        "filters_applied": context.get("filters_applied", []),
+        "unknown_other_handling": context.get("unknown_other_handling", ""),
+        "unit_handling": context.get("unit_handling", ""),
+        "category_handling": context.get("category_handling", ""),
+        "limitations": context.get("limitations", []),
+        "row_counts": _row_counts_by_panel(frame),
+        "excluded_row_counts": context.get("excluded_row_counts", {}),
+        "extra_metadata": {
+            "peak_bin_definitions": context.get("peak_bin_definitions", {}),
+            "raw_peak_count": context.get("raw_peak_count", 0),
+            "binned_peak_count": context.get("binned_peak_count", 0),
+            "excluded_peak_count": context.get("excluded_peak_count", 0),
+            "accepted_units": context.get("accepted_units", {}),
+            "accepted_ranges": context.get("accepted_ranges", {}),
+            "statement_that_bins_are_approximate": context.get("statement_that_bins_are_approximate", ""),
+        },
     }
     return fig_paths, meta
 
 
 def _fig1_panel_a(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "A")
-    if frame.empty:
-        annotate_empty(ax, "No data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No official-category counts")
         return
-    order = ["applications", "fiber_process", "mechanism", "rheology", "uncategorized"]
-    metrics = ["paper_count", "sample_count", "parameter_count", "process_step_count", "spectra_count", "link_count"]
-    pivot = frame.pivot_table(index="category", columns="metric", values="value", aggfunc="sum", fill_value=0).reindex(order).fillna(0)
+    pivot = data.pivot_table(index="category", columns="entity_label", values="value", aggfunc="sum", fill_value=0)
+    plot_values = np.log10(pivot.to_numpy(dtype=float) + 1.0)
     x = np.arange(len(pivot.index))
     width = 0.12
-    for idx, metric in enumerate(metrics):
+    for idx, object_type in enumerate(pivot.columns.tolist()):
         ax.bar(
-            x + (idx - 2.5) * width,
-            pivot[metric].to_numpy(),
+            x + (idx - (len(pivot.columns) - 1) / 2) * width,
+            plot_values[:, idx],
             width=width,
-            color=OBJECT_TYPE_COLORS.get(metric, "#888888"),
-            label=metric.replace("_count", ""),
+            color=OBJECT_TYPE_COLORS.get(f"{object_type}_count", "#888888"),
+            label=object_type,
         )
     ax.set_xticks(x)
-    ax.set_xticklabels(pivot.index.tolist(), rotation=20, ha="right")
-    ax.set_ylabel("Count")
-    ax.set_title("Dataset objects by category", loc="left")
-    ax.legend(ncol=3, fontsize=5.8, handlelength=1.0)
+    ax.set_xticklabels(pivot.index.tolist(), rotation=18, ha="right")
+    ax.set_ylabel("log10(count + 1)")
+    ax.set_title("Dataset object counts by category", loc="left")
+    ax.legend(ncol=3, fontsize=5.6, handlelength=1.0)
 
 
 def _fig1_panel_b(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "B")
-    if frame.empty:
-        annotate_empty(ax, "No data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No coverage fractions")
         return
-    grouped = frame.groupby("entity_label")["value"].sum().sort_values(ascending=True)
-    labels = [str(item).replace("_", " ") for item in grouped.index.tolist()]
-    ax.barh(labels, grouped.to_numpy(), color="#5D87B1")
-    ax.set_xlabel("Count")
+    paper_stage = data[data["metric"] == "paper_stage_completion"].copy()
+    figure_stage = data[data["metric"] == "stage4_extraction_rate"].copy()
+    labels = paper_stage["entity_label"].tolist() + [""] + figure_stage["entity_label"].tolist()
+    values = paper_stage["value"].tolist() + [np.nan] + figure_stage["value"].tolist()
+    colors = ["#4E9A51"] * len(paper_stage) + ["#FFFFFF"] + ["#B56576"] * len(figure_stage)
+    y = np.arange(len(labels))
+    ax.barh(y, [0 if pd.isna(v) else v for v in values], color=colors)
+    ax.set_yticks(y)
+    ax.set_yticklabels([label.replace("_", " ") for label in labels])
+    ax.set_xlim(0, 1.05)
+    ax.set_xlabel("Fraction of papers or candidate figures")
     ax.set_title("Stage coverage summary", loc="left")
+    ax.axvline(1.0, color="#cccccc", lw=0.8, ls="--")
 
 
 def _fig1_panel_c(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "C")
-    if frame.empty:
-        annotate_empty(ax, "No data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No completeness fractions")
         return
-    safe_heatmap(ax, frame, row_col="category", col_col="entity_label", value_col="value", cmap="Greens")
+    safe_heatmap(
+        ax,
+        data,
+        row_col="category",
+        col_col="entity_label",
+        value_col="value",
+        cmap="Greens",
+        colorbar_label="Fraction of parameters linked",
+        value_range=(0.0, 1.0),
+    )
     ax.set_title("Link completeness by category", loc="left")
 
 
 def _fig1_panel_d(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "D")
-    if frame.empty:
-        annotate_empty(ax, "No data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No availability values")
         return
-    safe_heatmap(ax, frame, row_col="category", col_col="entity_label", value_col="value", cmap="Blues", normalize=True)
+    safe_heatmap(
+        ax,
+        data,
+        row_col="category",
+        col_col="entity_label",
+        value_col="value",
+        cmap="Blues",
+        colorbar_label="Normalized per-paper mean",
+        value_range=(0.0, 1.0),
+    )
     ax.set_title("Data availability matrix", loc="left")
 
 
 def _fig2_panel_a(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "A")
-    if frame.empty:
-        annotate_empty(ax, "No data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No synthesis groups")
         return
-    top_cols = frame.groupby("entity_label")["value"].sum().sort_values(ascending=False).head(14).index.tolist()
-    panel = frame[frame["entity_label"].isin(top_cols)].copy()
-    safe_heatmap(ax, panel, row_col="category", col_col="entity_label", value_col="value", cmap="Blues")
-    ax.set_title("Category x parameter family", loc="left")
+    plot = data.copy()
+    plot["plot_value"] = np.log10(plot["value"].astype(float) + 1.0)
+    safe_heatmap(
+        ax,
+        plot,
+        row_col="category",
+        col_col="entity_label",
+        value_col="plot_value",
+        cmap="Blues",
+        colorbar_label="log10(count + 1)",
+    )
+    ax.set_title("Category x manuscript parameter group", loc="left")
 
 
 def _fig2_panel_b(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "B")
-    if frame.empty:
-        annotate_empty(ax, "No data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].sort_values("value", ascending=True).copy()
+    if data.empty:
+        annotate_empty(ax, "No filtered parameter families")
         return
-    top = frame.sort_values("value", ascending=False).head(12).copy()
-    top["group"] = top["entity_label"].apply(_parameter_group)
     ax.barh(
-        top["entity_label"][::-1],
-        top["value"][::-1],
-        color=[PARAMETER_GROUP_COLORS.get(item, PARAMETER_GROUP_COLORS["other"]) for item in top["group"][::-1]],
+        data["entity_label"],
+        data["value"],
+        color=[PARAMETER_GROUP_COLORS.get(group, PARAMETER_GROUP_COLORS["other"]) for group in data["manuscript_parameter_group"]],
     )
-    ax.set_xlabel("Count")
-    ax.set_title("Top parameter families", loc="left")
+    ax.set_xlabel("Unique parameter count")
+    ax.set_title("Top synthesis and process parameter families", loc="left")
 
 
 def _fig2_panel_c(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "C")
-    included = frame[frame["included_in_main_plot"].fillna(False)].copy()
-    ph = included[included["entity_label"] == "pH"].copy()
-    if ph.empty:
-        annotate_empty(ax, "No unit-safe numeric panel")
+    pH_rows = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if pH_rows.empty:
+        annotate_empty(ax, "No unit-safe pH rows")
         return
-    values = pd.to_numeric(ph["value"], errors="coerce").dropna()
+    values = pd.to_numeric(pH_rows["numeric_value"], errors="coerce").dropna()
     ax.hist(values, bins=20, color="#4E9A51", edgecolor="white")
     ax.set_xlabel("pH")
     ax.set_ylabel("Count")
-    ax.set_title("pH distribution", loc="left")
-    excluded_counts = frame.groupby("entity_label")["included_in_main_plot"].apply(lambda s: int((~s.fillna(False).astype(bool)).sum()))
+    ax.set_title("Solution chemistry distributions", loc="left")
     ax.text(
         0.98,
         0.97,
-        f"Excluded numeric rows\nAl concentration: {excluded_counts.get('Al concentration', 0)}\nsolid content: {excluded_counts.get('solid content', 0)}",
+        "Al concentration and solid content\nretained as availability-only rows\nbecause units remain mixed.",
         transform=ax.transAxes,
         ha="right",
         va="top",
-        fontsize=5.8,
+        fontsize=5.7,
         bbox={"facecolor": "white", "edgecolor": "#cccccc", "boxstyle": "round,pad=0.25"},
     )
 
 
 def _fig2_panel_d(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "D")
-    if frame.empty:
-        annotate_empty(ax, "No unit-safe window data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No filtered temperature rows")
         return
-    subset = frame[
-        frame["entity_label"].isin(
-            [
-                "aging temperature",
-                "calcination temperature",
-                "drying temperature",
-                "hydrolysis temperature",
-                "aging time",
-                "holding time",
-                "drying time",
-                "hydrolysis time",
-            ]
-        )
-    ]
-    grouped = []
-    labels = []
-    for family, group in subset.groupby("entity_label"):
-        values = pd.to_numeric(group["value"], errors="coerce").dropna()
-        if not values.empty:
-            grouped.append(values.tolist())
-            labels.append(str(family).replace("temperature", "temp"))
+    grouped, labels = _collect_boxplot_data(data)
     if not grouped:
-        annotate_empty(ax, "No unit-safe window data")
+        annotate_empty(ax, "No filtered temperature rows")
+        return
+    ax.boxplot(
+        grouped,
+        tick_labels=labels,
+        patch_artist=True,
+        boxprops={"facecolor": "#D8A25E", "edgecolor": "#8E5A24"},
+        medianprops={"color": "#6B2C2C"},
+    )
+    ax.tick_params(axis="x", rotation=25)
+    ax.set_ylabel("Temperature (deg C)")
+    ax.set_title("Temperature condition windows", loc="left")
+
+
+def _fig2_panel_e(ax: plt.Axes, frame: pd.DataFrame) -> None:
+    add_panel_label(ax, "E")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No filtered time rows")
+        return
+    grouped, labels = _collect_boxplot_data(data)
+    if not grouped:
+        annotate_empty(ax, "No filtered time rows")
         return
     ax.boxplot(
         grouped,
@@ -255,72 +309,119 @@ def _fig2_panel_d(ax: plt.Axes, frame: pd.DataFrame) -> None:
         medianprops={"color": "#C7675C"},
     )
     ax.tick_params(axis="x", rotation=25)
-    ax.set_ylabel("Value")
-    ax.set_title("Temperature/time windows", loc="left")
+    ax.set_ylabel("Time (h)")
+    ax.set_title("Time condition windows", loc="left")
 
 
-def _fig2_panel_e(ax: plt.Axes, frame: pd.DataFrame) -> None:
-    add_panel_label(ax, "E")
-    if frame.empty:
-        annotate_empty(ax, "No co-occurrence data")
+def _fig2_panel_f(ax: plt.Axes, frame: pd.DataFrame) -> None:
+    add_panel_label(ax, "F")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No filtered co-occurrence rows")
         return
-    panel = frame.copy()
-    panel["row_family"] = panel["entity_label"].str.split(" -> ").str[0]
-    panel["col_family"] = panel["entity_label"].str.split(" -> ").str[1]
-    top = panel.groupby("row_family")["value"].sum().sort_values(ascending=False).head(12).index.tolist()
-    filtered = panel[panel["row_family"].isin(top) & panel["col_family"].isin(top)]
-    safe_heatmap(ax, filtered, row_col="row_family", col_col="col_family", value_col="value", cmap="Purples")
+    plot = data.copy()
+    plot["row_family"] = plot["entity_label"].str.split(" -> ").str[0]
+    plot["col_family"] = plot["entity_label"].str.split(" -> ").str[1]
+    safe_heatmap(
+        ax,
+        plot,
+        row_col="row_family",
+        col_col="col_family",
+        value_col="value",
+        cmap="Purples",
+        colorbar_label="Co-occurrence count",
+    )
     ax.set_title("Parameter co-occurrence", loc="left")
 
 
 def _fig4_panel_a(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "A")
-    if frame.empty:
-        annotate_empty(ax, "No data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No filtered characterization rows")
         return
-    safe_heatmap(ax, frame, row_col="category", col_col="entity_label", value_col="value", cmap="Blues")
-    ax.set_title("Characterization x category", loc="left")
+    plot = data.copy()
+    plot["plot_value"] = np.log10(plot["value"].astype(float) + 1.0)
+    safe_heatmap(
+        ax,
+        plot,
+        row_col="category",
+        col_col="entity_label",
+        value_col="plot_value",
+        cmap="Blues",
+        colorbar_label="log10(count + 1)",
+    )
+    ax.set_title("Characterization family x category", loc="left")
 
 
 def _fig4_panel_b(ax: plt.Axes, frame: pd.DataFrame) -> None:
     add_panel_label(ax, "B")
-    if frame.empty:
-        annotate_empty(ax, "No data")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No deterministic spectra links")
         return
-    panel = frame.copy()
-    panel["spectra_type"] = panel["entity_label"].str.split(" -> ").str[0]
-    panel["parameter_family"] = panel["entity_label"].str.split(" -> ").str[1]
-    top_param = panel.groupby("parameter_family")["value"].sum().sort_values(ascending=False).head(10).index.tolist()
-    top_spec = panel.groupby("spectra_type")["value"].sum().sort_values(ascending=False).head(8).index.tolist()
-    panel = panel[panel["parameter_family"].isin(top_param) & panel["spectra_type"].isin(top_spec)]
-    safe_heatmap(ax, panel, row_col="spectra_type", col_col="parameter_family", value_col="value", cmap="Oranges")
-    ax.set_title("Spectra x parameter family", loc="left")
+    plot = data.copy()
+    plot["spectra_type"] = plot["entity_label"].str.split(" -> ").str[0]
+    plot["parameter_family"] = plot["entity_label"].str.split(" -> ").str[1]
+    safe_heatmap(
+        ax,
+        plot,
+        row_col="spectra_type",
+        col_col="parameter_family",
+        value_col="value",
+        cmap="Oranges",
+        colorbar_label="Deterministic link count",
+    )
+    ax.set_title("Spectra type x parameter family", loc="left")
 
 
-def _fig4_hist(ax: plt.Axes, frame: pd.DataFrame, *, xlabel: str, bins: int, title: str) -> None:
-    label = {"FTIR peaks": "C", "XRD peaks": "D", "NMR shifts": "E", "TG/DSC events": "F"}[title]
-    add_panel_label(ax, label)
-    if frame.empty:
-        annotate_empty(ax, "No filtered peak data")
+def _fig4_panel_c(ax: plt.Axes, frame: pd.DataFrame) -> None:
+    add_panel_label(ax, "C")
+    data = frame[frame["included_in_main_plot"].fillna(False)].sort_values("value", ascending=True).copy()
+    if data.empty:
+        annotate_empty(ax, "No linked-parameter contributions")
         return
-    values = pd.to_numeric(frame["value"], errors="coerce").dropna()
-    ax.hist(values, bins=bins, color="#7BA77F", edgecolor="white")
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel("Count")
-    ax.set_title(title, loc="left")
+    ax.barh(data["entity_label"], data["value"], color="#B56576")
+    ax.set_xlabel("Unique linked parameters")
+    ax.set_title("Contribution to linked parameters", loc="left")
+    for idx, row in enumerate(data.to_dict(orient="records")):
+        if pd.notna(row.get("numeric_value")):
+            ax.text(float(row["value"]) + 0.5, idx, f"{float(row['numeric_value']) * 100:.1f}%", va="center", fontsize=5.6)
 
 
-def _parameter_group(family: str) -> str:
-    text = str(family).lower()
-    if "ph" in text or "concentration" in text or "solid content" in text or "acid/base" in text:
-        return "sol chemistry"
-    if "temperature" in text or "time" in text or "heating" in text:
-        return "thermal processing"
-    if "xrd" in text or "nmr" in text or "ftir" in text or "spectra" in text:
-        return "spectroscopy/characterization"
-    if "size" in text or "surface" in text or "mass loss" in text or "mechanical" in text:
-        return "structure/property"
-    return "process"
+def _fig4_panel_d(ax: plt.Axes, frame: pd.DataFrame) -> None:
+    add_panel_label(ax, "D")
+    data = frame[frame["included_in_main_plot"].fillna(False)].copy()
+    if data.empty:
+        annotate_empty(ax, "No binned peak or event rows")
+        return
+    plot = data.copy()
+    plot["spectra_type"] = plot["entity_label"].str.split(" -> ").str[0]
+    plot["bin_label"] = plot["entity_label"].str.split(" -> ").str[1]
+    pivot = plot.pivot_table(index="spectra_type", columns="bin_label", values="value", aggfunc="sum", fill_value=0)
+    if pivot.empty:
+        annotate_empty(ax, "No binned peak or event rows")
+        return
+    left = np.zeros(len(pivot.index))
+    palette = ["#7BA77F", "#A8C686", "#DCC48E", "#C7675C", "#7D8CC4", "#A68AC0", "#D48FAD", "#B7B7B7"]
+    for idx, column in enumerate(pivot.columns.tolist()):
+        values = pivot[column].to_numpy(dtype=float)
+        ax.barh(pivot.index.tolist(), values, left=left, color=palette[idx % len(palette)], label=column)
+        left += values
+    ax.set_xlabel("Peak or event count")
+    ax.set_title("Approximate peak and event group summary", loc="left")
+    ax.legend(fontsize=5.0, loc="lower right")
+
+
+def _collect_boxplot_data(frame: pd.DataFrame) -> tuple[list[list[float]], list[str]]:
+    grouped: list[list[float]] = []
+    labels: list[str] = []
+    for family, group in frame.groupby("entity_label"):
+        values = pd.to_numeric(group["numeric_value"], errors="coerce").dropna()
+        if len(values) > 0:
+            grouped.append(values.tolist())
+            labels.append(str(family))
+    return grouped, labels
 
 
 def _row_counts_by_panel(frame: pd.DataFrame) -> dict[str, dict[str, int]]:

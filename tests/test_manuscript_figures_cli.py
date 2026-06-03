@@ -19,7 +19,7 @@ def test_parse_args_for_manuscript_figures(monkeypatch) -> None:
             "--diagnosis-dir",
             "data/batch_validation/20260602_212510/manuscript_figure_diagnosis",
             "--output-dir",
-            "data/batch_validation/20260602_212510/manuscript_figures_nature_v1",
+            "data/batch_validation/20260602_212510/manuscript_figures_nature_v2",
             "--figures",
             "Fig1",
             "Fig2",
@@ -30,7 +30,7 @@ def test_parse_args_for_manuscript_figures(monkeypatch) -> None:
     )
     args = MODULE.parse_args()
     assert args.diagnosis_dir.endswith("manuscript_figure_diagnosis")
-    assert args.output_dir.endswith("manuscript_figures_nature_v1")
+    assert args.output_dir.endswith("manuscript_figures_nature_v2")
     assert args.figures == ["Fig1", "Fig2", "Fig4"]
     assert args.dry_run is True
     assert args.continue_on_error is True
